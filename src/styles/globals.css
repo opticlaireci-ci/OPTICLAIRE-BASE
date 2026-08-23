@@ -1,0 +1,55 @@
+/* ── Responsive mobile global ─────────────────────────────────────────────── */
+
+/* Empêche le débordement horizontal sur tout le document */
+html, body, #root {
+  overflow-x: hidden;
+  max-width: 100vw;
+}
+
+/* Tables : défilement horizontal sur mobile */
+@media (max-width: 768px) {
+  table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    max-width: 100%;
+  }
+
+  /* Formulaires multi-colonnes : passage en colonne sur petit écran */
+  .mobile-stack {
+    flex-direction: column !important;
+  }
+
+  /* Réduit le padding des cartes sur mobile */
+  .mobile-compact {
+    padding: 8px !important;
+  }
+
+  /* Inputs et selects : taille de touche confortable (44px min) */
+  input, select, textarea, button {
+    min-height: 36px;
+    font-size: 16px !important; /* Empêche le zoom auto sur iOS */
+  }
+
+  /* Supprime les marges horizontales excessives */
+  .MuiBox-root {
+    max-width: 100%;
+  }
+}
+
+/* Scrollbar fine pour les tables en overflow */
+table::-webkit-scrollbar {
+  height: 4px;
+}
+table::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+table::-webkit-scrollbar-thumb {
+  background: #ccc;
+  border-radius: 2px;
+}
+
+/* ── Viewport meta enforcement (touch devices) ───────────────────────────── */
+* {
+  box-sizing: border-box;
+}
