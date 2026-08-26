@@ -53,3 +53,37 @@ table::-webkit-scrollbar-thumb {
 * {
   box-sizing: border-box;
 }
+
+/* Médias fluides : jamais plus large que leur conteneur, quel que soit l'écran. */
+img, video, canvas, svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Toute grille/flex "faite main" (Tailwind ou style inline) qui n'a pas prévu
+   de variante responsive repasse en une seule colonne sur mobile plutôt que
+   d'écraser son contenu ou déborder de l'écran. */
+@media (max-width: 640px) {
+  .grid {
+    grid-template-columns: 1fr !important;
+  }
+  .flex:not(.flex-col):not(.mobile-keep-row) {
+    flex-wrap: wrap;
+  }
+}
+
+/* Conteneurs à largeur fixe : on borne à la largeur de l'écran plutôt que de
+   laisser déborder horizontalement toute la page. */
+@media (max-width: 768px) {
+  [style*="width: 1"],
+  [style*="min-width: 1"] {
+    max-width: 100% !important;
+  }
+}
+
+/* Cartes / panneaux : on évite les coins et paddings surdimensionnés qui
+   mangent l'espace utile sur petit écran. */
+@media (max-width: 480px) {
+  h1 { font-size: 1.3rem !important; }
+  h2 { font-size: 1.15rem !important; }
+}
