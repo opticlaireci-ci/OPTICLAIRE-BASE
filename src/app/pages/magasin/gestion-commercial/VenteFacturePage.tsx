@@ -273,13 +273,16 @@ async function telechargerFacturePDF(factureData: {
   doc.setFontSize(11);
   doc.text('Signature & Cachet', 150, ty, { align: 'center' });
 
+  // Le pied de page suit directement le contenu (au lieu d'être figé en bas
+  // de page), pour éviter le grand vide inesthétique sur les reçus courts.
   const e = getEntete(magasinId);
+  ty += 20;
   doc.setDrawColor(200);
   doc.setLineWidth(0.2);
-  doc.line(14, 285, 196, 285);
+  doc.line(14, ty, 196, ty);
   doc.setFontSize(8);
   doc.setTextColor(120);
-  doc.text(`${e.adresse} Téléphone: ${e.telephone} Email: ${e.email}`, 105, 290, { align: 'center' });
+  doc.text(`${e.adresse} Téléphone: ${e.telephone} Email: ${e.email}`, 105, ty + 5, { align: 'center' });
 
   doc.save(`Facture_${factureData.numFacture}_${factureData.client}.pdf`);
 }
@@ -898,14 +901,17 @@ async function telechargerReglementPDF(reglement: any, vente: any, magasinId?: s
   doc.setFontSize(11);
   doc.text('Signature & Cachet', 105, y, { align: 'center' });
 
-  // Pied de page (coordonnées magasin)
+  // Pied de page (coordonnées magasin) : suit le contenu au lieu d'être
+  // figé en bas de page, pour un rendu compact identique quel que soit
+  // le nombre de lignes du reçu (versement simple ou bon d'assurance).
   const e = getEntete(magasinId);
+  y += 20;
   doc.setDrawColor(0);
   doc.setLineWidth(0.3);
-  doc.line(14, 285, 196, 285);
+  doc.line(14, y, 196, y);
   doc.setFontSize(9);
   doc.setTextColor(60);
-  doc.text(`${e.adresse}  Téléphone: ${e.telephone}  Email: ${e.email}`, 105, 291, { align: 'center' });
+  doc.text(`${e.adresse}  Téléphone: ${e.telephone}  Email: ${e.email}`, 105, y + 6, { align: 'center' });
 
   doc.save(`Reglement_${reglement.recu}_${vente.client}.pdf`);
 }
