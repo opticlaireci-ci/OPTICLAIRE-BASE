@@ -3096,9 +3096,9 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
   // La commande de verre est réservée aux opticiens, directeurs, comptables et
   // administrateurs — masquée pour les conseillères (et autres rôles).
   const peutCommanderVerre = ['super_admin', 'admin', 'administrateur', 'directeur', 'comptable', 'opticien'].includes(user?.role || '');
-  // Le règlement (encaissement) dans le détail de vente est réservé aux opticiens,
-  // directeurs, comptables et administrateurs — la conseillère n'y a PAS accès.
-  const peutReglement = ['super_admin', 'admin', 'administrateur', 'directeur', 'comptable', 'opticien'].includes(user?.role || '');
+  // Le règlement (encaissement) dans le détail de vente est accessible aux
+  // conseillères, opticiens, directeurs, comptables et administrateurs.
+  const peutReglement = ['super_admin', 'admin', 'administrateur', 'directeur', 'comptable', 'opticien', 'conseillere'].includes(user?.role || '');
   const { magasinId = '' } = useParams<{ magasinId: string }>();
   const [searchFacture, setSearchFacture] = useState('');
   const [searchClient, setSearchClient] = useState('');
