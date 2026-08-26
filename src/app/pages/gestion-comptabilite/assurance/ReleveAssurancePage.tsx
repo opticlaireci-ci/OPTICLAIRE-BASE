@@ -77,7 +77,7 @@ function NouveauReleve({ initial, onSave, onClose }: { initial?: Releve; onSave:
           </div>
         </div>
 
-        <div className="p-5 overflow-y-auto flex flex-col gap-5">
+        <div className="p-5 overflow-y-auto flex-1 min-h-0 flex flex-col gap-5">
           {/* Row 1 fields */}
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
             <div>

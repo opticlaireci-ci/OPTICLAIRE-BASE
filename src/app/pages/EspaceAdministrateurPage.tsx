@@ -213,7 +213,7 @@ export function EspaceAdministrateurPage() {
               <span className="font-semibold text-gray-800">Personnaliser la page d'accueil</span>
               <button onClick={() => setAccueilOpen(false)} className="text-gray-500 hover:text-gray-700"><X size={18} /></button>
             </div>
-            <div className="p-5 flex flex-col gap-4 overflow-y-auto">
+            <div className="p-5 flex flex-col gap-4 overflow-y-auto flex-1 min-h-0">
               <p className="text-xs text-blue-800 bg-blue-50 border border-blue-200 rounded px-3 py-2">
                 Ce contenu s'affiche sur la page d'accueil de <b>tous les utilisateurs</b> (synchronisé sur tous les appareils).
               </p>

@@ -3579,7 +3579,12 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
               </button>
             </div>
 
-            <div className="overflow-y-auto flex-1" key={`modal-${viewMode}`}>
+            {/* min-h-0 est indispensable : sans lui, un enfant flex garde sa
+                hauteur "auto" (basée sur son contenu) et ne se réduit jamais,
+                donc overflow-y-auto ne s'active pas et le conteneur parent
+                (overflow-hidden) tronque le contenu au lieu de le rendre
+                défilable — c'est ce qui coupait l'affichage du Détail. */}
+            <div className="overflow-y-auto flex-1 min-h-0" key={`modal-${viewMode}`}>
               {viewMode === 'details' ? (
               <>
                 <div className="grid grid-cols-12 gap-4 p-4">

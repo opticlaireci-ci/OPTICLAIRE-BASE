@@ -41,7 +41,7 @@ function NouveauReleve({ initial, onSave, onClose }: { initial?: Releve; onSave:
             <button onClick={onClose}><X size={18} className="text-gray-500" /></button>
           </div>
         </div>
-        <div className="p-5 overflow-y-auto flex flex-col gap-5">
+        <div className="p-5 overflow-y-auto flex-1 min-h-0 flex flex-col gap-5">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div>
               <label className="text-xs text-gray-600 mb-1 block">Référence <span className="text-red-500">*</span></label>

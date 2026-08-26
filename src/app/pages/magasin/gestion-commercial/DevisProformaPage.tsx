@@ -580,9 +580,17 @@ function ArticlesBlock({ articles, onChange, magasinId, idSuffix }: { articles: 
   const montureDl = `dev-monture-acc-${idSuffix}`;
   const traitDl = `dev-trait-service-${idSuffix}`;
 
-  const allOptions = [...new Set(products.flatMap(p => [p.label, p.codeBarre].filter(Boolean)))];
+  // Montures / accessoires : on ne propose QUE les articles réellement présents
+  // dans CE magasin (stock reçu par bon de distribution ou de transfert > 0).
+  // Un article détenu par un autre magasin, mais absent de celui-ci, ne doit
+  // pas apparaître dans la liste de choix du devis (même règle que la Facture).
+  const disponible = (p: VenteProduct) => p.stock == null || p.stock > 0;
+  const allOptions = [...new Set(
+    products.filter(disponible).flatMap(p => [p.label, p.codeBarre].filter(Boolean))
+  )];
   const montureAccOptions = [...new Set(
-    products.filter(p => p.type === 'monture' || p.type === 'accessoire').flatMap(p => [p.label, p.codeBarre].filter(Boolean))
+    products.filter(p => (p.type === 'monture' || p.type === 'accessoire') && (p.stock ?? 0) > 0)
+      .flatMap(p => [p.label, p.codeBarre].filter(Boolean))
   )];
   const traitServiceOptions = [...new Set(
     products.filter(p => p.type === 'verre' || p.type === 'service').map(p => p.label).filter(Boolean)
@@ -924,7 +932,7 @@ function EtapeII({ propositions, onChange, magasinId, client }: { propositions: 
               </div>
               <button type="button" onClick={() => setShowOrdo(false)} className="text-gray-500 hover:text-gray-800"><X size={18} /></button>
             </div>
-            <div className="overflow-y-auto p-4 flex flex-col gap-3">
+            <div className="overflow-y-auto flex-1 min-h-0 p-4 flex flex-col gap-3">
               {loadingOrdo && ordoList.length === 0 && (
                 <div className="text-center text-sm text-gray-500 py-8">Chargement des ordonnances…</div>
               )}
