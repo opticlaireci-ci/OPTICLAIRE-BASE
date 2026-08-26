@@ -1357,13 +1357,19 @@ function MainLayoutContent() {
   return (
     <Box sx={{ display: 'flex' }}>
       <style>{`
+        /* Pas de "transform" ici (ni de will-change: transform) : un ancêtre
+           avec un transform actif devient le "containing block" des enfants
+           position: fixed (ex: les modales), qui ne se positionnent alors
+           plus par rapport à l'écran mais par rapport à ce conteneur — d'où
+           les modales tronquées en haut sur grand écran. On anime
+           uniquement l'opacité pour éviter ce piège. */
         @keyframes pageFadeIn {
-          from { opacity: 0; transform: translateY(6px); }
-          to   { opacity: 1; transform: translateY(0); }
+          from { opacity: 0; }
+          to   { opacity: 1; }
         }
         .page-transition {
           animation: pageFadeIn 0.15s ease-out both;
-          will-change: opacity, transform;
+          will-change: opacity;
         }
       `}</style>
       <NavigationMenu />
