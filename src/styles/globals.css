@@ -6,6 +6,33 @@ html, body, #root {
   max-width: 100vw;
 }
 
+/* ── Correctif fenêtres modales (tout écran, pas seulement mobile) ──────────
+   Cause du bug « menu caché derrière la fenêtre » observé sur grand écran :
+   un enfant flex ou grid a par défaut min-width: auto, c'est-à-dire qu'il ne
+   peut jamais devenir plus étroit que le contenu le plus large qu'il
+   contient (ex : un tableau de règlements avec beaucoup de colonnes). Ce
+   contenu « pousse » alors la fenêtre modale — et parfois la page entière —
+   au-delà de la largeur de l'écran, ce qui décale tout l'affichage et
+   tronque le menu et le titre de la fenêtre, quel que soit l'appareil ou le
+   navigateur utilisé. On neutralise ce piège partout dans l'application. */
+.flex > *,
+.grid > * {
+  min-width: 0;
+}
+
+/* Sécurité supplémentaire : quel que soit son contenu, une fenêtre modale
+   (overlay plein écran + boîte blanche) ne doit jamais dépasser la largeur
+   ni la hauteur visibles de l'écran. Le débordement éventuel défile à
+   l'intérieur de la fenêtre au lieu de décaler toute la page. */
+.fixed.inset-0 {
+  overflow: auto;
+}
+.fixed.inset-0 > div {
+  max-width: calc(100vw - 1rem);
+  max-height: 100vh;
+  box-sizing: border-box;
+}
+
 /* Tables : défilement horizontal sur mobile */
 @media (max-width: 768px) {
   table {
