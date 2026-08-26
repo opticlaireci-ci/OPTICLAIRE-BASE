@@ -726,13 +726,16 @@ async function telechargerDossierClientPDF(vente: any, magasinId?: string) {
   doc.text(assurance ? assurance.toUpperCase() : '', 17, y + 17);
 
   // ── Pied de page (coordonnées direction) ───────────────────────────────────
+  // Suit le contenu au lieu d'être figé en bas de page (même correctif que
+  // pour la facture et le reçu de règlement).
+  y += 20;
   doc.setDrawColor(210);
   doc.setLineWidth(0.2);
-  doc.line(30, 280, 180, 280);
+  doc.line(30, y, 180, y);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
   doc.setTextColor(80);
-  doc.text(`${directionEntete.telephone} | ${directionEntete.email} | 8 Pool, R.point de la rivera Palmeraie`, 105, 286, { align: 'center' });
+  doc.text(`${directionEntete.telephone} | ${directionEntete.email} | 8 Pool, R.point de la rivera Palmeraie`, 105, y + 6, { align: 'center' });
 
   doc.save(`Dossier_Client_${vente.numeroClient}_${vente.client}.pdf`);
 }
