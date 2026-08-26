@@ -794,7 +794,12 @@ async function telechargerReglementPDF(reglement: any, vente: any, magasinId?: s
   doc.setTextColor(0);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9);
-  doc.text('INFORMATIONS BON ASSURANCE', 16, y + 5);
+  // Le titre s'adapte : "BON ASSURANCE" seulement s'il y a réellement un bon
+  // d'assurance sur cette vente, sinon "RÈGLEMENT" pour un versement classique.
+  const titreInfos = (Array.isArray(vente.bonsAssurance) && vente.bonsAssurance.length > 0)
+    ? 'INFORMATIONS BON ASSURANCE'
+    : 'INFORMATIONS RÈGLEMENT';
+  doc.text(titreInfos, 16, y + 5);
   doc.text('ÉDITÉ LE', 110, y + 5);
   doc.text('MONTANT', 194, y + 5, { align: 'right' });
   doc.setDrawColor(0);
@@ -953,6 +958,10 @@ function imprimerReglement(reglement: any, vente: any, magasinId?: string) {
   const qrData = encodeURIComponent(`${TENANT.nom}|Facture:${vente.recap?.numFacture || ''}|Recu:${reglement.recu || ''}|Client:${vente.numeroClient || ''}|Montant:${acompte}`);
   const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=130x130&margin=0&data=${qrData}`;
 
+  // Même règle que sur le PDF direct : "BON ASSURANCE" seulement s'il y a
+  // réellement un bon d'assurance, sinon "RÈGLEMENT" pour un versement classique.
+  const titreInfos = bons.length > 0 ? 'INFORMATIONS BON ASSURANCE' : 'INFORMATIONS RÈGLEMENT';
+
   const totLine = (label: string, val: string, shaded: boolean) => `
     <tr${shaded ? ' style="background:#e5e5e5;"' : ''}>
       <td style="padding:6px 14px;text-align:right;color:#333;">${label}</td>
@@ -1002,7 +1011,7 @@ function imprimerReglement(reglement: any, vente: any, magasinId?: string) {
     </colgroup>
     <thead>
       <tr style="font-weight:700;border-bottom:2px solid #111;">
-        <td style="padding:8px;overflow:hidden;">INFORMATIONS BON ASSURANCE</td>
+        <td style="padding:8px;overflow:hidden;">${titreInfos}</td>
         <td style="padding:8px;overflow:hidden;">ÉDITÉ LE</td>
         <td style="padding:8px;text-align:right;overflow:hidden;">MONTANT</td>
       </tr>
