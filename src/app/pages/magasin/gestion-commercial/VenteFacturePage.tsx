@@ -4,7 +4,7 @@ import { ModalPortal } from '../../../components/ModalPortal';
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useParams } from 'react-router';
-import { Calendar, Trash2, X, Download, Plus, Eye, FileText, ArrowLeft, Printer, MoreHorizontal, Pencil } from 'lucide-react';
+import { Calendar, Trash2, X, XCircle, Download, Plus, Eye, FileText, ArrowLeft, Printer, MoreHorizontal, Pencil } from 'lucide-react';
 import { addCreateAudit, addUpdateAudit, formatDate, resolveUserName, AuditInfo } from '../../../utils/auditUtils';
 import { genNumFacture, genCodeBarre, genRefBonCommandeVerre, genNumRecu } from '../../../utils/autoNumbers';
 import { autoSaveOphtalmologue, autoSaveCabinet } from '../../../utils/autoActeur';
@@ -1066,6 +1066,71 @@ function imprimerReglement(reglement: any, vente: any, magasinId?: string) {
   win.onload = () => win.print();
 }
 
+// ── Bon de livraison PDF ─────────────────────────────────────────────────────
+// Généré depuis la carte « Informations Rendez-vous » une fois le RDV
+// retrait et la Date Récupération enregistrés.
+async function telechargerBonLivraisonPDF(vente: any, magasinId?: string) {
+  const { default: jsPDF } = await import('jspdf');
+  const doc = new jsPDF();
+  const fmt = (d?: string) => d ? new Date(d).toLocaleDateString('fr-FR') : '—';
+  const fmtDateTime = (d?: string) => (d ? new Date(d) : new Date()).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  const recap = vente.recap || {};
+
+  let y = pdfHeader(doc, magasinId, { date: vente.date });
+
+  doc.setFillColor(233, 233, 233);
+  doc.rect(14, y, 182, 24, 'F');
+  doc.setTextColor(0);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(12);
+  doc.text(`(N° ${vente.numeroClient || '—'}) ${vente.client || ''}`, 18, y + 8);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.text(`Téléphone: ${vente.telephone || ''}`, 18, y + 15);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(13);
+  doc.text('BON DE LIVRAISON', 192, y + 10, { align: 'right' });
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.text(`Facture N° ${recap.numFacture || '—'}`, 192, y + 17, { align: 'right' });
+  y += 32;
+
+  const rows: Array<[string, string]> = [
+    ['RDV Retrait', fmt(recap.rdvRetrait)],
+    ['Date Récupération', fmt(recap.dateRecuperation)],
+    ['Édité par', recap.rdvEditePar || '—'],
+    ['Édité le', recap.rdvEditeLe ? fmtDateTime(recap.rdvEditeLe) : '—'],
+    ['Livré par', recap.livrePar || '—'],
+  ];
+  doc.setFontSize(11);
+  rows.forEach((r, i) => {
+    if (i % 2 === 0) { doc.setFillColor(233, 233, 233); doc.rect(14, y - 5, 182, 8, 'F'); }
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(0);
+    doc.text(r[0], 18, y);
+    doc.setFont('helvetica', 'bold');
+    doc.text(r[1], 192, y, { align: 'right' });
+    y += 9;
+  });
+
+  y += 20;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(11);
+  doc.text('Signature du client', 40, y, { align: 'center' });
+  doc.text('Signature & Cachet', 165, y, { align: 'center' });
+
+  const e = getEntete(magasinId);
+  y += 30;
+  doc.setDrawColor(0);
+  doc.setLineWidth(0.3);
+  doc.line(14, y, 196, y);
+  doc.setFontSize(9);
+  doc.setTextColor(60);
+  doc.text(`${e.adresse}  Téléphone: ${e.telephone}  Email: ${e.email}`, 105, y + 6, { align: 'center' });
+
+  doc.save(`Bon_Livraison_${recap.numFacture || vente.id}_${vente.client}.pdf`);
+}
+
 // ── Auto-ID generators ───────────────────────────────────────────────────────
 
 function genClientId() {
@@ -1154,6 +1219,14 @@ interface RecapInfo {
   rdvRetrait: string;
   numFacture: string;
   numRecu?: string;
+  // Carte « Informations Rendez-vous » (détail de vente).
+  dateRecuperation?: string;
+  rdvEditeLe?: string;
+  rdvEditePar?: string;
+  livrePar?: string;
+  savNote?: string;
+  savDate?: string;
+  savPar?: string;
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -3132,6 +3205,12 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
   // Règlement verrier. La clé et le hook sont identiques pour rester cohérents.
   const [bonsVerres, setBonsVerres] = useLiveData<any>('leclaire_bons_commande_verres', []);
   const [showCommandeVerre, setShowCommandeVerre] = useState(false);
+  // Carte « Informations Rendez-vous » (colonne gauche du détail) : formulaire
+  // RDV retrait / Date Récupération tant que les 2 dates ne sont pas
+  // enregistrées, puis récapitulatif (BL, Édité/Livré par…) une fois saisies.
+  const [rdvForm, setRdvForm] = useState({ rdvRetrait: '', dateRecuperation: '' });
+  const [savingRdv, setSavingRdv] = useState(false);
+  const [blFichier, setBlFichier] = useState<string>('');
 
   // Enregistre un nouveau bon de commande de verre à partir de la vente ouverte.
   const handleSaveCommandeVerre = useCallback((bon: any) => {
@@ -3166,6 +3245,78 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
       logger.error('❌ Suppression bon assurance échouée:', err);
     }
   }, [detail]);
+
+  // Enregistre le rendez-vous (RDV retrait + Date Récupération) de la vente
+  // ouverte. Une fois les 2 dates renseignées, la carte « Informations
+  // Rendez-vous » bascule automatiquement en vue récapitulative (BL, Édité
+  // par, Livré par…) — c'est `detail.recap.rdvRetrait`/`dateRecuperation`
+  // qui pilote cet affichage.
+  const handleSaveRdv = useCallback(async () => {
+    if (!detail) return;
+    if (!rdvForm.rdvRetrait || !rdvForm.dateRecuperation) {
+      alert('Merci de renseigner le RDV retrait et la Date Récupération.');
+      return;
+    }
+    const userName = user?.nom || user?.prenom || user?.email || 'Utilisateur';
+    const nouveauRecap = {
+      ...detail.recap,
+      rdvRetrait: rdvForm.rdvRetrait,
+      dateRecuperation: rdvForm.dateRecuperation,
+      rdvEditeLe: new Date().toISOString(),
+      rdvEditePar: userName,
+      livrePar: userName,
+    };
+    setDetail(prev => prev ? { ...prev, recap: nouveauRecap } : prev);
+    setSavingRdv(true);
+    try {
+      await mettreAJourVente(detail.id, { recap: nouveauRecap });
+    } catch (err) {
+      logger.error('❌ Enregistrement du rendez-vous échoué:', err);
+      alert("Le rendez-vous n'a pas pu être enregistré. Réessayez.");
+    } finally {
+      setSavingRdv(false);
+    }
+  }, [detail, rdvForm, user]);
+
+  // Réinitialise le rendez-vous (repasse la carte en formulaire vide).
+  const handleAnnulerRdv = useCallback(async () => {
+    if (!detail) return;
+    if (!window.confirm('Annuler ce rendez-vous et réinitialiser les dates ?')) return;
+    const nouveauRecap = {
+      ...detail.recap,
+      rdvRetrait: '',
+      dateRecuperation: '',
+      rdvEditeLe: '',
+      rdvEditePar: '',
+      livrePar: '',
+    };
+    setDetail(prev => prev ? { ...prev, recap: nouveauRecap } : prev);
+    setRdvForm({ rdvRetrait: '', dateRecuperation: '' });
+    setBlFichier('');
+    try {
+      await mettreAJourVente(detail.id, { recap: nouveauRecap });
+    } catch (err) {
+      logger.error('❌ Annulation du rendez-vous échouée:', err);
+    }
+  }, [detail]);
+
+  // Ouvre un dossier Service Après-Vente simple (note horodatée sur la vente).
+  const handleServiceApresVente = useCallback(async () => {
+    if (!detail) return;
+    const note = window.prompt('Note Service Après-Vente pour ce dossier :', (detail.recap as any)?.savNote || '');
+    if (note === null) return;
+    const userName = user?.nom || user?.prenom || user?.email || 'Utilisateur';
+    const nouveauRecap = { ...detail.recap, savNote: note, savDate: new Date().toISOString(), savPar: userName };
+    setDetail(prev => prev ? { ...prev, recap: nouveauRecap } : prev);
+    try {
+      await mettreAJourVente(detail.id, { recap: nouveauRecap });
+      alert('Note Service Après-Vente enregistrée.');
+    } catch (err) {
+      logger.error('❌ Enregistrement SAV échoué:', err);
+      alert("La note n'a pas pu être enregistrée. Réessayez.");
+    }
+  }, [detail, user]);
+
   // Seed INSTANTANÉ depuis le cache local → les montants (reste/soldé) corrects
   // s'affichent immédiatement, sans flash des anciennes valeurs.
   const [reglementsParVente, setReglementsParVente] = useState<Record<string, ReglementSupabase[]>>(() => readReglementsCacheMap());
@@ -3185,6 +3336,11 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
   useEffect(() => {
     if (detail) {
       setViewMode('details');
+      setRdvForm({
+        rdvRetrait: (detail.recap as any)?.rdvRetrait || '',
+        dateRecuperation: (detail.recap as any)?.dateRecuperation || '',
+      });
+      setBlFichier('');
     }
   }, [detail?.id]);
 
@@ -3604,9 +3760,9 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
             <div className="overflow-y-auto flex-1 min-h-0" key={`modal-${viewMode}`}>
               {viewMode === 'details' ? (
               <>
-                <div className="grid grid-cols-12 gap-4 p-4">
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 p-4">
                 {/* Left Column - Client Info */}
-                <div className="col-span-3 flex flex-col gap-3">
+                <div className="col-span-1 lg:col-span-3 flex flex-col gap-3">
                   {/* Informations Client */}
                   <div className="rounded-lg p-4 text-white text-sm" style={{ backgroundColor: '#1a7a96' }}>
                     <div className="text-xs font-semibold uppercase mb-2 opacity-90">📋 Informations Client | {fmt(detail.date)}</div>
@@ -3623,6 +3779,112 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
                         );
                       }
                       return null;
+                    })()}
+                  </div>
+
+                  {/* Informations Rendez-vous : formulaire RDV retrait / Date
+                      Récupération tant que non renseignées, puis récap
+                      (BL, Édité/Livré par…) une fois les 2 dates enregistrées. */}
+                  <div className="rounded-lg p-4 text-white text-sm" style={{ backgroundColor: '#1a7a96' }}>
+                    <div className="text-xs font-semibold uppercase mb-2 opacity-90">📅 Informations Rendez-vous</div>
+                    {(() => {
+                      const recap: any = detail.recap || {};
+                      const rdvConfirme = !!(recap.rdvRetrait && recap.dateRecuperation);
+                      const editeLe = recap.rdvEditeLe ? new Date(recap.rdvEditeLe) : new Date((detail as any).createdAt || detail.date);
+                      const editeLeLabel = `${editeLe.toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })} ${editeLe.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
+
+                      if (rdvConfirme) {
+                        return (
+                          <>
+                            <div className="flex items-center gap-2 mb-1"><span>✅</span><span>Édité le {editeLeLabel}</span></div>
+                            <div className="flex items-center gap-2 mb-1"><span>✅</span><span>RDV retrait {fmt(recap.rdvRetrait)}</span></div>
+                            <div className="flex items-center gap-2 mb-3"><span>✅</span><span>Date Récupération {fmt(recap.dateRecuperation)}</span></div>
+
+                            <button
+                              onClick={() => telechargerBonLivraisonPDF(detail, magasinId)}
+                              className="w-full px-3 py-2 rounded-lg text-white text-xs font-semibold shadow hover:opacity-90 mb-3 flex items-center justify-center gap-1"
+                              style={{ backgroundColor: '#0d5a70' }}
+                            >
+                              🖨️ BON DE LIVRAISON PDF
+                            </button>
+
+                            <div className="text-xs font-semibold uppercase mb-1 opacity-90">📎 Charger BL</div>
+                            <div className="flex items-center gap-2 mb-3">
+                              <label className="flex-1 min-w-0 px-2 py-1.5 rounded text-xs font-medium cursor-pointer bg-white text-gray-700 border border-gray-300 truncate block">
+                                <span className="truncate block">{blFichier || 'Choisir un fichier'}</span>
+                                <input
+                                  type="file"
+                                  className="hidden"
+                                  accept=".pdf,.jpg,.jpeg,.png"
+                                  onChange={(e) => setBlFichier(e.target.files?.[0]?.name || '')}
+                                />
+                              </label>
+                              <button
+                                type="button"
+                                onClick={() => alert(blFichier ? `BL « ${blFichier} » prêt à être joint au dossier.` : "Choisissez d'abord un fichier.")}
+                                className="w-9 h-9 flex items-center justify-center rounded flex-shrink-0"
+                                style={{ backgroundColor: '#f5a623' }}
+                                title="Charger le fichier"
+                              >
+                                <Download size={16} className="text-white" />
+                              </button>
+                            </div>
+
+                            <div className="text-sm">Édité par: {recap.rdvEditePar || '—'}</div>
+                            <div className="text-sm flex items-center gap-1 mb-3">Livré Par: {recap.livrePar || '—'} <span>✅</span></div>
+
+                            <button
+                              onClick={handleServiceApresVente}
+                              className="w-full px-3 py-2 rounded-lg text-white text-xs font-semibold shadow hover:opacity-90 mb-2"
+                              style={{ backgroundColor: '#0d5a70' }}
+                            >
+                              Service Après-Vente
+                            </button>
+
+                            <button
+                              onClick={handleAnnulerRdv}
+                              className="w-full py-2 rounded-lg flex items-center justify-center hover:opacity-90"
+                              style={{ backgroundColor: '#f5a623' }}
+                              title="Annuler le rendez-vous"
+                            >
+                              <XCircle size={18} className="text-red-700" />
+                            </button>
+                          </>
+                        );
+                      }
+
+                      return (
+                        <>
+                          <div className="flex items-center gap-2 mb-2"><span>✅</span><span>Édité le {editeLeLabel}</span></div>
+
+                          <label className="text-xs block mb-1 opacity-90">RDV retrait</label>
+                          <input
+                            type="date"
+                            className="w-full px-2 py-1.5 rounded text-sm text-gray-800 mb-3"
+                            value={rdvForm.rdvRetrait}
+                            onChange={(e) => setRdvForm(f => ({ ...f, rdvRetrait: e.target.value }))}
+                          />
+
+                          <label className="text-xs block mb-1 opacity-90">Date Récupération</label>
+                          <input
+                            type="date"
+                            className="w-full px-2 py-1.5 rounded text-sm text-gray-800 mb-3"
+                            value={rdvForm.dateRecuperation}
+                            onChange={(e) => setRdvForm(f => ({ ...f, dateRecuperation: e.target.value }))}
+                          />
+
+                          <button
+                            onClick={handleSaveRdv}
+                            disabled={savingRdv}
+                            className="w-full px-3 py-2 rounded-lg text-white text-sm font-semibold shadow hover:opacity-90 disabled:opacity-60 mb-2"
+                            style={{ backgroundColor: '#0d5a70' }}
+                          >
+                            {savingRdv ? 'Enregistrement…' : 'Enregistrer'}
+                          </button>
+
+                          <div className="text-sm opacity-90">Édité par: {(detail as any).createdBy || user?.nom || user?.prenom || user?.email || '—'}</div>
+                        </>
+                      );
                     })()}
                   </div>
 
