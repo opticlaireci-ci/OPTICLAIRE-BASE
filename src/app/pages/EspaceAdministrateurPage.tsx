@@ -1,7 +1,7 @@
 import { logger } from '../utils/logger';
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
-import { Monitor, Settings, Plus, Home, X, Trash2, AlertTriangle, Loader2 } from 'lucide-react';
+import { Monitor, Settings, Plus, Home, X, Trash2, AlertTriangle, Loader2, RotateCcw } from 'lucide-react';
 import { getActiveMagasins } from '../constants/magasins';
 import {
   ACCUEIL_CONTENT_KEY, readAccueilContent, saveAccueilContent, newAccueilBlock, type AccueilContent,
@@ -35,6 +35,16 @@ export function EspaceAdministrateurPage() {
   const MOT_CONFIRMATION = 'REINITIALISER';
 
   const toggleResetCible = (c: ResetCible) => setResetCibles(prev => ({ ...prev, [c]: !prev[c] }));
+
+  // Ouvre la boîte de réinitialisation déjà pré-réglée sur UN magasin précis
+  // (bouton "Réinitialiser" sur la carte du magasin) — évite à l'admin de
+  // devoir rouvrir le dialogue général puis choisir le magasin dans la liste.
+  const ouvrirResetMagasin = (idMagasin: string) => {
+    setResetCibles({ ventes: true, reglements: true, clients: false });
+    setResetMagasin(idMagasin);
+    setResetConfirm('');
+    setResetOpen(true);
+  };
 
   const lancerReset = async () => {
     const cibles = (Object.keys(resetCibles) as ResetCible[]).filter(c => resetCibles[c]);
@@ -355,6 +365,16 @@ export function EspaceAdministrateurPage() {
                   <Settings size={12} />
                   Gérer le magasin
                 </button>
+                {peut('action:reinitialiser-donnees') && (
+                  <button
+                    onClick={() => ouvrirResetMagasin(magasin.id)}
+                    title={`Réinitialiser les données de ${magasin.label}`}
+                    className="flex items-center gap-1.5 text-white text-xs font-medium px-2 py-1.5 rounded shadow active:scale-95 transition-all w-full justify-center bg-red-600 hover:bg-red-700"
+                  >
+                    <RotateCcw size={12} />
+                    Réinitialiser
+                  </button>
+                )}
               </div>
             </div>
           );

@@ -70,7 +70,17 @@ export function DashboardPage() {
       v => { map.set(v.id, v); flush(); },
       id => { map.delete(id); flush(); },
     );
-    return () => { mounted = false; unsub(); };
+
+    // Filet de sécurité : une suppression de vente (bouton Supprimer d'une
+    // facture) ou une Réinitialisation de magasin met immédiatement à jour le
+    // cache local ('leclaire_ventes_ALL') et émet 'ventes-updated'. On relit ce
+    // cache aussitôt pour que le Tableau de Bord Général retire la somme SANS
+    // attendre l'abonnement temps réel (utile en cas de latence réseau ou si
+    // le flux temps réel n'est pas actif sur cette page).
+    const onVentesUpdated = () => { if (mounted) setVentes(readVentesCache('ALL')); };
+    window.addEventListener('ventes-updated', onVentesUpdated);
+
+    return () => { mounted = false; unsub(); window.removeEventListener('ventes-updated', onVentesUpdated); };
   }, []);
 
   useEffect(() => {
