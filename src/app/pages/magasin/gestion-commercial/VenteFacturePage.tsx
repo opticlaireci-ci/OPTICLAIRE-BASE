@@ -1,5 +1,6 @@
 import { logger } from '../../../utils/logger';
 import { AddButton } from '../../../components/AddButton';
+import { ModalPortal } from '../../../components/ModalPortal';
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useParams } from 'react-router';
@@ -1808,6 +1809,7 @@ function StepII({ data, onChange, client, magasinId }: {
 
       {/* Modale : anciennes ordonnances du client */}
       {showOrdo && (
+        <ModalPortal>
         <div
           className="fixed inset-0 z-[1000] flex items-center justify-center p-4"
           style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
@@ -1864,6 +1866,7 @@ function StepII({ data, onChange, client, magasinId }: {
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
     </div>
   );
@@ -2456,6 +2459,7 @@ function ModalBonAssurance({
   };
 
   return (
+    <ModalPortal>
     <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}>
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden">
         {/* Header */}
@@ -2505,6 +2509,7 @@ function ModalBonAssurance({
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 }
 
@@ -2516,6 +2521,7 @@ function ModalSucces({ numFacture, numClient, total, onClose, onNouvelle, onImpr
   numFacture: string; numClient: string; total: string; onClose: () => void; onNouvelle: () => void; onImprimer: () => void;
 }) {
   return (
+    <ModalPortal>
     <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}>
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden text-center">
         <div className="px-8 py-10 flex flex-col items-center gap-4">
@@ -2549,6 +2555,7 @@ function ModalSucces({ numFacture, numClient, total, onClose, onNouvelle, onImpr
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 }
 
@@ -2914,6 +2921,7 @@ function CommandeVerreModal({
   ];
 
   return (
+    <ModalPortal>
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl max-h-[92vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-6 py-3 rounded-t-xl" style={{ backgroundColor: '#1a7a96' }}>
@@ -3080,6 +3088,7 @@ function CommandeVerreModal({
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 }
 
@@ -3350,6 +3359,7 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
     <>
       {/* Modal Ajouter Règlement */}
       {showAjouterReglement && detail && (
+        <ModalPortal>
         <div className="fixed inset-0 z-[60] flex items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
           <div className="bg-white rounded-lg shadow-2xl w-full max-w-4xl mx-4 overflow-hidden">
             <div className="flex items-center justify-between px-6 py-3 bg-gray-100 border-b border-gray-300">
@@ -3458,10 +3468,12 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
 
       {/* Modal Bon Assurance (sur page règlements) */}
       {showBonAssuranceReglement && detail && (
+        <ModalPortal>
         <div className="fixed inset-0 z-[60] flex items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
           <div className="bg-white rounded-lg shadow-2xl w-full max-w-4xl mx-4 overflow-hidden">
             <div className="flex items-center justify-between px-6 py-3 bg-gray-100 border-b border-gray-300">
@@ -3552,10 +3564,12 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
             />
           )}
         </div>
+        </ModalPortal>
       )}
 
       {/* Détail modal */}
       {detail && (
+        <ModalPortal>
         <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}>
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-7xl mx-4 overflow-hidden max-h-[90vh] flex flex-col">
             {/* Header */}
@@ -4358,6 +4372,7 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
 
       {showCommandeVerre && detail && (
