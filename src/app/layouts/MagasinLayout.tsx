@@ -453,7 +453,7 @@ export function MagasinLayout() {
   };
 
   const handleNavigate = (path: string) => {
-    if (isMobile) setMobileOpen(false);
+    setMobileOpen(false);
     navigate(path);
   };
 
@@ -553,13 +553,10 @@ export function MagasinLayout() {
 
   const drawerContent = (
     <>
-      {!isMobile && <Toolbar />}
-      {isMobile && (
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 2, py: 1, borderBottom: '1px solid #eee' }}>
-          <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>{magasinNom}</Typography>
-          <IconButton size="small" onClick={() => setMobileOpen(false)}><ArrowBack fontSize="small" /></IconButton>
-        </Box>
-      )}
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 2, py: 1, borderBottom: '1px solid #eee' }}>
+        <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>{magasinNom}</Typography>
+        <IconButton size="small" onClick={() => setMobileOpen(false)} title="Fermer le menu"><ArrowBack fontSize="small" /></IconButton>
+      </Box>
       <Box sx={{ overflow: 'auto', py: 0.5 }}>
         <List sx={{ py: 0 }}>
           {visibleMenuItems.map((item) => renderMenuItem(item))}
@@ -577,9 +574,14 @@ export function MagasinLayout() {
               <MenuIcon />
             </IconButton>
           ) : (
-            <IconButton edge="start" onClick={handleBack} sx={{ mr: 2, color: '#fff' }}>
-              <ArrowBack />
-            </IconButton>
+            <>
+              <IconButton edge="start" onClick={() => setMobileOpen(true)} sx={{ mr: 1, color: '#fff' }} title="Ouvrir le menu">
+                <MenuIcon />
+              </IconButton>
+              <IconButton onClick={handleBack} sx={{ mr: 2, color: '#fff' }} title="Retour">
+                <ArrowBack />
+              </IconButton>
+            </>
           )}
           <SeasonLogo size={28} />
           <Typography variant={isMobile ? 'body2' : 'h6'} noWrap sx={{ fontWeight: 700, color: '#fff', flexShrink: 0 }}>
@@ -651,42 +653,25 @@ export function MagasinLayout() {
         )}
       </AppBar>
 
-      {/* Drawer permanent sur desktop, temporaire sur mobile */}
-      <Box component="nav" sx={{ width: { md: drawerWidth }, flexShrink: { md: 0 } }}>
-        {isMobile ? (
-          <Drawer
-            variant="temporary"
-            open={mobileOpen}
-            onClose={() => setMobileOpen(false)}
-            ModalProps={{ keepMounted: true }}
-            sx={{
-              '& .MuiDrawer-paper': {
-                width: drawerWidth,
-                boxSizing: 'border-box',
-                backgroundColor: '#fff',
-              },
-            }}
-          >
-            {drawerContent}
-          </Drawer>
-        ) : (
-          <Drawer
-            variant="permanent"
-            sx={{
-              width: drawerWidth,
-              flexShrink: 0,
-              '& .MuiDrawer-paper': {
-                width: drawerWidth,
-                boxSizing: 'border-box',
-                backgroundColor: '#fff',
-              },
-            }}
-            open
-          >
-            {drawerContent}
-          </Drawer>
-        )}
-      </Box>
+      {/* Menu latéral : toujours "temporaire" (fermé par défaut, s'ouvre au clic
+          sur le bouton menu, se ferme automatiquement après un clic sur un
+          lien ou en dehors) — sur mobile ET sur ordinateur. Ainsi il ne peut
+          plus jamais rester affiché en permanence par-dessus une fenêtre. */}
+      <Drawer
+        variant="temporary"
+        open={mobileOpen}
+        onClose={() => setMobileOpen(false)}
+        ModalProps={{ keepMounted: true }}
+        sx={{
+          '& .MuiDrawer-paper': {
+            width: drawerWidth,
+            boxSizing: 'border-box',
+            backgroundColor: '#fff',
+          },
+        }}
+      >
+        {drawerContent}
+      </Drawer>
 
       <Box
         component="main"
@@ -694,7 +679,7 @@ export function MagasinLayout() {
           flexGrow: 1,
           minWidth: 0,
           p: { xs: 1, sm: 2, md: 3 },
-          width: { xs: '100%', md: `calc(100% - ${drawerWidth}px)` },
+          width: '100%',
           maxWidth: '100vw',
           // Sur mobile : le contenu large défile horizontalement au lieu d'être
           // coupé ; sur desktop on masque le débordement comme avant.
