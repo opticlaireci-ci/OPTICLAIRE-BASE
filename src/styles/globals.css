@@ -26,6 +26,17 @@ html, body, #root {
    l'intérieur de la fenêtre au lieu de décaler toute la page. */
 .fixed.inset-0 {
   overflow: auto;
+  /* ── Correctif « menu au-dessus de la fenêtre » ─────────────────────────
+     Le menu latéral (Drawer) et la barre du haut (AppBar) viennent de la
+     bibliothèque MUI, dont l'échelle de superposition va jusqu'à 1200-1201.
+     Les fenêtres modales de l'app (Tailwind, classes z-50 / z-[60] /
+     z-[1000]) restaient elles bien en-dessous : le menu et la barre du
+     haut s'affichaient donc PAR-DESSUS la fenêtre au lieu d'être masqués
+     par elle, ce qui donnait l'impression que la fenêtre était tronquée
+     derrière le menu (visible sur grand écran comme sur mobile). On force
+     ici toutes les fenêtres modales de l'app à passer au-dessus de tout le
+     reste de l'interface, quel que soit l'appareil ou le navigateur. */
+  z-index: 1310 !important;
 }
 .fixed.inset-0 > div {
   max-width: calc(100vw - 1rem);
