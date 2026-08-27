@@ -44,6 +44,15 @@ html, body, #root {
   box-sizing: border-box;
 }
 
+/* Double sécurité : on plafonne aussi directement le menu latéral (Drawer)
+   et la barre du haut (AppBar) de MUI, pour garantir qu'ils restent SOUS
+   les fenêtres modales même si une autre règle venait changer leur
+   superposition par ailleurs. */
+.MuiDrawer-root,
+.MuiAppBar-root {
+  z-index: 1200 !important;
+}
+
 /* Tables : défilement horizontal sur mobile */
 @media (max-width: 768px) {
   table {
