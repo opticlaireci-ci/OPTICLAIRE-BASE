@@ -188,9 +188,56 @@ function imprimerDevis(d: DevisRecord, magasinId: string) {
 </body></html>`;
 
   const w = window.open('', '_blank');
-  if (!w) { alert('Autorisez les fenêtres pop-up pour imprimer le devis.'); return; }
-  w.document.write(html);
-  w.document.close();
+  if (w) {
+    // Cas normal (desktop / navigateur classique) : un nouvel onglet s'ouvre.
+    // On force le focus + l'impression automatique dès le chargement : sans
+    // cela l'onglet pouvait s'ouvrir discrètement en arrière-plan (comportement
+    // de certains navigateurs) et donnait l'impression que rien ne s'était
+    // passé, alors qu'il fallait aller cliquer soi-même sur l'onglet ouvert.
+    w.document.write(html);
+    w.document.close();
+    w.focus();
+    w.onload = () => { try { w.print(); } catch { /* le bouton manuel reste disponible dans l'aperçu */ } };
+    return;
+  }
+
+  // Repli robuste : sur mobile, dans une PWA installée, ou dans certains
+  // navigateurs intégrés (WebView), `window.open` peut être bloqué ou ne
+  // renvoyer aucune fenêtre SANS déclencher d'erreur — le bouton « Imprimer »
+  // semblait alors ne « rien faire ». On imprime dans ce cas via un iframe
+  // caché : cette méthode n'est jamais bloquée par un bloqueur de pop-up
+  // puisqu'aucune nouvelle fenêtre/onglet n'est ouvert(e).
+  try {
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    document.body.appendChild(iframe);
+
+    const cleanup = () => setTimeout(() => iframe.parentNode?.removeChild(iframe), 1000);
+
+    const doc = iframe.contentWindow?.document;
+    if (!doc) throw new Error('Aperçu d\'impression indisponible sur ce navigateur.');
+    doc.open();
+    doc.write(html);
+    doc.close();
+
+    iframe.onload = () => {
+      try {
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+      } catch {
+        alert('Impossible de lancer l\'impression automatiquement. Utilisez le bouton "Imprimer" dans l\'aperçu.');
+      } finally {
+        cleanup();
+      }
+    };
+  } catch (e) {
+    alert('Impossible d\'imprimer le devis : ' + ((e as Error)?.message || 'erreur inconnue') + '. Autorisez les fenêtres pop-up puis réessayez.');
+  }
 }
 
 // ── Étape I ───────────────────────────────────────────────────────────────────
