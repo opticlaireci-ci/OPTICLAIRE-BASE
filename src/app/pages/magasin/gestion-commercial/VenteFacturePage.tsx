@@ -987,7 +987,7 @@ function imprimerReglement(reglement: any, vente: any, magasinId?: string) {
   <style>
     * { margin:0; padding:0; box-sizing:border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
     html, body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-    body { font-family: Arial, Helvetica, sans-serif; font-size:13px; color:#111; padding:28px; }
+    body { font-family: Arial, Helvetica, sans-serif; font-size:13px; color:#111; padding:28px; display:flex; flex-direction:column; min-height:100vh; }
     @media print { body { padding:12px; } .no-print { display:none; } }
     table { border-collapse:collapse; }
   </style>
@@ -1050,10 +1050,10 @@ function imprimerReglement(reglement: any, vente: any, magasinId?: string) {
   </table>
   ${reste <= 0 ? `<div style="margin-top:8px;width:360px;margin-left:auto;text-align:right;"><span style="display:inline-block;padding:4px 14px;border-radius:14px;background:#43a047;color:#fff;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">✓ Soldée</span></div>` : ''}
 
-  <div style="text-align:center;margin-top:40px;color:#111;">Signature &amp; Cachet</div>
+  <div style="text-align:center;margin-top:auto;padding-top:40px;color:#111;">Signature &amp; Cachet</div>
 
   <!-- Pied de page -->
-  <div style="margin-top:60px;border-top:1px solid #111;padding-top:14px;text-align:center;font-size:12px;color:#111;">
+  <div style="margin-top:24px;border-top:1px solid #111;padding-top:14px;text-align:center;font-size:12px;color:#111;">
     ${e.adresse} Téléphone: ${e.telephone} Email: ${e.email}
   </div>
 </body>
