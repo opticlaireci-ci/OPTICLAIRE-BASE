@@ -1227,6 +1227,191 @@ function FormulaireDevis({ magasinId, onRetour, onSaved, devisInitial }: { magas
   );
 }
 
+// ── Modal Détail Devis (vue riche : client, ophtalmologue, propositions) ───────
+function DetailDevisModal({ detail, magasinId, onClose, onConvertir }: { detail: DevisRecord; magasinId: string; onClose: () => void; onConvertir: (d: DevisRecord) => void }) {
+  const [tab, setTab] = useState(0);
+  const client = detail._raw ? venteToClientInfo(detail._raw) : null;
+  const props = detail.propositions && detail.propositions.length > 0 ? detail.propositions : [emptyProp()];
+  const p = props[tab] || props[0];
+  const teal = '#1a7a96';
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}>
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl mx-4 max-h-[90vh] overflow-hidden flex flex-col">
+        <div className="flex items-center justify-between px-6 py-4 shrink-0" style={{ backgroundColor: teal }}>
+          <span className="text-white font-semibold">Détail — {detail.numDevis}</span>
+          <button onClick={onClose} className="text-white"><X size={18} /></button>
+        </div>
+
+        <div className="overflow-y-auto flex-1 min-h-0 grid grid-cols-[260px_1fr_190px]">
+          {/* Colonne gauche : infos client / ophtalmologue */}
+          <div className="border-r border-gray-200 p-4 flex flex-col gap-4 text-sm">
+            <div>
+              <div className="flex items-center gap-1.5 font-semibold text-gray-700 mb-2 text-xs uppercase tracking-wide">
+                <FileText size={14} /> Informations Client | {fmt(detail.date)}
+              </div>
+              <div className="rounded-lg p-3 text-white text-xs leading-relaxed" style={{ backgroundColor: teal }}>
+                <div className="font-bold">N° {detail.numeroClient} | {[client?.civilite, client?.nom || detail.client].filter(Boolean).join(' ').toUpperCase()}</div>
+                {(client?.telephone1 || detail.telephone) && <div className="mt-1">Téléphone: {client?.telephone1 || detail.telephone}</div>}
+                {client?.matriculeAssurance && <div>Matricule: {client.matriculeAssurance}</div>}
+                {client?.entreprise && <div>Entreprise: {client.entreprise}</div>}
+                {(client?.jourNaissance || client?.moisNaissance || client?.anneeNaissance) && (
+                  <div>{[client?.jourNaissance, client?.moisNaissance, client?.anneeNaissance].filter(Boolean).join('-')}</div>
+                )}
+              </div>
+            </div>
+
+            {(client?.ophtalmologue || client?.cabinetOphtalmologue) && (
+              <div>
+                <div className="font-semibold text-gray-700 mb-2 text-xs uppercase tracking-wide">Informations Ophtalmologue</div>
+                <div className="rounded-lg p-3 text-white text-xs leading-relaxed" style={{ backgroundColor: teal }}>
+                  {client?.ophtalmologue && <div className="font-bold">{client.ophtalmologue}</div>}
+                  {client?.telOphtalmologue && <div>{client.telOphtalmologue}</div>}
+                  {client?.cabinetOphtalmologue && <div className="mt-1 font-semibold">{client.cabinetOphtalmologue}</div>}
+                  {client?.telCabinet && <div>{client.telCabinet}</div>}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Colonne centrale : détails du dossier */}
+          <div className="p-4 border-r border-gray-200">
+            <div className="font-semibold text-gray-700 mb-2 text-xs uppercase tracking-wide">Détails Dossier</div>
+
+            {props.length > 1 && (
+              <div className="flex gap-1 border-b border-gray-200 mb-4">
+                {props.map((_, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setTab(i)}
+                    className={'px-3 py-2 text-sm font-semibold ' + (tab === i ? 'border-b-2' : 'text-gray-400')}
+                    style={tab === i ? { borderColor: teal, color: teal } : {}}
+                  >
+                    Proposition {toRoman(i + 1)}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {p.verres.length > 0 && (
+              <div className="mb-5">
+                <div className="font-semibold text-gray-700 mb-2 text-sm">Informations Verre</div>
+                {p.verres.map((v, vi) => (
+                  <div key={vi} className="mb-3 rounded-lg overflow-hidden text-white" style={{ backgroundColor: teal }}>
+                    <div className="px-3 py-2 text-sm font-semibold">
+                      {[v.typeVerre, v.verre, v.traitement].filter(Boolean).join(' | ') || 'Verre'}
+                      {(v.matiere || v.diametre) && (
+                        <div className="text-xs font-normal">{[v.matiere, v.diametre].filter(Boolean).join(' | ')}</div>
+                      )}
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-[11px] whitespace-nowrap">
+                        <thead>
+                          <tr className="border-t border-white/25">
+                            {['', 'Sphère', 'Cylindre', 'Axe', 'Dec', 'Addition', 'Hauteur', 'EV Loin', 'EV Près', 'Qté', 'Prix', 'Remise', 'Total'].map((h, hi) => (
+                              <th key={hi} className="px-2 py-1 text-left font-semibold">{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(['oeilDroit', 'oeilGauche'] as const).map((key) => {
+                            const o = v[key];
+                            const rowTotal = (Number(o.prix) || 0) * (Number(o.quantite) || 1) - (Number(o.remise) || 0);
+                            return (
+                              <tr key={key} className="border-t border-white/20">
+                                <td className="px-2 py-1 font-semibold">{key === 'oeilDroit' ? 'Oeil Droit' : 'Oeil Gauche'}</td>
+                                <td className="px-2 py-1">{o.sphere}</td>
+                                <td className="px-2 py-1">{o.cylindre}</td>
+                                <td className="px-2 py-1">{o.axe}</td>
+                                <td className="px-2 py-1">{o.dec}</td>
+                                <td className="px-2 py-1">{o.addition}</td>
+                                <td className="px-2 py-1">{o.hauteur}</td>
+                                <td className="px-2 py-1">{o.evLoin}</td>
+                                <td className="px-2 py-1">{o.evPres}</td>
+                                <td className="px-2 py-1">{o.quantite}</td>
+                                <td className="px-2 py-1">{money(Number(o.prix) || 0)}</td>
+                                <td className="px-2 py-1">{money(Number(o.remise) || 0)}</td>
+                                <td className="px-2 py-1 font-semibold">{money(rowTotal)}</td>
+                              </tr>
+                            );
+                          })}
+                          <tr className="border-t border-white/30 bg-black/10">
+                            <td colSpan={12} className="px-2 py-1 text-right font-semibold">Total</td>
+                            <td className="px-2 py-1 font-bold">{money(Number(v.total) || 0)}</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {p.articles.length > 0 && (
+              <div className="mb-4">
+                <div className="font-semibold text-gray-700 mb-2 text-sm">Informations Traitements Montures Accessoires Autres</div>
+                <div className="rounded-lg overflow-hidden text-white">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-[11px] whitespace-nowrap" style={{ backgroundColor: teal }}>
+                      <thead>
+                        <tr>
+                          <th className="px-2 py-2 text-left font-semibold">Désignation</th>
+                          <th className="px-2 py-2 text-right font-semibold">Prix</th>
+                          <th className="px-2 py-2 text-right font-semibold">Remise</th>
+                          <th className="px-2 py-2 text-right font-semibold">Quantité</th>
+                          <th className="px-2 py-2 text-right font-semibold">Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {p.articles.map((a, ai) => (
+                          <tr key={ai} className="border-t border-white/20">
+                            <td className="px-2 py-2">{a.designation}</td>
+                            <td className="px-2 py-2 text-right">{money(Number(a.prix) || 0)}</td>
+                            <td className="px-2 py-2 text-right">{money(Number(a.remise) || 0)}</td>
+                            <td className="px-2 py-2 text-right">{a.quantite}</td>
+                            <td className="px-2 py-2 text-right font-semibold">{money(Number(a.total) || 0)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-3 gap-3">
+              <div className="rounded-lg p-3 text-white text-center" style={{ backgroundColor: teal }}>
+                <div className="text-xs opacity-80">Total</div>
+                <div className="font-bold">{money((p.totalVerres || 0) + (p.totalArticles || 0))}</div>
+              </div>
+              <div className="rounded-lg p-3 text-white text-center" style={{ backgroundColor: teal }}>
+                <div className="text-xs opacity-80">Remise ({p.remisePct}%)</div>
+                <div className="font-bold">{money(p.valeurRemise || 0)}</div>
+              </div>
+              <div className="rounded-lg p-3 text-white text-center" style={{ backgroundColor: teal }}>
+                <div className="text-xs opacity-80">Total Net</div>
+                <div className="font-bold">{money(p.totalNet || 0)}</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Colonne droite : actions */}
+          <div className="p-4 flex flex-col gap-2">
+            <div className="font-semibold text-gray-700 mb-1 text-xs uppercase tracking-wide">Actions</div>
+            <button onClick={() => imprimerDevis(detail, magasinId)} className="flex items-center gap-1.5 px-3 py-2 rounded text-white text-sm font-semibold justify-center" style={{ backgroundColor: '#7b3fa0' }}>
+              <Printer size={15} /> Imprimer
+            </button>
+            <button onClick={() => onConvertir(detail)} className="flex items-center gap-1.5 px-3 py-2 rounded text-white text-sm font-semibold justify-center" style={{ backgroundColor: '#1a9c5b' }}>
+              <ArrowRightLeft size={15} /> Convertir en vente
+            </button>
+            <button onClick={onClose} className="px-3 py-2 rounded border border-gray-300 text-sm mt-2">Fermer</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Liste Devis ───────────────────────────────────────────────────────────────
 function ListeDevis({ magasinId, onNouveau, onModifier }: { magasinId: string; onNouveau: () => void; onModifier?: (d: DevisRecord) => void }) {
   const { user } = useAuth();
@@ -1323,29 +1508,12 @@ function ListeDevis({ magasinId, onNouveau, onModifier }: { magasinId: string; o
   return (
     <>
       {detail && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}>
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-xl mx-4">
-            <div className="flex items-center justify-between px-6 py-4" style={{ backgroundColor: '#1a7a96' }}>
-              <span className="text-white font-semibold">Détail — {detail.numDevis}</span>
-              <button onClick={() => setDetail(null)} className="text-white"><X size={18} /></button>
-            </div>
-            <div className="p-5 grid grid-cols-2 gap-3 text-sm">
-              <div><span className="text-gray-500">N° Client</span><div className="font-mono font-bold text-blue-700">{detail.numeroClient}</div></div>
-              <div><span className="text-gray-500">Client</span><div className="font-semibold">{detail.client}</div></div>
-              <div><span className="text-gray-500">Date</span><div>{fmt(detail.date)}</div></div>
-              <div><span className="text-gray-500">N° Devis</span><div className="font-mono">{detail.numDevis}</div></div>
-            </div>
-            <div className="flex justify-end gap-2 px-5 pb-5">
-              <button onClick={() => imprimerDevis(detail, magasinId)} className="flex items-center gap-1.5 px-4 py-2 rounded text-white text-sm font-semibold" style={{ backgroundColor: '#7b3fa0' }}>
-                <Printer size={15} /> Imprimer
-              </button>
-              <button onClick={() => { const d = detail; setDetail(null); handleConvertir(d); }} className="flex items-center gap-1.5 px-4 py-2 rounded text-white text-sm font-semibold" style={{ backgroundColor: '#1a9c5b' }}>
-                <ArrowRightLeft size={15} /> Convertir en vente
-              </button>
-              <button onClick={() => setDetail(null)} className="px-4 py-2 rounded border border-gray-300 text-sm">Fermer</button>
-            </div>
-          </div>
-        </div>
+        <DetailDevisModal
+          detail={detail}
+          magasinId={magasinId}
+          onClose={() => setDetail(null)}
+          onConvertir={(d) => { setDetail(null); handleConvertir(d); }}
+        />
       )}
 
       <div className="flex flex-col gap-5 p-6">
