@@ -9,7 +9,7 @@ import { autoSaveOphtalmologue, autoSaveCabinet } from '../../../utils/autoActeu
 import { autoSaveClient } from '../../../utils/autoClient';
 import { useTypesVerre, useVerresList, findVerreByName, VerreRecord, useOphtalmologues, useCabinets, useProfessions, useClientRecordsMagasin, ClientRecord, useVenteProducts, findVenteProduct, VenteProduct } from '../../../utils/venteLookups';
 import { genCodeBarre, genNumFacture } from '../../../utils/autoNumbers';
-import { printHeaderHTML } from '../../../utils/documentHeader';
+import { printHeaderHTML, getEntete } from '../../../utils/documentHeader';
 import { useSupabaseSync } from '../../../hooks/useSupabaseSync';
 import { ajouterVente, chargerVentes, readVentesCache, supprimerVente, VenteSupabase } from '../../../services/ventesService';
 import { loadFromSupabase, saveToSupabase } from '../../../services/supabaseRealtime';
@@ -69,8 +69,8 @@ const toRoman = (n: number) => ROMAN[n] || String(n);
 
 // ── types ──────────────────────────────────────────────────────────────────────
 interface OeilData { sphere: string; cylindre: string; axe: string; dec: string; addition: string; hauteur: string; evLoin: string; evPres: string; quantite: string; prix: string; remise: string; }
-interface VerreInfo { typeVerre: string; verre: string; traitement: string; matiere: string; diametre: string; oeilDroit: OeilData; oeilGauche: OeilData; ecartPupillaire: string; total: string; }
-interface ArticleLigne { id: string; produitId?: string; codeBarre?: string; designation: string; type?: 'monture' | 'accessoire' | 'traitement' | 'service' | 'autre'; stock?: string; remise?: string; prix: string; quantite: string; total: string; }
+interface VerreInfo { typeVerre: string; verre: string; traitement: string; matiere: string; diametre: string; fournisseur?: string; garantie?: string; oeilDroit: OeilData; oeilGauche: OeilData; ecartPupillaire: string; total: string; }
+interface ArticleLigne { id: string; produitId?: string; codeBarre?: string; designation: string; type?: 'monture' | 'accessoire' | 'traitement' | 'service' | 'autre'; stock?: string; remise?: string; prix: string; quantite: string; total: string; fournisseur?: string; garantie?: string; detailMonture?: string; }
 interface PropositionData { verres: VerreInfo[]; articles: ArticleLigne[]; totalVerres: number; totalArticles: number; remisePct: string; valeurRemise: number; totalNet: number; }
 interface ClientInfo { numeroClient: string; civilite: string; nom: string; telephone1: string; telephone2: string; email: string; adresse: string; profession: string; jourNaissance: string; moisNaissance: string; anneeNaissance: string; soldeClient: string; matriculeAssurance: string; entreprise: string; ophtalmologue: string; telOphtalmologue: string; cabinetOphtalmologue: string; telCabinet: string; }
 interface DevisRecord extends AuditInfo { id: string; date: string; numeroClient: string; client: string; telephone: string; propositions: PropositionData[]; numDevis: string; _raw?: VenteSupabase; }
@@ -97,52 +97,153 @@ const purpleHdr = 'text-xs font-semibold text-white text-center px-1 py-1 whites
 const purpleCell = 'border border-purple-400 bg-white px-0.5 py-0.5';
 const vInput = 'w-full text-xs text-center border-none outline-none bg-transparent py-1';
 
+// Nombre entier -> texte français ("DEUX CENT MILLE FRANCS CFA"). Copie locale
+// volontaire (même logique que VenteFacturePage.tsx) pour ne pas coupler les
+// deux pages d'impression entre elles.
+function montantEnLettresDevis(nombre: number): string {
+  nombre = Math.round(nombre || 0);
+  if (nombre === 0) return 'ZÉRO FRANC CFA';
+  const u = ['', 'un', 'deux', 'trois', 'quatre', 'cinq', 'six', 'sept', 'huit', 'neuf', 'dix',
+    'onze', 'douze', 'treize', 'quatorze', 'quinze', 'seize', 'dix-sept', 'dix-huit', 'dix-neuf'];
+  const d = ['', 'dix', 'vingt', 'trente', 'quarante', 'cinquante', 'soixante', 'soixante', 'quatre-vingt', 'quatre-vingt'];
+  const centaines = (n: number): string => {
+    let r = '';
+    const c = Math.floor(n / 100), reste = n % 100;
+    if (c > 0) r += (c > 1 ? u[c] + ' ' : '') + 'cent' + (c > 1 && reste === 0 ? 's' : '');
+    if (reste > 0) {
+      if (r) r += ' ';
+      if (reste < 20) r += u[reste];
+      else {
+        const diz = Math.floor(reste / 10), un = reste % 10;
+        if (diz === 7 || diz === 9) r += d[diz] + '-' + u[10 + un];
+        else {
+          r += d[diz];
+          if (un === 1 && diz !== 8) r += '-et-un';
+          else if (un > 0) r += '-' + u[un];
+          else if (diz === 8) r += 's';
+        }
+      }
+    }
+    return r;
+  };
+  let mots = '';
+  const millions = Math.floor(nombre / 1000000);
+  const milliers = Math.floor((nombre % 1000000) / 1000);
+  const reste = nombre % 1000;
+  if (millions > 0) mots += (millions > 1 ? centaines(millions) + ' millions' : 'un million') + ' ';
+  if (milliers > 0) mots += (milliers > 1 ? centaines(milliers) + ' ' : '') + 'mille ';
+  if (reste > 0) mots += centaines(reste);
+  return (mots.trim() + ' FRANCS CFA').toUpperCase();
+}
+
 // ── Impression du devis ─────────────────────────────────────────────────────
 function imprimerDevis(d: DevisRecord, magasinId: string) {
-  const fmtD = (s: string) => s ? new Date(s).toLocaleDateString('fr-FR') : '—';
-  const money = (n: number) => (n || 0).toLocaleString('fr-FR');
+  const money = (n: number) => (n || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fmtDT = (s?: string) => {
+    if (!s) return '—';
+    const dt = new Date(s);
+    if (isNaN(dt.getTime())) return '—';
+    const p2 = (n: number) => String(n).padStart(2, '0');
+    return `${p2(dt.getDate())}-${p2(dt.getMonth() + 1)}-${dt.getFullYear()} ${p2(dt.getHours())}:${p2(dt.getMinutes())}:${p2(dt.getSeconds())}`;
+  };
+  const raw = d._raw;
+  const matricule = raw?.matricule_assurance || '';
+  const email = raw?.email || '';
+  const editeLe = fmtDT(d.createdAt || d.date);
 
-  const propositionsHTML = (d.propositions || []).map((p, i) => {
-    if ((!p.verres || p.verres.length === 0) && (!p.articles || p.articles.length === 0)) return '';
-    const verresRows = (p.verres || []).map(v => `
-      <tr>
-        <td style="padding:5px 8px;border:1px solid #ddd;">${v.verre || v.typeVerre || '—'}</td>
-        <td style="padding:5px 8px;border:1px solid #ddd;text-align:center;">${v.oeilDroit?.sphere || '—'} / ${v.oeilDroit?.cylindre || '—'} × ${v.oeilDroit?.axe || '—'}</td>
-        <td style="padding:5px 8px;border:1px solid #ddd;text-align:center;">${v.oeilGauche?.sphere || '—'} / ${v.oeilGauche?.cylindre || '—'} × ${v.oeilGauche?.axe || '—'}</td>
-        <td style="padding:5px 8px;border:1px solid #ddd;">${v.traitement || '—'}</td>
-        <td style="padding:5px 8px;border:1px solid #ddd;text-align:right;font-weight:600;">${money(parseFloat(v.total || '0'))}</td>
-      </tr>`).join('');
-    const articlesRows = (p.articles || []).map(a => `
-      <tr>
-        <td style="padding:5px 8px;border:1px solid #ddd;" colspan="3">${a.designation || '—'}</td>
-        <td style="padding:5px 8px;border:1px solid #ddd;text-align:center;">Qté ${a.quantite || '1'}</td>
-        <td style="padding:5px 8px;border:1px solid #ddd;text-align:right;font-weight:600;">${money(parseFloat(a.total || '0'))}</td>
-      </tr>`).join('');
-    const total = (p.totalVerres || 0) + (p.totalArticles || 0);
-    const totalNet = i === 0 ? (p.totalNet || total) : total;
+  const oeilTotal = (o?: OeilData): number => {
+    if (!o) return 0;
+    const p = parseFloat(o.prix || '0') || 0;
+    const q = parseFloat(o.quantite || '1') || 1;
+    const r = parseFloat(o.remise || '0') || 0;
+    return p * q * (1 - r / 100);
+  };
+
+  const oeilCell = (v: string | undefined) => `<td style="padding:4px 3px;border:1px solid #ccc;text-align:center;">${v || ''}</td>`;
+
+  // Une ligne "Oeil Droit"/"Oeil Gauche" avec ses 8 colonnes de prescription
+  // + Quantité/Prix/Remise/Total, exactement comme le modèle papier.
+  const oeilRow = (label: string, o: OeilData | undefined) => `
+    <tr>
+      <td style="padding:4px 6px;border:1px solid #ccc;white-space:nowrap;">${label}</td>
+      ${oeilCell(o?.sphere)}${oeilCell(o?.cylindre)}${oeilCell(o?.axe)}${oeilCell(o?.dec)}${oeilCell(o?.addition)}${oeilCell(o?.hauteur)}${oeilCell(o?.evLoin)}${oeilCell(o?.evPres)}
+      <td style="padding:4px 6px;border:1px solid #ccc;text-align:center;">${o?.quantite || '1'}</td>
+      <td style="padding:4px 6px;border:1px solid #ccc;text-align:right;">${money(parseFloat(o?.prix || '0'))}</td>
+      <td style="padding:4px 6px;border:1px solid #ccc;text-align:right;">${money(parseFloat(o?.remise || '0'))}</td>
+      <td style="padding:4px 6px;border:1px solid #ccc;text-align:right;font-weight:600;">${money(oeilTotal(o))}</td>
+    </tr>`;
+
+  const verreBlock = (v: VerreInfo) => {
+    const descLines = [
+      [v.typeVerre, v.verre].filter(Boolean).join(' | '),
+      v.traitement || '',
+      [v.matiere, v.diametre].filter(Boolean).join(' | '),
+    ].filter(Boolean).map(l => `<div>${l}</div>`).join('');
     return `
-      <div class="section">
-        <div class="section-title">Proposition ${['I','II','III'][i] || i + 1}</div>
-        <table style="width:100%;border-collapse:collapse;font-size:12px;">
-          <thead><tr style="background:#7b3fa0;color:#fff;">
-            <th style="padding:6px 8px;text-align:left;">Verre / Article</th>
-            <th style="padding:6px 8px;">Œil Droit (Sph/Cyl/Axe)</th>
-            <th style="padding:6px 8px;">Œil Gauche (Sph/Cyl/Axe)</th>
-            <th style="padding:6px 8px;">Traitement / Détail</th>
-            <th style="padding:6px 8px;text-align:right;">Total</th>
-          </tr></thead>
-          <tbody>
-            ${verresRows || ''}
-            ${articlesRows || ''}
-            ${(!verresRows && !articlesRows) ? '<tr><td colspan="5" style="padding:10px;text-align:center;color:#999;">Aucun élément</td></tr>' : ''}
-          </tbody>
-        </table>
-        <div style="text-align:right;margin-top:6px;font-size:13px;">
-          ${i === 0 && p.valeurRemise ? `<div>Remise (${p.remisePct || '0'}%) : <strong>-${money(p.valeurRemise)}</strong></div>` : ''}
-          <div style="font-weight:700;color:#7b3fa0;">Total Net : ${money(totalNet)} FCFA</div>
-        </div>
-      </div>`;
-  }).join('');
+      <tr><td colspan="13" style="padding:6px 6px 2px 6px;border:1px solid #ccc;border-bottom:none;font-weight:700;font-size:11px;">${descLines || '—'}</td></tr>
+      ${v.garantie ? `<tr><td colspan="13" style="padding:0 6px 6px 6px;border:1px solid #ccc;border-top:none;text-align:right;font-size:10px;font-weight:600;">Garantie: ${v.garantie}</td></tr>` : ''}
+      <tr style="background:#f0f0f0;">
+        <td style="padding:3px 6px;border:1px solid #ccc;"></td>
+        ${VERRE_COLS.slice(0, 8).map(c => `<td style="padding:3px 3px;border:1px solid #ccc;text-align:center;font-size:9px;font-weight:700;white-space:nowrap;">${c.label}</td>`).join('')}
+        <td style="padding:3px 6px;border:1px solid #ccc;text-align:center;font-size:9px;font-weight:700;">Qté</td>
+        <td style="padding:3px 6px;border:1px solid #ccc;text-align:center;font-size:9px;font-weight:700;">Prix</td>
+        <td style="padding:3px 6px;border:1px solid #ccc;text-align:center;font-size:9px;font-weight:700;">Remise</td>
+        <td style="padding:3px 6px;border:1px solid #ccc;text-align:center;font-size:9px;font-weight:700;">Total</td>
+      </tr>
+      ${oeilRow('Oeil Droit', v.oeilDroit)}
+      ${oeilRow('Oeil Gauche', v.oeilGauche)}`;
+  };
+
+  const articleRow = (a: ArticleLigne) => {
+    const lines = [
+      a.fournisseur ? `Fournisseur | ${a.fournisseur}` : '',
+      a.detailMonture || a.designation || '—',
+      a.garantie ? `Garantie: ${a.garantie}` : '',
+    ].filter(Boolean).map(l => `<div>${l}</div>`).join('');
+    return `
+      <tr>
+        <td style="padding:5px 8px;border:1px solid #ccc;">${lines}</td>
+        <td style="padding:5px 8px;border:1px solid #ccc;text-align:center;">${a.quantite || '1'}</td>
+        <td style="padding:5px 8px;border:1px solid #ccc;text-align:right;">${money(parseFloat(a.prix || '0'))}</td>
+        <td style="padding:5px 8px;border:1px solid #ccc;text-align:right;">${money(parseFloat(a.remise || '0'))}</td>
+        <td style="padding:5px 8px;border:1px solid #ccc;text-align:right;font-weight:600;">${money(parseFloat(a.total || '0'))}</td>
+      </tr>`;
+  };
+
+  // Toutes les propositions sont fusionnées dans les 2 mêmes tableaux
+  // VERRES / MONTURES (comme le document de référence, qui ne montre qu'une
+  // seule série de tableaux même si plusieurs lignes existent).
+  const tousVerres = (d.propositions || []).flatMap(p => p.verres || []);
+  const tousArticles = (d.propositions || []).flatMap(p => p.articles || []);
+
+  const totalVerresNet = tousVerres.reduce((s, v) => s + oeilTotal(v.oeilDroit) + oeilTotal(v.oeilGauche), 0);
+  const totalArticlesNet = tousArticles.reduce((s, a) => s + (parseFloat(a.total || '0') || 0), 0);
+  const totalBrut = totalVerresNet + totalArticlesNet;
+  const remisePct = (d.propositions || [])[0]?.remisePct || '0';
+  const valeurRemise = (d.propositions || [])[0]?.valeurRemise || 0;
+  const totalNet = Math.max(0, totalBrut - (valeurRemise || 0));
+
+  const verresSection = tousVerres.length > 0 ? `
+    <div class="section-title">VERRES</div>
+    <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:18px;">
+      <thead><tr style="background:#111;color:#fff;">
+        <th colspan="9" style="padding:6px 8px;text-align:left;">PRESCIPTION</th>
+        <th style="padding:6px 6px;">QUANTITÉ</th><th style="padding:6px 6px;">PRIX</th><th style="padding:6px 6px;">REMISE</th><th style="padding:6px 6px;">TOTAL</th>
+      </tr></thead>
+      <tbody>${tousVerres.map(verreBlock).join('')}</tbody>
+    </table>` : '';
+
+  const monturesSection = tousArticles.length > 0 ? `
+    <div class="section-title">MONTURES</div>
+    <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:18px;">
+      <thead><tr style="background:#111;color:#fff;">
+        <th style="padding:6px 8px;text-align:left;">DÉSIGNATION</th>
+        <th style="padding:6px 6px;">QUANTITÉ</th><th style="padding:6px 6px;">PRIX</th><th style="padding:6px 6px;">REMISE</th><th style="padding:6px 6px;">TOTAL</th>
+      </tr></thead>
+      <tbody>${tousArticles.map(articleRow).join('')}</tbody>
+    </table>` : '';
+
+  const e = getEntete(magasinId);
 
   const html = `<!DOCTYPE html>
 <html lang="fr"><head><meta charset="UTF-8"/>
@@ -151,41 +252,63 @@ function imprimerDevis(d: DevisRecord, magasinId: string) {
   * { margin:0; padding:0; box-sizing:border-box; }
   body { font-family: Arial, sans-serif; font-size: 13px; color: #222; padding: 30px; display: flex; flex-direction: column; min-height: 100vh; }
   @media print { body { padding: 15px; } .no-print { display: none; } }
-  .section { margin-bottom: 20px; }
-  .section-title { font-size: 11px; font-weight: 700; color: #7b3fa0; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; border-left: 3px solid #7b3fa0; padding-left: 8px; }
-  .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 20px; font-size: 12px; }
-  .info-row { display: flex; gap: 6px; }
-  .info-label { color: #777; min-width: 110px; }
-  .info-val { font-weight: 600; }
-  .badge { display: inline-block; background: #f3e8fb; color: #7b3fa0; border-radius: 4px; padding: 2px 10px; font-size: 12px; font-weight: 600; }
-  .title { font-size: 20px; font-weight: 700; color: #7b3fa0; }
+  .section-title { font-size: 15px; font-weight: 800; margin: 4px 0 8px 0; }
+  .info-box { background: #ececec; padding: 10px 14px; margin-bottom: 18px; display: flex; justify-content: space-between; gap: 20px; font-size: 11px; line-height: 1.6; }
   .print-btn { position: fixed; top: 20px; right: 20px; background: #7b3fa0; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 600; }
-  .footer { margin-top: auto; padding-top: 16px; border-top: 1px solid #e0e0e0; font-size: 11px; color: #888; }
+  .assure-box { border: 1px solid #333; font-size: 11px; }
+  .assure-box td { border: 1px solid #333; padding: 4px 8px; }
+  .totaux-box td { padding: 4px 10px; font-size: 12px; }
+  .totaux-box tr.net td { font-weight: 800; }
+  .footer { margin-top: auto; padding-top: 12px; border-top: 1px solid #333; font-size: 10px; color: #444; text-align: center; }
 </style></head>
 <body>
   <button class="no-print print-btn" onclick="window.print()">🖨️ Imprimer</button>
   ${printHeaderHTML(magasinId || '', { date: d.date })}
-  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;">
-    <div class="title">DEVIS | PROFORMA</div>
-    <div style="text-align:right;font-size:11px;color:#555;line-height:1.7;">
-      <div class="badge">N° ${d.numDevis}</div>
-      <div style="margin-top:8px;">Date : <strong>${fmtD(d.date)}</strong></div>
-      <div>N° Client : <strong>${d.numeroClient}</strong></div>
+
+  <div class="info-box">
+    <div>
+      <div style="font-weight:700;">(N° ${d.numeroClient || '—'}) ${(d.client || '').toUpperCase()}</div>
+      ${matricule ? `<div>Matricule: ${matricule}</div>` : ''}
+      <div>Téléphone: ${d.telephone || '—'}</div>
+      <div>Email: ${email}</div>
+    </div>
+    <div style="text-align:right;">
+      <div style="font-weight:700;">Édité par: ${(d.createdBy || '—').toUpperCase()}</div>
+      <div>Édité le, ${editeLe}</div>
+      <div style="font-weight:800;font-size:13px;margin-top:4px;">DEVIS | PROFORMA N° ${d.numDevis}</div>
     </div>
   </div>
-  <div class="section">
-    <div class="section-title">Informations Client</div>
-    <div class="info-grid">
-      <div class="info-row"><span class="info-label">Nom :</span><span class="info-val">${d.client || '—'}</span></div>
-      <div class="info-row"><span class="info-label">Téléphone :</span><span class="info-val">${d.telephone || '—'}</span></div>
+
+  ${verresSection}
+  ${monturesSection}
+  ${(!verresSection && !monturesSection) ? '<p style="color:#999;">Aucun élément renseigné.</p>' : ''}
+
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:20px;margin-bottom:14px;flex-wrap:wrap;">
+    <div>
+      <div class="section-title" style="font-size:13px;">CAS POUR UN ASSURÉ</div>
+      <table class="assure-box" style="border-collapse:collapse;">
+        <tr><td style="font-weight:600;">PART ASSURANCE</td><td style="width:120px;">&nbsp;</td></tr>
+        <tr><td style="font-weight:600;">PART ASSURÉ(E)</td><td style="width:120px;">&nbsp;</td></tr>
+      </table>
     </div>
+    <table class="totaux-box" style="border-collapse:collapse;background:#ececec;">
+      <tr><td>TOTAL</td><td style="text-align:right;font-weight:600;">${money(totalBrut)} F CFA</td></tr>
+      <tr><td>REMISE(${remisePct}%)</td><td style="text-align:right;font-weight:600;">${money(valeurRemise || 0)} F CFA</td></tr>
+      <tr class="net"><td>TOTAL NET</td><td style="text-align:right;">${money(totalNet)} F CFA</td></tr>
+    </table>
   </div>
-  ${propositionsHTML || '<p style="color:#999;">Aucune proposition renseignée.</p>'}
+
+  <div style="font-size:12px;font-weight:600;text-transform:uppercase;margin-bottom:40px;">
+    Arrêté le présent devis à la somme de : <strong>${montantEnLettresDevis(totalNet)}</strong>
+  </div>
+
+  <div style="text-align:right;font-size:12px;margin-bottom:20px;">Signature &amp; Cachet</div>
+
   <div class="footer">
-    <div>Devis valable 30 jours. Ce document ne constitue pas une facture.</div>
-    <div>Édité par : <strong>${d.createdBy || '—'}</strong></div>
+    ${e.adresse} Téléphone: ${e.telephone} Email: ${e.email}
   </div>
 </body></html>`;
+
 
   const w = window.open('', '_blank');
   if (w) {
@@ -501,6 +624,8 @@ function VerreBlock({ data, index, total, onChange, onRemove }: { data: VerreInf
       traitement: v.traitement || data.traitement,
       matiere: v.matiere || data.matiere,
       diametre: v.diametre || data.diametre,
+      fournisseur: v.fournisseur || data.fournisseur,
+      garantie: v.garantie || data.garantie,
       oeilDroit,
       oeilGauche,
       total: calcTotal(oeilDroit, oeilGauche),
@@ -521,6 +646,8 @@ function VerreBlock({ data, index, total, onChange, onRemove }: { data: VerreInf
       traitement: found ? found.traitement : data.traitement,
       matiere: found ? found.matiere : data.matiere,
       diametre: found ? found.diametre : data.diametre,
+      fournisseur: found ? found.fournisseur : data.fournisseur,
+      garantie: found ? found.garantie : data.garantie,
       oeilDroit,
       oeilGauche,
       total: calcTotal(oeilDroit, oeilGauche),
@@ -661,6 +788,9 @@ function ArticlesBlock({ articles, onChange, magasinId, idSuffix }: { articles: 
     remise: '0',
     quantite: '1',
     total: String(Math.round(p.prix || 0)),
+    fournisseur: p.fournisseur || '',
+    garantie: p.garantie || '',
+    detailMonture: p.detailMonture || '',
   });
 
   const addFromSearch = (value: string, filter: (p: VenteProduct) => boolean, clear: () => void) => {
@@ -686,6 +816,9 @@ function ArticlesBlock({ articles, onChange, magasinId, idSuffix }: { articles: 
             type: found.type === 'verre' ? 'traitement' : (found.type as ArticleLigne['type']),
             stock: found.stock === null ? updated.stock : String(found.stock),
             prix: String(found.prix ?? ''),
+            fournisseur: found.fournisseur || '',
+            garantie: found.garantie || '',
+            detailMonture: found.detailMonture || '',
           };
         }
       }
