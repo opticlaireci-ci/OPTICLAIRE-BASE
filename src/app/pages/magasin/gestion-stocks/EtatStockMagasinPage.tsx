@@ -147,7 +147,7 @@ export function EtatStockMagasinPage() {
       <head>
         <title>État de Stock - ${getMagasinLabel(magasinId || '')}</title>
         <style>
-          body { font-family: Arial, sans-serif; padding: 20px; }
+          body { font-family: Arial, sans-serif; padding: 20px; display: flex; flex-direction: column; min-height: 100vh; }
           h1 { text-align: center; color: #1976d2; margin-bottom: 10px; }
           .subtitle { text-align: center; color: #666; margin-bottom: 30px; }
           .stats { display: flex; gap: 15px; margin-bottom: 30px; flex-wrap: wrap; }
@@ -161,7 +161,7 @@ export function EtatStockMagasinPage() {
           .status-disponible { background-color: #4caf50; color: white; padding: 4px 8px; border-radius: 12px; font-size: 10px; }
           .status-alerte { background-color: #ff9800; color: white; padding: 4px 8px; border-radius: 12px; font-size: 10px; }
           .status-rupture { background-color: #f44336; color: white; padding: 4px 8px; border-radius: 12px; font-size: 10px; }
-          .footer { margin-top: 30px; text-align: center; font-size: 10px; color: #666; }
+          .footer { margin-top: auto; padding-top: 30px; text-align: center; font-size: 10px; color: #666; }
         </style>
       </head>
       <body>
