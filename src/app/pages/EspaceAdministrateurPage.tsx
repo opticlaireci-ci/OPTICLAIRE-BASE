@@ -108,7 +108,7 @@ export function EspaceAdministrateurPage() {
   };
 
   function ouvrirMagasin(idMagasin: string) {
-    navigate(`/magasin/${idMagasin}/dashboard`);
+    navigate(`/magasin/${idMagasin}`);
   }
 
   function gererMagasin(idMagasin: string) {
@@ -295,7 +295,7 @@ export function EspaceAdministrateurPage() {
 
       <div className="flex flex-wrap gap-5">
         {magasins.map((magasin) => {
-          const accederUrl = `/magasin/${magasin.id}/dashboard`;
+          const accederUrl = `/magasin/${magasin.id}`;
           const gererUrl = `/gerer-magasin?magasin=${magasin.id}`;
 
           return (

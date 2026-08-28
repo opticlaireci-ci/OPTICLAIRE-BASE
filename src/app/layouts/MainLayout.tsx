@@ -1320,7 +1320,7 @@ function MainLayoutContent() {
     if ((user?.role === 'conseillere' || user?.role === 'employee' || user?.role === 'caissier') && magasinDest) {
       if (!location.pathname.includes('/magasin/') && !hasRedirected.current) {
         hasRedirected.current = true;
-        navigate(`/magasin/${magasinDest}/dashboard`, { replace: true });
+        navigate(`/magasin/${magasinDest}`, { replace: true });
       }
     }
   }, [isLoading, isAuthenticated, user, location.pathname, navigate]);
