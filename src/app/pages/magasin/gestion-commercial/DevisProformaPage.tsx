@@ -150,7 +150,7 @@ function imprimerDevis(d: DevisRecord, magasinId: string) {
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
   body { font-family: Arial, sans-serif; font-size: 13px; color: #222; padding: 30px; }
-  @media print { body { padding: 15px; } .no-print { display: none; } }
+  @media print { body { padding: 15px; padding-bottom: 110px; } .no-print { display: none; } }
   .section { margin-bottom: 20px; }
   .section-title { font-size: 11px; font-weight: 700; color: #7b3fa0; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; border-left: 3px solid #7b3fa0; padding-left: 8px; }
   .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 20px; font-size: 12px; }
@@ -161,6 +161,12 @@ function imprimerDevis(d: DevisRecord, magasinId: string) {
   .title { font-size: 20px; font-weight: 700; color: #7b3fa0; }
   .print-btn { position: fixed; top: 20px; right: 20px; background: #7b3fa0; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 600; }
   .footer { margin-top: 40px; border-top: 1px solid #e0e0e0; padding-top: 16px; font-size: 11px; color: #888; }
+  /* À l'impression, le pied de page est ancré au bas PHYSIQUE de chaque page
+     (et se répète sur chaque page si le devis en fait plusieurs), au lieu de
+     simplement suivre le dernier bloc de contenu où qu'il tombe. */
+  @media print {
+    .footer { position: fixed; bottom: 0; left: 0; right: 0; margin-top: 0; background: #fff; padding: 12px 15px 15px 15px; }
+  }
 </style></head>
 <body>
   <button class="no-print print-btn" onclick="window.print()">🖨️ Imprimer</button>

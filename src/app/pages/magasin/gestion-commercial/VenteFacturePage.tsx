@@ -2368,7 +2368,7 @@ function imprimerFacture(f: FactureData, magasinId?: string) {
   <style>
     * { margin:0; padding:0; box-sizing:border-box; }
     body { font-family: Arial, sans-serif; font-size: 13px; color: #222; padding: 30px; }
-    @media print { body { padding: 15px; } .no-print { display: none; } }
+    @media print { body { padding: 15px; padding-bottom: 110px; } .no-print { display: none; } }
     .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 30px; border-bottom: 3px solid #1a7a96; padding-bottom: 20px; }
     .logo-box { background: #1a7a96; color: white; font-weight: 900; font-size: 22px; padding: 12px 18px; border-radius: 8px; letter-spacing: 1px; }
     .logo-sub { font-size: 10px; font-weight: 400; letter-spacing: 3px; opacity: 0.85; }
@@ -2391,6 +2391,12 @@ function imprimerFacture(f: FactureData, magasinId?: string) {
     .totaux-row.net { font-size: 15px; font-weight: 700; border-top: 2px solid #1a7a96; padding-top: 6px; margin-top: 4px; }
     .totaux-row.reste { font-size: 14px; font-weight: 700; color: ${reste > 0 ? '#c62828' : '#2e7d32'}; }
     .footer { margin-top: 40px; border-top: 1px solid #e0e0e0; padding-top: 16px; font-size: 11px; color: #888; display: flex; justify-content: space-between; }
+    /* À l'impression, le pied de page est ancré au bas PHYSIQUE de chaque page
+       (et se répète sur chaque page si la facture en fait plusieurs), au lieu
+       de simplement suivre le dernier bloc de contenu où qu'il tombe. */
+    @media print {
+      .footer { position: fixed; bottom: 0; left: 0; right: 0; margin-top: 0; background: #fff; padding: 12px 15px 15px 15px; }
+    }
     .signature-box { border: 1px dashed #ccc; width: 180px; height: 60px; display: flex; align-items: center; justify-content: center; color: #bbb; font-size: 11px; border-radius: 4px; }
     .print-btn { position: fixed; top: 20px; right: 20px; background: #1a7a96; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 600; }
   </style>
