@@ -271,9 +271,9 @@ export function RdvRetraitGlobalPage() {
   const pageData = filtered.slice((page - 1) * PAGE, page * PAGE);
 
   return (
-    <div className="flex gap-0" style={{ backgroundColor: '#d6e4ea', minHeight: '100vh' }}>
+    <div className="flex flex-col md:flex-row" style={{ backgroundColor: '#d6e4ea', minHeight: '100vh', gap: 0 }}>
       {/* Left — list */}
-      <div className="flex flex-col p-4 gap-3" style={{ width: 480, minWidth: 380, flexShrink: 0 }}>
+      <div className="flex flex-col p-4 gap-3 w-full md:flex-shrink-0" style={{ maxWidth: '100%', boxSizing: 'border-box' }}>
         <div className="bg-white rounded-lg shadow-sm p-4 flex flex-col gap-3">
           <h1 className="text-sm font-bold text-gray-800">
             Ventes | Factures | Rendez-vous ({allVentes.length})

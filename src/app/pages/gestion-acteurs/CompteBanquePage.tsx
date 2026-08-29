@@ -219,7 +219,8 @@ export function CompteBanquePage() {
       {/* ── Barre de titre ── */}
       <Box sx={{
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        px: 3, py: 2,
+        flexWrap: 'wrap', gap: 1.5,
+        px: { xs: 2, sm: 3 }, py: 2,
         background: 'linear-gradient(135deg, #1b5e20 0%, #2e7d32 60%, #388e3c 100%)',
         boxShadow: '0 2px 8px rgba(27,94,32,0.25)',
       }}>
@@ -232,7 +233,7 @@ export function CompteBanquePage() {
             fontSize: 18,
           }}>🏦</Box>
           <Box>
-            <Typography sx={{ fontWeight: 700, fontSize: '1rem', color: 'white', lineHeight: 1.1 }}>
+            <Typography sx={{ fontWeight: 700, fontSize: 'clamp(0.85rem, 3.5vw, 1rem)', color: 'white', lineHeight: 1.1 }}>
               Comptes Banque
             </Typography>
             <Typography sx={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.75)' }}>
@@ -257,7 +258,7 @@ export function CompteBanquePage() {
         </Button>
       </Box>
 
-      <Box sx={{ px: 3, pt: 2.5 }}>
+      <Box sx={{ px: { xs: 1.5, sm: 3 }, pt: 2.5 }}>
         {error && <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }} onClose={() => setError(null)}>{error}</Alert>}
 
         {/* ── Barre de recherche ── */}

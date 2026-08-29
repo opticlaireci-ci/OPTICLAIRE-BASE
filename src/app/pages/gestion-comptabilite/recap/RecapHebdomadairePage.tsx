@@ -108,55 +108,117 @@ function TableauMagasin({
   editable: boolean;
 }) {
   const cellNum = 'px-2 py-1.5 text-center font-semibold';
+  const nomOfficine = magasinLabel.replace(`${TENANT.nom} `, '');
+
   return (
     <div className="border-2 border-gray-800 rounded overflow-hidden bg-white">
       <div className="text-center font-bold py-1.5 border-b-2 border-gray-800 bg-white text-sm">
-        OFFICINE {magasinLabel.replace(`${TENANT.nom} `, '')}
+        OFFICINE {nomOfficine}
       </div>
-      <table className="w-full text-sm border-collapse">
-        <thead>
-          <tr>
-            <th className="border border-gray-700 px-2 py-1 bg-white text-gray-800 text-xs">JOURS</th>
-            <th className="border border-gray-700 px-2 py-1 text-white text-xs" style={{ backgroundColor: '#7b8fc7' }}>RECETTES</th>
-            <th className="border border-gray-700 px-2 py-1 text-white text-xs" style={{ backgroundColor: '#e53935' }}>DEPENSES</th>
-            <th className="border border-gray-700 px-2 py-1 text-white text-xs" style={{ backgroundColor: '#29b6f6' }}>R-D</th>
-          </tr>
-        </thead>
-        <tbody>
-          {recap.lignes.map(({ jour, recettes, depenses, rd }) => (
-            <tr key={jour}>
-              <td className="border border-gray-700 px-2 py-1 font-bold text-gray-800 text-xs bg-white">{jour}</td>
-              <td className={cellNum + ' text-gray-900'} style={{ backgroundColor: '#9fb0da' }}>
+
+      {/* Desktop table */}
+      <div className="hidden md:block">
+        <table className="w-full text-sm border-collapse">
+          <thead>
+            <tr>
+              <th className="border border-gray-700 px-2 py-1 bg-white text-gray-800 text-xs">JOURS</th>
+              <th className="border border-gray-700 px-2 py-1 text-white text-xs" style={{ backgroundColor: '#7b8fc7' }}>RECETTES</th>
+              <th className="border border-gray-700 px-2 py-1 text-white text-xs" style={{ backgroundColor: '#e53935' }}>DEPENSES</th>
+              <th className="border border-gray-700 px-2 py-1 text-white text-xs" style={{ backgroundColor: '#29b6f6' }}>R-D</th>
+            </tr>
+          </thead>
+          <tbody>
+            {recap.lignes.map(({ jour, recettes, depenses, rd }) => (
+              <tr key={jour}>
+                <td className="border border-gray-700 px-2 py-1 font-bold text-gray-800 text-xs bg-white">{jour}</td>
+                <td className={cellNum + ' text-gray-900'} style={{ backgroundColor: '#9fb0da' }}>
+                  {editable ? (
+                    <input
+                      type="number"
+                      className="w-full bg-transparent text-center outline-none font-semibold"
+                      value={recettes}
+                      onChange={e => onSet(jour, 'recettes', Number(e.target.value) || 0)}
+                    />
+                  ) : fmt(recettes)}
+                </td>
+                <td className={cellNum + ' text-white'} style={{ backgroundColor: '#f44336' }}>
+                  {editable ? (
+                    <input
+                      type="number"
+                      className="w-full bg-transparent text-center outline-none font-semibold text-white"
+                      value={depenses}
+                      onChange={e => onSet(jour, 'depenses', Number(e.target.value) || 0)}
+                    />
+                  ) : fmt(depenses)}
+                </td>
+                <td className={cellNum + ' text-gray-900'} style={{ backgroundColor: '#4fc3f7' }}>{fmt(rd)}</td>
+              </tr>
+            ))}
+            <tr>
+              <td className="border-2 border-gray-800 px-2 py-1.5 font-bold text-gray-900 text-sm bg-white">TOTAL</td>
+              <td className={cellNum + ' text-gray-900 border-2 border-gray-800'} style={{ backgroundColor: '#9fb0da' }}>{fmt(recap.totalR)}</td>
+              <td className={cellNum + ' text-white border-2 border-gray-800'} style={{ backgroundColor: '#f44336' }}>{fmt(recap.totalD)}</td>
+              <td className={cellNum + ' text-gray-900 border-2 border-gray-800'} style={{ backgroundColor: '#4fc3f7' }}>{fmt(recap.totalR - recap.totalD)}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      {/* Mobile cards — one row per jour */}
+      <div className="md:hidden">
+        {recap.lignes.map(({ jour, recettes, depenses, rd }) => (
+          <div key={jour} style={{ borderBottom: '1px solid #e5e7eb', padding: '0.5rem 0.75rem' }}>
+            <div style={{ fontWeight: 700, fontSize: '0.75rem', color: '#374151', marginBottom: '0.35rem' }}>{jour}</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.375rem' }}>
+              <div style={{ background: '#9fb0da', borderRadius: 6, padding: '0.3rem 0.4rem', textAlign: 'center' }}>
+                <div style={{ fontSize: '0.6rem', color: '#1e3a5f', fontWeight: 600, marginBottom: '0.15rem' }}>RECETTES</div>
                 {editable ? (
                   <input
                     type="number"
-                    className="w-full bg-transparent text-center outline-none font-semibold"
+                    style={{ width: '100%', background: 'transparent', textAlign: 'center', outline: 'none', fontWeight: 700, fontSize: '0.8125rem', color: '#1e293b' }}
                     value={recettes}
                     onChange={e => onSet(jour, 'recettes', Number(e.target.value) || 0)}
                   />
-                ) : fmt(recettes)}
-              </td>
-              <td className={cellNum + ' text-white'} style={{ backgroundColor: '#f44336' }}>
+                ) : (
+                  <div style={{ fontWeight: 700, fontSize: '0.8125rem', color: '#1e293b' }}>{fmt(recettes)}</div>
+                )}
+              </div>
+              <div style={{ background: '#f44336', borderRadius: 6, padding: '0.3rem 0.4rem', textAlign: 'center' }}>
+                <div style={{ fontSize: '0.6rem', color: '#fff', fontWeight: 600, marginBottom: '0.15rem' }}>DEPENSES</div>
                 {editable ? (
                   <input
                     type="number"
-                    className="w-full bg-transparent text-center outline-none font-semibold text-white"
+                    style={{ width: '100%', background: 'transparent', textAlign: 'center', outline: 'none', fontWeight: 700, fontSize: '0.8125rem', color: '#fff' }}
                     value={depenses}
                     onChange={e => onSet(jour, 'depenses', Number(e.target.value) || 0)}
                   />
-                ) : fmt(depenses)}
-              </td>
-              <td className={cellNum + ' text-gray-900'} style={{ backgroundColor: '#4fc3f7' }}>{fmt(rd)}</td>
-            </tr>
-          ))}
-          <tr>
-            <td className="border-2 border-gray-800 px-2 py-1.5 font-bold text-gray-900 text-sm bg-white">TOTAL</td>
-            <td className={cellNum + ' text-gray-900 border-2 border-gray-800'} style={{ backgroundColor: '#9fb0da' }}>{fmt(recap.totalR)}</td>
-            <td className={cellNum + ' text-white border-2 border-gray-800'} style={{ backgroundColor: '#f44336' }}>{fmt(recap.totalD)}</td>
-            <td className={cellNum + ' text-gray-900 border-2 border-gray-800'} style={{ backgroundColor: '#4fc3f7' }}>{fmt(recap.totalR - recap.totalD)}</td>
-          </tr>
-        </tbody>
-      </table>
+                ) : (
+                  <div style={{ fontWeight: 700, fontSize: '0.8125rem', color: '#fff' }}>{fmt(depenses)}</div>
+                )}
+              </div>
+              <div style={{ background: '#4fc3f7', borderRadius: 6, padding: '0.3rem 0.4rem', textAlign: 'center' }}>
+                <div style={{ fontSize: '0.6rem', color: '#1e3a5f', fontWeight: 600, marginBottom: '0.15rem' }}>R-D</div>
+                <div style={{ fontWeight: 700, fontSize: '0.8125rem', color: '#1e293b' }}>{fmt(rd)}</div>
+              </div>
+            </div>
+          </div>
+        ))}
+        {/* Total row */}
+        <div style={{ padding: '0.5rem 0.75rem', background: '#f9fafb' }}>
+          <div style={{ fontWeight: 700, fontSize: '0.75rem', color: '#374151', marginBottom: '0.35rem' }}>TOTAL</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.375rem' }}>
+            <div style={{ background: '#9fb0da', borderRadius: 6, padding: '0.3rem 0.5rem', textAlign: 'center' }}>
+              <div style={{ fontWeight: 700, fontSize: '0.875rem', color: '#1e293b' }}>{fmt(recap.totalR)}</div>
+            </div>
+            <div style={{ background: '#f44336', borderRadius: 6, padding: '0.3rem 0.5rem', textAlign: 'center' }}>
+              <div style={{ fontWeight: 700, fontSize: '0.875rem', color: '#fff' }}>{fmt(recap.totalD)}</div>
+            </div>
+            <div style={{ background: '#4fc3f7', borderRadius: 6, padding: '0.3rem 0.5rem', textAlign: 'center' }}>
+              <div style={{ fontWeight: 700, fontSize: '0.875rem', color: '#1e293b' }}>{fmt(recap.totalR - recap.totalD)}</div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -269,8 +331,8 @@ export function RecapHebdomadairePage() {
         }
       `}</style>
 
-      <div className="flex items-center justify-between bg-white rounded-lg shadow-sm px-5 py-3 flex-wrap gap-3 recap-no-print">
-        <span className="text-sm font-semibold text-gray-700">
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }} className="bg-white rounded-lg shadow-sm px-5 py-3 recap-no-print">
+        <span className="text-sm font-semibold text-gray-700" style={{ fontSize: 'clamp(0.75rem, 2vw, 0.875rem)' }}>
           Récapitulatif Hebdomadaire — Recettes & Dépenses par Magasin
         </span>
         <div className="flex items-center gap-2 flex-wrap">

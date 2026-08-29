@@ -198,10 +198,6 @@ export interface VenteProduct {
   prix: number;
   /** Quantité réelle en magasin, ou null si non gérée en stock (verre/service). */
   stock: number | null;
-  /** Renseignés uniquement pour les montures (impression devis/facture). */
-  fournisseur?: string;
-  garantie?: string;
-  detailMonture?: string;
 }
 
 export function useVenteProducts(magasinId: string): VenteProduct[] {
@@ -231,9 +227,6 @@ export function useVenteProducts(magasinId: string): VenteProduct[] {
     for (const m of montures) {
       // Désignation telle qu'écrite par le bon de distribution (modal).
       const modalDesig = `${m.marque} - ${m.reference} ${(m as any).couleur ?? ''} ${(m as any).taille ?? ''}`.replace(/\s+/g, ' ').trim();
-      // Ligne détaillée façon devis/facture imprimé : Marque - Catégorie - Famille - Référence - Couleur - Taille
-      const detailMonture = [m.marque, (m as any).categorie, (m as any).famille, m.reference, (m as any).couleur, (m as any).taille]
-        .filter(Boolean).join(' - ');
       list.push({
         produitId: m.id,
         type: 'monture',
@@ -241,9 +234,6 @@ export function useVenteProducts(magasinId: string): VenteProduct[] {
         codeBarre: m.codeBarre || '',
         prix: Number(m.prix) || 0,
         stock: lookupStock(m.id, modalDesig, getMontureLabel(m)) ?? 0,
-        fournisseur: m.fournisseur || '',
-        garantie: m.garantie || '',
-        detailMonture,
       });
     }
 

@@ -80,6 +80,11 @@ export function TypeVerrePage() {
     return true;
   }), [typesVerre, search, dateFilter]);
 
+  const sorted = useMemo(() =>
+    [...filtered].sort((a, b) => (a.typeVerre || '').localeCompare(b.typeVerre || '', 'fr')),
+    [filtered]
+  );
+
   const handleSave = (c: TypeVerre) => {
     const isUpdate = typesVerre.find(x => x.id === c.id);
     const typeVerreWithAudit = isUpdate ? addUpdateAudit(c) : addCreateAudit(c);
@@ -96,14 +101,16 @@ export function TypeVerrePage() {
   };
 
   return (
-    <div className="flex flex-col gap-5 p-6" style={{ backgroundColor: '#f9fafb', minHeight: '100vh' }}>
+    <div className="flex flex-col gap-5 p-4 md:p-6" style={{ backgroundColor: '#f9fafb', minHeight: '100vh' }}>
       {modal && <ModalTypeVerre initial={modal.item} onSave={handleSave} onClose={() => setModal(null)} />}
 
       {/* Header */}
-      <div className="flex items-center justify-between bg-white rounded-lg shadow-sm px-6 py-4 border border-gray-200">
+      <div className="flex items-center justify-between bg-white rounded-lg shadow-sm px-4 md:px-6 py-3 md:py-4 border border-gray-200" style={{ flexWrap: 'wrap', gap: 12 }}>
         <div className="flex items-center gap-3">
           <span className="text-gray-400">👓</span>
-          <span className="font-semibold text-gray-800">Gestion des Composants: {TENANT.nom}</span>
+          <span className="font-semibold text-gray-800" style={{ fontSize: 'clamp(13px, 3.5vw, 15px)' }}>
+            Gestion des Composants: {TENANT.nom}
+          </span>
         </div>
         <AddButton onClick={() => setModal({ mode: 'add' })} className="px-5 py-2.5 rounded text-white text-sm font-semibold shadow" style={{ backgroundColor: '#0e7490' }}>
           Ajouter Type Verre
@@ -111,21 +118,21 @@ export function TypeVerrePage() {
       </div>
 
       {/* Content */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6">
         <h2 className="text-lg font-semibold text-gray-800 mb-5">Types Verre ({typesVerre.length})</h2>
 
         {/* Filters */}
-        <div className="flex items-center gap-3 mb-5">
-          <div className="flex items-center border border-gray-300 rounded bg-white overflow-hidden" style={{ width: 380 }}>
+        <div className="flex items-center gap-3 mb-5 flex-wrap">
+          <div className="flex items-center border border-gray-300 rounded bg-white overflow-hidden flex-1" style={{ minWidth: 180 }}>
             <input
-              className="px-3 py-2 text-sm outline-none flex-1"
+              className="px-3 py-2 text-sm outline-none flex-1 w-full"
               placeholder="Recherche Type Verre..."
               value={search}
               onChange={e => setSearch(e.target.value)}
             />
             {search && <button onClick={() => setSearch('')} className="px-2 text-gray-400"><X size={14} /></button>}
           </div>
-          <div className="flex items-center border border-gray-300 rounded bg-white overflow-hidden">
+          <div className="hidden md:flex items-center border border-gray-300 rounded bg-white overflow-hidden">
             <input
               type="text"
               className="px-3 py-2 text-sm outline-none"
@@ -140,7 +147,7 @@ export function TypeVerrePage() {
           <button onClick={() => {}} className="px-4 py-2 rounded text-white text-sm flex items-center gap-2" style={{ backgroundColor: '#3b82f6' }}>
             <Search size={16} />
           </button>
-          <div className="flex-1"></div>
+          <div className="flex-1 hidden md:block"></div>
           <div className="flex items-center gap-1 text-sm text-gray-600">
             <button className="px-2 py-1 border border-gray-300 rounded text-gray-400">{'<<'}</button>
             <button className="px-2 py-1 border border-gray-300 rounded text-gray-400">{'<'}</button>
@@ -150,8 +157,8 @@ export function TypeVerrePage() {
           </div>
         </div>
 
-        {/* Table */}
-        <div className="border border-gray-200 rounded overflow-hidden">
+        {/* Table — desktop */}
+        <div className="hidden md:block border border-gray-200 rounded overflow-hidden">
           <table className="w-full text-sm border-collapse">
             <thead>
               <tr className="bg-white border-b border-gray-200">
@@ -164,9 +171,9 @@ export function TypeVerrePage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.length === 0 ? (
+              {sorted.length === 0 ? (
                 <tr><td colSpan={6} className="text-center py-10 text-gray-400">Aucun type verre</td></tr>
-              ) : [...filtered].sort((a, b) => (a.typeVerre || '').localeCompare(b.typeVerre || '', 'fr')).map((c, idx) => (
+              ) : sorted.map((c, idx) => (
                 <tr key={c.id} className="border-b border-gray-100 hover:bg-gray-50">
                   <td className="px-4 py-2.5 text-center"><input type="checkbox" /></td>
                   <td className="px-4 py-2.5 text-center text-xs text-gray-400 font-medium">{idx + 1}</td>
@@ -187,6 +194,33 @@ export function TypeVerrePage() {
               ))}
             </tbody>
           </table>
+        </div>
+
+        {/* Cards — mobile */}
+        <div className="md:hidden flex flex-col gap-2">
+          {sorted.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '40px 0', color: '#9ca3af' }}>Aucun type verre</div>
+          ) : sorted.map(c => (
+            <div key={c.id} style={{
+              background: 'white', border: '1px solid #e5e7eb', borderRadius: 8,
+              padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+            }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 600, fontSize: 14, color: '#1f2937', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {c.typeVerre}
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                <button onClick={() => setModal({ mode: 'edit', item: c })} style={{ color: '#3b82f6', padding: '4px 6px' }}>
+                  <Edit size={15} />
+                </button>
+                <button onClick={() => handleDelete(c.id)} style={{ color: '#ef4444', padding: '4px 6px' }}>
+                  <Trash2 size={15} />
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </div>

@@ -89,8 +89,8 @@ export function SynchronisationPage() {
   const statusMsg = getStatusMessage();
 
   return (
-    <Box sx={{ p: 3 }}>
-      <Typography variant="h4" sx={{ mb: 3 }}>
+    <Box sx={{ p: { xs: 2, sm: 3 } }}>
+      <Typography variant="h4" sx={{ mb: 3, fontSize: { xs: 'clamp(1.3rem, 5vw, 2rem)' } }}>
         Synchronisation Multi-Appareils
       </Typography>
 
@@ -165,7 +165,7 @@ export function SynchronisationPage() {
             startIcon={syncing ? <CloudSyncIcon /> : <SyncIcon />}
             onClick={handleForcerSync}
             disabled={syncing || status === 'syncing'}
-            sx={{ bgcolor: '#2196f3' }}
+            sx={{ bgcolor: '#2196f3', width: { xs: '100%', sm: 'auto' } }}
           >
             {syncing ? 'Synchronisation en cours...' : 'Forcer la synchronisation'}
           </Button>
@@ -173,7 +173,7 @@ export function SynchronisationPage() {
       </Paper>
 
       {/* Remise à zéro des compteurs */}
-      <Paper sx={{ p: 3, mb: 3, border: '1px solid #ffcdd2' }}>
+      <Paper sx={{ p: { xs: 2, sm: 3 }, mb: 3, border: '1px solid #ffcdd2' }}>
         <Typography variant="h6" sx={{ mb: 1 }}>
           Réinitialisation des compteurs
         </Typography>
@@ -188,6 +188,7 @@ export function SynchronisationPage() {
           startIcon={<RestartAltIcon />}
           onClick={handleResetCounters}
           disabled={resetting}
+          sx={{ width: { xs: '100%', sm: 'auto' } }}
         >
           {resetting ? 'Remise à zéro en cours...' : 'Remettre tous les compteurs à zéro'}
         </Button>

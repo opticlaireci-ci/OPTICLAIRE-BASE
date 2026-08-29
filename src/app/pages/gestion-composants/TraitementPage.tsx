@@ -101,6 +101,11 @@ export function TraitementPage() {
     return true;
   }), [traitements, search, date]);
 
+  const sorted = useMemo(() =>
+    [...filtered].sort((a, b) => (a.designation || '').localeCompare(b.designation || '', 'fr')),
+    [filtered]
+  );
+
   const handleSave = (t: Traitement) => {
     const isUpdate = traitements.find(x => x.id === t.id);
     const traitementWithAudit = isUpdate ? addUpdateAudit(t) : addCreateAudit(t);
@@ -120,40 +125,23 @@ export function TraitementPage() {
     removeCatalogueFromMagasins('traitements', id);
   };
 
-  const FilterBar = () => (
-    <div className="flex items-center gap-2 flex-wrap">
-      <div className="flex items-center border border-gray-300 rounded bg-white overflow-hidden">
-        <input className="px-2 py-1.5 text-sm outline-none" style={{ width: 220 }} placeholder="Recherche..." value={search} onChange={e => setSearch(e.target.value)} />
-        {search && <button onClick={() => setSearch('')} className="px-1.5 text-gray-400"><X size={12} /></button>}
-      </div>
-      <div className="flex items-center border border-gray-300 rounded bg-white overflow-hidden">
-        <input type="date" className="px-2 py-1.5 text-sm outline-none" style={{ width: 140 }} placeholder="jj/mm/aaaa" value={date} onChange={e => setDate(e.target.value)} />
-        {date && <button onClick={() => setDate('')} className="px-1 text-gray-400"><X size={12} /></button>}
-      </div>
-      <button onClick={() => {}} className="px-3 py-1.5 rounded text-white text-sm" style={{ backgroundColor: '#2563eb' }}><Search size={14} /></button>
-      <div className="flex-1" />
-      <div className="flex items-center gap-0.5 text-xs text-gray-500">
-        {['<<', '<', '1', '>', '>>'].map((s, i) => (
-          <button key={i} className={`px-1.5 py-0.5 border rounded hover:bg-gray-100 ${s === '1' ? 'border-blue-500 text-blue-600 font-bold' : 'border-gray-300'}`}>{s}</button>
-        ))}
-      </div>
-    </div>
-  );
-
   return (
-    <div className="flex flex-col gap-4 p-5" style={{ backgroundColor: '#f0f4f6', minHeight: '100vh' }}>
+    <div className="flex flex-col gap-4 p-4 md:p-5" style={{ backgroundColor: '#f0f4f6', minHeight: '100vh' }}>
       {modal && <ModalTraitement initial={modal.item} onSave={handleSave} onClose={() => setModal(null)} />}
 
-      <div className="flex items-center justify-between bg-white rounded-lg shadow-sm px-5 py-2.5">
+      {/* Header */}
+      <div className="flex items-center justify-between bg-white rounded-lg shadow-sm px-4 md:px-5 py-2.5" style={{ flexWrap: 'wrap', gap: 10 }}>
         <div className="flex items-center gap-2 text-sm text-gray-600">
           <span className="text-gray-400">👓</span>
-          <span className="font-semibold">Gestion des Composants: {TENANT.nom}</span>
+          <span className="font-semibold" style={{ fontSize: 'clamp(13px, 3.5vw, 15px)' }}>
+            Gestion des Composants: {TENANT.nom}
+          </span>
         </div>
-        <div className="flex gap-2">
-          <button onClick={() => printCatalogueTraitements(traitements)} className="flex items-center gap-1.5 px-4 py-2 rounded text-sm border border-gray-300 text-gray-700 hover:bg-gray-50 bg-white">
+        <div className="flex gap-2 flex-wrap">
+          <button onClick={() => printCatalogueTraitements(traitements)} className="hidden md:flex items-center gap-1.5 px-4 py-2 rounded text-sm border border-gray-300 text-gray-700 hover:bg-gray-50 bg-white">
             <Printer size={15} /> Catalogue Traitements
           </button>
-          <button onClick={() => setImportModal(true)} className="flex items-center gap-1.5 px-4 py-2 rounded text-sm border border-gray-300 text-gray-700 hover:bg-gray-50 bg-white">
+          <button onClick={() => setImportModal(true)} className="hidden md:flex items-center gap-1.5 px-4 py-2 rounded text-sm border border-gray-300 text-gray-700 hover:bg-gray-50 bg-white">
             <FileUp size={15} /> Importer Fichier
           </button>
           <button onClick={() => setModal({ mode: 'add' })} className="flex items-center gap-1.5 px-4 py-2 rounded text-white text-sm font-semibold" style={{ backgroundColor: '#1a7a96' }}>
@@ -172,13 +160,32 @@ export function TraitementPage() {
         />
       )}
 
-      <div className="bg-white rounded-lg shadow-sm p-5 flex flex-col gap-4">
+      <div className="bg-white rounded-lg shadow-sm p-4 md:p-5 flex flex-col gap-4">
         <h2 className="text-base font-semibold text-gray-800">Traitements ({traitements.length})</h2>
 
-        <div className="text-xs text-gray-400">(Traitement, Prix)</div>
-        <FilterBar />
+        <div className="text-xs text-gray-400 hidden md:block">(Traitement, Prix)</div>
 
-        <div className="border border-gray-200 rounded overflow-x-auto">
+        {/* Filters */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center border border-gray-300 rounded bg-white overflow-hidden flex-1" style={{ minWidth: 180 }}>
+            <input className="px-2 py-1.5 text-sm outline-none flex-1 w-full" placeholder="Recherche..." value={search} onChange={e => setSearch(e.target.value)} />
+            {search && <button onClick={() => setSearch('')} className="px-1.5 text-gray-400"><X size={12} /></button>}
+          </div>
+          <div className="hidden md:flex items-center border border-gray-300 rounded bg-white overflow-hidden">
+            <input type="date" className="px-2 py-1.5 text-sm outline-none" style={{ width: 140 }} placeholder="jj/mm/aaaa" value={date} onChange={e => setDate(e.target.value)} />
+            {date && <button onClick={() => setDate('')} className="px-1 text-gray-400"><X size={12} /></button>}
+          </div>
+          <button onClick={() => {}} className="px-3 py-1.5 rounded text-white text-sm" style={{ backgroundColor: '#2563eb' }}><Search size={14} /></button>
+          <div className="flex-1 hidden md:block" />
+          <div className="flex items-center gap-0.5 text-xs text-gray-500">
+            {['<<', '<', '1', '>', '>>'].map((s, i) => (
+              <button key={i} className={`px-1.5 py-0.5 border rounded hover:bg-gray-100 ${s === '1' ? 'border-blue-500 text-blue-600 font-bold' : 'border-gray-300'}`}>{s}</button>
+            ))}
+          </div>
+        </div>
+
+        {/* Table — desktop */}
+        <div className="hidden md:block border border-gray-200 rounded overflow-x-auto">
           <table className="w-full text-sm border-collapse">
             <thead>
               <tr className="bg-white border-b-2 border-gray-200 text-gray-700 font-semibold text-xs">
@@ -192,9 +199,9 @@ export function TraitementPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.length === 0
+              {sorted.length === 0
                 ? <tr><td colSpan={7} className="text-center py-10 text-gray-400">Aucun traitement</td></tr>
-                : [...filtered].sort((a, b) => (a.designation || '').localeCompare(b.designation || '', 'fr')).map((t, idx) => (
+                : sorted.map((t, idx) => (
                   <tr key={t.id} className="border-b border-gray-100 hover:bg-gray-50">
                     <td className="px-3 py-2 text-center"><input type="checkbox" /></td>
                     <td className="px-3 py-2 text-center text-xs text-gray-400 font-medium">{idx + 1}</td>
@@ -226,6 +233,36 @@ export function TraitementPage() {
                 ))}
             </tbody>
           </table>
+        </div>
+
+        {/* Cards — mobile */}
+        <div className="md:hidden flex flex-col gap-2">
+          {sorted.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '40px 0', color: '#9ca3af' }}>Aucun traitement</div>
+          ) : sorted.map(t => (
+            <div key={t.id} style={{
+              background: 'white', border: '1px solid #e5e7eb', borderRadius: 8,
+              padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+            }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 600, fontSize: 14, color: '#1f2937', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {t.designation}
+                </div>
+                <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>
+                  {t.prix.toLocaleString('fr-FR')} F CFA
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                <button onClick={() => setModal({ mode: 'edit', item: t })} style={{ color: '#3b82f6', padding: '4px 6px' }}>
+                  <Edit size={15} />
+                </button>
+                <button onClick={() => handleDelete(t.id)} style={{ color: '#ef4444', padding: '4px 6px' }}>
+                  <Trash2 size={15} />
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </div>

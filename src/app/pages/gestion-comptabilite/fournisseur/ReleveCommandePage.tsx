@@ -41,7 +41,7 @@ function NouveauReleve({ initial, onSave, onClose }: { initial?: Releve; onSave:
             <button onClick={onClose}><X size={18} className="text-gray-500" /></button>
           </div>
         </div>
-        <div className="p-5 overflow-y-auto flex-1 min-h-0 flex flex-col gap-5">
+        <div className="p-5 overflow-y-auto flex flex-col gap-5">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div>
               <label className="text-xs text-gray-600 mb-1 block">Référence <span className="text-red-500">*</span></label>
@@ -256,7 +256,8 @@ export function ReleveCommandePage() {
       <div className="bg-white rounded-lg shadow-sm p-4 flex flex-col gap-4">
         <div className="text-sm font-bold text-gray-800">RELEVÉS VERRIERS ({filtered.length})</div>
         <FilterBar {...fbProps} />
-        <div className="border border-gray-200 rounded overflow-x-auto">
+        {/* Desktop table */}
+        <div className="hidden md:block border border-gray-200 rounded overflow-x-auto">
           <table className="w-full text-sm border-collapse" style={{ minWidth: 720 }}>
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200 text-gray-700 font-semibold text-xs">
@@ -310,6 +311,52 @@ export function ReleveCommandePage() {
                 ))}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile cards */}
+        <div className="md:hidden" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          {filtered.length === 0 ? (
+            <div style={{ padding: '40px', textAlign: 'center', color: '#9ca3af', fontSize: '14px' }}>Aucun relevé verrier</div>
+          ) : filtered.map(r => (
+            <div key={r.id} style={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '8px', padding: '14px', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexWrap: 'wrap', gap: '6px' }}>
+                <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '13px', color: '#1d4ed8' }}>{r.reference}</span>
+                <span style={{ backgroundColor: r.statut === 'Réglé' ? '#16a34a' : '#dc2626', color: '#fff', borderRadius: '10px', padding: '2px 10px', fontSize: '11px', fontWeight: 600 }}>{r.statut}</span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '13px' }}>
+                <div>
+                  <span style={{ color: '#6b7280', fontSize: '11px' }}>Fournisseur</span>
+                  <div style={{ fontWeight: 600, color: '#111827' }}>{r.fournisseur}</div>
+                </div>
+                <div>
+                  <span style={{ color: '#6b7280', fontSize: '11px' }}>Période</span>
+                  <div style={{ color: '#374151' }}>{r.edition ? new Date(r.edition).toLocaleDateString('fr-FR') : '—'}</div>
+                </div>
+                <div>
+                  <span style={{ color: '#6b7280', fontSize: '11px' }}>Total commandes</span>
+                  <div style={{ fontWeight: 600, color: '#111827' }}>{r.totalNet.toLocaleString('fr-FR')} F CFA</div>
+                </div>
+                <div>
+                  <span style={{ color: '#6b7280', fontSize: '11px' }}>Payé</span>
+                  <div style={{ fontWeight: 600, color: '#16a34a' }}>{r.acompte.toLocaleString('fr-FR')} F CFA</div>
+                </div>
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <span style={{ color: '#6b7280', fontSize: '11px' }}>Restant</span>
+                  <div style={{ fontWeight: 700, color: r.totalReste > 0 ? '#dc2626' : '#16a34a', fontSize: '14px' }}>{r.totalReste.toLocaleString('fr-FR')} F CFA</div>
+                </div>
+                {r.officine && (
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <span style={{ color: '#6b7280', fontSize: '11px' }}>Officine</span>
+                    <div style={{ color: '#374151' }}>{r.officine}</div>
+                  </div>
+                )}
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '10px', paddingTop: '10px', borderTop: '1px solid #f3f4f6' }}>
+                <button onClick={() => setModal({ mode: 'edit', item: r })} style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 12px', border: '1px solid #bfdbfe', borderRadius: '6px', backgroundColor: '#eff6ff', color: '#2563eb', fontSize: '12px', cursor: 'pointer' }}><Edit size={13} /> Modifier</button>
+                <button onClick={() => handleDelete(r.id)} style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 12px', border: '1px solid #fecaca', borderRadius: '6px', backgroundColor: '#fef2f2', color: '#dc2626', fontSize: '12px', cursor: 'pointer' }}><Trash2 size={13} /> Supprimer</button>
+              </div>
+            </div>
+          ))}
         </div>
         <FilterBar {...fbProps} />
       </div>

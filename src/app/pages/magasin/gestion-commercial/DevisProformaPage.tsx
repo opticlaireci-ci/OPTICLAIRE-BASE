@@ -9,9 +9,9 @@ import { autoSaveOphtalmologue, autoSaveCabinet } from '../../../utils/autoActeu
 import { autoSaveClient } from '../../../utils/autoClient';
 import { useTypesVerre, useVerresList, findVerreByName, VerreRecord, useOphtalmologues, useCabinets, useProfessions, useClientRecordsMagasin, ClientRecord, useVenteProducts, findVenteProduct, VenteProduct } from '../../../utils/venteLookups';
 import { genCodeBarre, genNumFacture } from '../../../utils/autoNumbers';
-import { printHeaderHTML, getEntete } from '../../../utils/documentHeader';
+import { printHeaderHTML } from '../../../utils/documentHeader';
 import { useSupabaseSync } from '../../../hooks/useSupabaseSync';
-import { ajouterVente, chargerVentes, readVentesCache, supprimerVente, VenteSupabase } from '../../../services/ventesService';
+import { ajouterVente, chargerVentes, readVentesCache, supprimerVente, mettreAJourVente, VenteSupabase } from '../../../services/ventesService';
 import { loadFromSupabase, saveToSupabase } from '../../../services/supabaseRealtime';
 import { useAuth } from '../../../contexts/AuthContext';
 import { canEdit, canDelete } from '../../../utils/actionRights';
@@ -69,8 +69,8 @@ const toRoman = (n: number) => ROMAN[n] || String(n);
 
 // ── types ──────────────────────────────────────────────────────────────────────
 interface OeilData { sphere: string; cylindre: string; axe: string; dec: string; addition: string; hauteur: string; evLoin: string; evPres: string; quantite: string; prix: string; remise: string; }
-interface VerreInfo { typeVerre: string; verre: string; traitement: string; matiere: string; diametre: string; fournisseur?: string; garantie?: string; oeilDroit: OeilData; oeilGauche: OeilData; ecartPupillaire: string; total: string; }
-interface ArticleLigne { id: string; produitId?: string; codeBarre?: string; designation: string; type?: 'monture' | 'accessoire' | 'traitement' | 'service' | 'autre'; stock?: string; remise?: string; prix: string; quantite: string; total: string; fournisseur?: string; garantie?: string; detailMonture?: string; }
+interface VerreInfo { typeVerre: string; verre: string; traitement: string; matiere: string; diametre: string; oeilDroit: OeilData; oeilGauche: OeilData; ecartPupillaire: string; total: string; }
+interface ArticleLigne { id: string; produitId?: string; codeBarre?: string; designation: string; type?: 'monture' | 'accessoire' | 'traitement' | 'service' | 'autre'; stock?: string; remise?: string; prix: string; quantite: string; total: string; }
 interface PropositionData { verres: VerreInfo[]; articles: ArticleLigne[]; totalVerres: number; totalArticles: number; remisePct: string; valeurRemise: number; totalNet: number; }
 interface ClientInfo { numeroClient: string; civilite: string; nom: string; telephone1: string; telephone2: string; email: string; adresse: string; profession: string; jourNaissance: string; moisNaissance: string; anneeNaissance: string; soldeClient: string; matriculeAssurance: string; entreprise: string; ophtalmologue: string; telOphtalmologue: string; cabinetOphtalmologue: string; telCabinet: string; }
 interface DevisRecord extends AuditInfo { id: string; date: string; numeroClient: string; client: string; telephone: string; propositions: PropositionData[]; numDevis: string; _raw?: VenteSupabase; }
@@ -97,270 +97,175 @@ const purpleHdr = 'text-xs font-semibold text-white text-center px-1 py-1 whites
 const purpleCell = 'border border-purple-400 bg-white px-0.5 py-0.5';
 const vInput = 'w-full text-xs text-center border-none outline-none bg-transparent py-1';
 
-// Nombre entier -> texte français ("DEUX CENT MILLE FRANCS CFA"). Copie locale
-// volontaire (même logique que VenteFacturePage.tsx) pour ne pas coupler les
-// deux pages d'impression entre elles.
-function montantEnLettresDevis(nombre: number): string {
-  nombre = Math.round(nombre || 0);
-  if (nombre === 0) return 'ZÉRO FRANC CFA';
-  const u = ['', 'un', 'deux', 'trois', 'quatre', 'cinq', 'six', 'sept', 'huit', 'neuf', 'dix',
-    'onze', 'douze', 'treize', 'quatorze', 'quinze', 'seize', 'dix-sept', 'dix-huit', 'dix-neuf'];
-  const d = ['', 'dix', 'vingt', 'trente', 'quarante', 'cinquante', 'soixante', 'soixante', 'quatre-vingt', 'quatre-vingt'];
-  const centaines = (n: number): string => {
-    let r = '';
-    const c = Math.floor(n / 100), reste = n % 100;
-    if (c > 0) r += (c > 1 ? u[c] + ' ' : '') + 'cent' + (c > 1 && reste === 0 ? 's' : '');
-    if (reste > 0) {
-      if (r) r += ' ';
-      if (reste < 20) r += u[reste];
-      else {
-        const diz = Math.floor(reste / 10), un = reste % 10;
-        if (diz === 7 || diz === 9) r += d[diz] + '-' + u[10 + un];
-        else {
-          r += d[diz];
-          if (un === 1 && diz !== 8) r += '-et-un';
-          else if (un > 0) r += '-' + u[un];
-          else if (diz === 8) r += 's';
-        }
-      }
-    }
-    return r;
-  };
-  let mots = '';
-  const millions = Math.floor(nombre / 1000000);
-  const milliers = Math.floor((nombre % 1000000) / 1000);
-  const reste = nombre % 1000;
-  if (millions > 0) mots += (millions > 1 ? centaines(millions) + ' millions' : 'un million') + ' ';
-  if (milliers > 0) mots += (milliers > 1 ? centaines(milliers) + ' ' : '') + 'mille ';
-  if (reste > 0) mots += centaines(reste);
-  return (mots.trim() + ' FRANCS CFA').toUpperCase();
-}
-
-// ── Impression du devis ─────────────────────────────────────────────────────
-function imprimerDevis(d: DevisRecord, magasinId: string) {
-  const money = (n: number) => (n || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const fmtDT = (s?: string) => {
-    if (!s) return '—';
-    const dt = new Date(s);
-    if (isNaN(dt.getTime())) return '—';
-    const p2 = (n: number) => String(n).padStart(2, '0');
-    return `${p2(dt.getDate())}-${p2(dt.getMonth() + 1)}-${dt.getFullYear()} ${p2(dt.getHours())}:${p2(dt.getMinutes())}:${p2(dt.getSeconds())}`;
-  };
+// ── Téléchargement PDF du devis (jsPDF, modèle DEVIS | PROFORMA) ─────────────
+async function telechargerDevisPDF(d: DevisRecord, magasinId: string) {
+  const { pdfHeader, getEntete } = await import('../../../utils/documentHeader');
+  const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
+    import('jspdf'),
+    import('jspdf-autotable'),
+  ]);
+  const doc = new jsPDF();
   const raw = d._raw;
-  const matricule = raw?.matricule_assurance || '';
-  const email = raw?.email || '';
-  const editeLe = fmtDT(d.createdAt || d.date);
+  const fmtF = (n: number) => (Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).replace(/,/g, ' ');
+  const fmtDateHeure = (s?: string) => s ? new Date(s).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '';
+  const num = (v: any) => { const n = Number(v); return isNaN(n) ? 0 : n; };
 
-  const oeilTotal = (o?: OeilData): number => {
-    if (!o) return 0;
-    const p = parseFloat(o.prix || '0') || 0;
-    const q = parseFloat(o.quantite || '1') || 1;
-    const r = parseFloat(o.remise || '0') || 0;
-    return p * q * (1 - r / 100);
+  // Proposition active (la première non-vide)
+  const props = d.propositions || [];
+  const prop = props.find((p: any) => (p.verres?.length || 0) + (p.articles?.length || 0) > 0) || props[0] || { verres: [], articles: [], totalVerres: 0, totalArticles: 0, remisePct: '0', totalNet: 0, valeurRemise: 0 };
+
+  const nomClient = `${raw?.civilite ? raw.civilite + '. ' : ''}${d.client || ''}`.trim().toUpperCase();
+  let y = pdfHeader(doc, magasinId, { date: d.date });
+
+  // Bloc client (bandeau gris) + N° devis / édition
+  doc.setFillColor(233, 233, 233);
+  doc.rect(14, y, 182, 26, 'F');
+  doc.setTextColor(0);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.text(`(N° ${d.numeroClient || '—'}) ${nomClient}`, 18, y + 8);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  const tel2 = raw?.telephone2 ? ' / ' + raw.telephone2 : '';
+  doc.text(`Téléphone: ${d.telephone || ''}${tel2}`, 18, y + 15);
+  doc.text(`Email: ${raw?.email || ''}`, 18, y + 20);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.text(`Édité par: ${d.createdBy || '—'}`, 192, y + 8, { align: 'right' });
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.text(`Édité le, ${fmtDateHeure(d.createdAt || d.date)}`, 192, y + 14, { align: 'right' });
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.text(`DEVIS | PROFORMA N° ${d.numDevis}`, 192, y + 20, { align: 'right' });
+  y += 34;
+
+  const heading = (label: string, yy: number) => {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(15);
+    doc.setTextColor(0);
+    doc.text(label, 14, yy);
   };
 
-  const oeilCell = (v: string | undefined) => `<td style="padding:4px 3px;border:1px solid #ccc;text-align:center;">${v || ''}</td>`;
+  // ── VERRES
+  const verres: VerreInfo[] = (prop as any).verres || [];
+  if (verres.length > 0) {
+    heading('VERRES', y);
+    verres.forEach((v: VerreInfo) => {
+      const desc = [
+        `${v.typeVerre || ''}${v.verre ? ' | ' + v.verre : ''}`,
+        v.traitement,
+        [v.matiere, v.diametre].filter(Boolean).join(' | '),
+        'Garantie: 2 ANS',
+      ].filter(Boolean).join('\n');
+      const od = v.oeilDroit || {} as OeilData;
+      const og = v.oeilGauche || {} as OeilData;
+      const prixOD = num(od.prix); const prixOG = num(og.prix);
+      autoTable(doc, {
+        startY: y + 3,
+        margin: { left: 14, right: 14 },
+        styles: { fontSize: 7, cellPadding: 1.5, lineColor: [160, 160, 160], lineWidth: 0.1, textColor: 20, halign: 'center', valign: 'middle' },
+        head: [[
+          { content: 'PRESCIPTION', colSpan: 10, styles: { halign: 'left', fillColor: [225, 225, 225], textColor: 0, fontStyle: 'bold' } },
+          { content: 'QUANTITÉ' }, { content: 'PRIX' }, { content: 'REMISE' }, { content: 'TOTAL' },
+        ]],
+        headStyles: { fillColor: [225, 225, 225], textColor: 0, fontStyle: 'bold' },
+        body: [
+          [
+            { content: desc, rowSpan: 3, styles: { halign: 'left', valign: 'top', fontStyle: 'bold', cellWidth: 50 } },
+            { content: '', styles: { fillColor: [244, 244, 244] } },
+            { content: 'Sph', styles: { fillColor: [244, 244, 244], fontStyle: 'bold' } },
+            { content: 'Cyl', styles: { fillColor: [244, 244, 244], fontStyle: 'bold' } },
+            { content: 'Axe', styles: { fillColor: [244, 244, 244], fontStyle: 'bold' } },
+            { content: 'Dec', styles: { fillColor: [244, 244, 244], fontStyle: 'bold' } },
+            { content: 'Add', styles: { fillColor: [244, 244, 244], fontStyle: 'bold' } },
+            { content: 'H', styles: { fillColor: [244, 244, 244], fontStyle: 'bold' } },
+            { content: 'E V Loin', styles: { fillColor: [244, 244, 244], fontStyle: 'bold' } },
+            { content: 'E V Près', styles: { fillColor: [244, 244, 244], fontStyle: 'bold' } },
+            { content: '', styles: { fillColor: [244, 244, 244] } },
+            { content: '', styles: { fillColor: [244, 244, 244] } },
+            { content: '', styles: { fillColor: [244, 244, 244] } },
+            { content: '', styles: { fillColor: [244, 244, 244] } },
+          ],
+          [
+            { content: 'Oeil Droit', styles: { halign: 'left', fontStyle: 'bold' } },
+            od.sphere || '', od.cylindre || '', od.axe || '', od.dec || '', od.addition || '', od.hauteur || '', od.evLoin || '', od.evPres || '',
+            od.quantite || '1', { content: fmtF(prixOD), styles: { halign: 'right' } }, `${od.remise || '0'}`, { content: fmtF(prixOD), styles: { halign: 'right' } },
+          ],
+          [
+            { content: 'Oeil Gauche', styles: { halign: 'left', fontStyle: 'bold' } },
+            og.sphere || '', og.cylindre || '', og.axe || '', og.dec || '', og.addition || '', og.hauteur || '', og.evLoin || '', og.evPres || '',
+            og.quantite || '1', { content: fmtF(prixOG), styles: { halign: 'right' } }, `${og.remise || '0'}`, { content: fmtF(prixOG), styles: { halign: 'right' } },
+          ],
+        ],
+      });
+      y = (doc as any).lastAutoTable.finalY;
+    });
+  }
 
-  // Une ligne "Oeil Droit"/"Oeil Gauche" avec ses 8 colonnes de prescription
-  // + Quantité/Prix/Remise/Total, exactement comme le modèle papier.
-  const oeilRow = (label: string, o: OeilData | undefined) => `
-    <tr>
-      <td style="padding:4px 6px;border:1px solid #ccc;white-space:nowrap;">${label}</td>
-      ${oeilCell(o?.sphere)}${oeilCell(o?.cylindre)}${oeilCell(o?.axe)}${oeilCell(o?.dec)}${oeilCell(o?.addition)}${oeilCell(o?.hauteur)}${oeilCell(o?.evLoin)}${oeilCell(o?.evPres)}
-      <td style="padding:4px 6px;border:1px solid #ccc;text-align:center;">${o?.quantite || '1'}</td>
-      <td style="padding:4px 6px;border:1px solid #ccc;text-align:right;">${money(parseFloat(o?.prix || '0'))}</td>
-      <td style="padding:4px 6px;border:1px solid #ccc;text-align:right;">${money(parseFloat(o?.remise || '0'))}</td>
-      <td style="padding:4px 6px;border:1px solid #ccc;text-align:right;font-weight:600;">${money(oeilTotal(o))}</td>
-    </tr>`;
+  // ── MONTURES / ARTICLES
+  const articles: ArticleLigne[] = (prop as any).articles || [];
+  if (articles.length > 0) {
+    heading('MONTURES', y + 8);
+    autoTable(doc, {
+      startY: y + 11,
+      margin: { left: 14, right: 14 },
+      styles: { fontSize: 8, cellPadding: 2, lineColor: [160, 160, 160], lineWidth: 0.1, textColor: 20, valign: 'middle' },
+      headStyles: { fillColor: [225, 225, 225], textColor: 0, fontStyle: 'bold' },
+      columnStyles: { 0: { halign: 'left' }, 1: { halign: 'center', cellWidth: 22 }, 2: { halign: 'right', cellWidth: 28 }, 3: { halign: 'right', cellWidth: 22 }, 4: { halign: 'right', cellWidth: 28 } },
+      head: [[{ content: 'DÉSIGNATION' }, { content: 'QUANTITÉ' }, { content: 'PRIX' }, { content: 'REMISE' }, { content: 'TOTAL' }]],
+      body: articles.map((a: ArticleLigne) => {
+        const desc = [a.designation, a.codeBarre ? `Réf: ${a.codeBarre}` : '', 'Garantie: 2 ANS'].filter(Boolean).join('\n');
+        return [{ content: desc, styles: { fontStyle: 'bold' } }, a.quantite || '1', { content: fmtF(num(a.prix)), styles: { halign: 'right' } }, { content: fmtF(num(a.remise ?? 0)), styles: { halign: 'right' } }, { content: fmtF(num(a.total)), styles: { halign: 'right' } }];
+      }),
+    });
+    y = (doc as any).lastAutoTable.finalY;
+  }
 
-  const verreBlock = (v: VerreInfo) => {
-    const descLines = [
-      [v.typeVerre, v.verre].filter(Boolean).join(' | '),
-      v.traitement || '',
-      [v.matiere, v.diametre].filter(Boolean).join(' | '),
-    ].filter(Boolean).map(l => `<div>${l}</div>`).join('');
-    return `
-      <tr><td colspan="13" style="padding:6px 6px 2px 6px;border:1px solid #ccc;border-bottom:none;font-weight:700;font-size:11px;">${descLines || '—'}</td></tr>
-      ${v.garantie ? `<tr><td colspan="13" style="padding:0 6px 6px 6px;border:1px solid #ccc;border-top:none;text-align:right;font-size:10px;font-weight:600;">Garantie: ${v.garantie}</td></tr>` : ''}
-      <tr style="background:#f0f0f0;">
-        <td style="padding:3px 6px;border:1px solid #ccc;"></td>
-        ${VERRE_COLS.slice(0, 8).map(c => `<td style="padding:3px 3px;border:1px solid #ccc;text-align:center;font-size:9px;font-weight:700;white-space:nowrap;">${c.label}</td>`).join('')}
-        <td style="padding:3px 6px;border:1px solid #ccc;text-align:center;font-size:9px;font-weight:700;">Qté</td>
-        <td style="padding:3px 6px;border:1px solid #ccc;text-align:center;font-size:9px;font-weight:700;">Prix</td>
-        <td style="padding:3px 6px;border:1px solid #ccc;text-align:center;font-size:9px;font-weight:700;">Remise</td>
-        <td style="padding:3px 6px;border:1px solid #ccc;text-align:center;font-size:9px;font-weight:700;">Total</td>
-      </tr>
-      ${oeilRow('Oeil Droit', v.oeilDroit)}
-      ${oeilRow('Oeil Gauche', v.oeilGauche)}`;
-  };
+  // ── CAS POUR UN ASSURÉ / Totaux
+  const totalBrut = num((prop as any).totalVerres) + num((prop as any).totalArticles);
+  const remisePct = (prop as any).remisePct || '0';
+  const valeurRemise = num((prop as any).valeurRemise);
+  const totalNet = num((prop as any).totalNet) || totalBrut;
 
-  const articleRow = (a: ArticleLigne) => {
-    const lines = [
-      a.fournisseur ? `Fournisseur | ${a.fournisseur}` : '',
-      a.detailMonture || a.designation || '—',
-      a.garantie ? `Garantie: ${a.garantie}` : '',
-    ].filter(Boolean).map(l => `<div>${l}</div>`).join('');
-    return `
-      <tr>
-        <td style="padding:5px 8px;border:1px solid #ccc;">${lines}</td>
-        <td style="padding:5px 8px;border:1px solid #ccc;text-align:center;">${a.quantite || '1'}</td>
-        <td style="padding:5px 8px;border:1px solid #ccc;text-align:right;">${money(parseFloat(a.prix || '0'))}</td>
-        <td style="padding:5px 8px;border:1px solid #ccc;text-align:right;">${money(parseFloat(a.remise || '0'))}</td>
-        <td style="padding:5px 8px;border:1px solid #ccc;text-align:right;font-weight:600;">${money(parseFloat(a.total || '0'))}</td>
-      </tr>`;
-  };
+  autoTable(doc, {
+    startY: y + 10,
+    margin: { left: 14, right: 14 },
+    styles: { fontSize: 8, cellPadding: 2, lineColor: [200, 200, 200], lineWidth: 0.1, textColor: 20 },
+    headStyles: { fillColor: [0, 0, 0], textColor: 255, fontStyle: 'bold', fontSize: 10 },
+    body: [
+      [{ content: 'PART ASSURANCE', styles: { halign: 'left' } }, { content: '', styles: { cellWidth: 60 } }, { content: `TOTAL`, styles: { halign: 'right', fontStyle: 'bold' } }, { content: `${fmtF(totalBrut)} F CFA`, styles: { halign: 'right', fontStyle: 'bold' } }],
+      [{ content: `PART ASSURÉ(E)`, styles: { halign: 'left' } }, { content: '', styles: { cellWidth: 60 } }, { content: `REMISE(${remisePct}%)`, styles: { halign: 'right' } }, { content: `${fmtF(valeurRemise)} F CFA`, styles: { halign: 'right' } }],
+      [{ content: '', colSpan: 2 }, { content: `TOTAL NET`, styles: { halign: 'right', fontStyle: 'bold' } }, { content: `${fmtF(totalNet)} F CFA`, styles: { halign: 'right', fontStyle: 'bold' } }],
+    ],
+    columnStyles: { 0: { cellWidth: 50 }, 1: { cellWidth: 50 }, 2: { cellWidth: 50 }, 3: { cellWidth: 36 } },
+    tableWidth: 182,
+    head: [[{ content: 'CAS POUR UN ASSURÉ', colSpan: 4, styles: { fillColor: [0, 0, 0], textColor: 255, fontStyle: 'bold', fontSize: 10 } }]],
+  });
+  y = (doc as any).lastAutoTable.finalY + 8;
 
-  // Toutes les propositions sont fusionnées dans les 2 mêmes tableaux
-  // VERRES / MONTURES (comme le document de référence, qui ne montre qu'une
-  // seule série de tableaux même si plusieurs lignes existent).
-  const tousVerres = (d.propositions || []).flatMap(p => p.verres || []);
-  const tousArticles = (d.propositions || []).flatMap(p => p.articles || []);
+  // Arrêté
+  const montantLettre = totalNet.toLocaleString('fr-FR', { style: 'currency', currency: 'XOF', minimumFractionDigits: 0, maximumFractionDigits: 0 }).replace('XOF', 'FRANCS CFA').toUpperCase();
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.text(`ARRÊTÉ LE PRÉSENT DEVIS À LA SOMME DE:`, 14, y);
+  doc.setFont('helvetica', 'bold');
+  doc.text(`${fmtF(totalNet)} FCFA`, 14 + doc.getTextWidth('ARRÊTÉ LE PRÉSENT DEVIS À LA SOMME DE:') + 2, y);
+  y += 20;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.text('Signature & Cachet', 192, y, { align: 'right' });
 
-  const totalVerresNet = tousVerres.reduce((s, v) => s + oeilTotal(v.oeilDroit) + oeilTotal(v.oeilGauche), 0);
-  const totalArticlesNet = tousArticles.reduce((s, a) => s + (parseFloat(a.total || '0') || 0), 0);
-  const totalBrut = totalVerresNet + totalArticlesNet;
-  const remisePct = (d.propositions || [])[0]?.remisePct || '0';
-  const valeurRemise = (d.propositions || [])[0]?.valeurRemise || 0;
-  const totalNet = Math.max(0, totalBrut - (valeurRemise || 0));
-
-  const verresSection = tousVerres.length > 0 ? `
-    <div class="section-title">VERRES</div>
-    <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:18px;">
-      <thead><tr style="background:#111;color:#fff;">
-        <th colspan="9" style="padding:6px 8px;text-align:left;">PRESCIPTION</th>
-        <th style="padding:6px 6px;">QUANTITÉ</th><th style="padding:6px 6px;">PRIX</th><th style="padding:6px 6px;">REMISE</th><th style="padding:6px 6px;">TOTAL</th>
-      </tr></thead>
-      <tbody>${tousVerres.map(verreBlock).join('')}</tbody>
-    </table>` : '';
-
-  const monturesSection = tousArticles.length > 0 ? `
-    <div class="section-title">MONTURES</div>
-    <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:18px;">
-      <thead><tr style="background:#111;color:#fff;">
-        <th style="padding:6px 8px;text-align:left;">DÉSIGNATION</th>
-        <th style="padding:6px 6px;">QUANTITÉ</th><th style="padding:6px 6px;">PRIX</th><th style="padding:6px 6px;">REMISE</th><th style="padding:6px 6px;">TOTAL</th>
-      </tr></thead>
-      <tbody>${tousArticles.map(articleRow).join('')}</tbody>
-    </table>` : '';
-
+  // Footer
   const e = getEntete(magasinId);
+  const footerY = 285;
+  doc.setDrawColor(0); doc.setLineWidth(0.3);
+  doc.line(14, footerY - 4, 196, footerY - 4);
+  doc.setFontSize(8); doc.setFont('helvetica', 'normal'); doc.setTextColor(80);
+  const footerParts = [e.telephone, e.email, e.adresse].filter(Boolean);
+  doc.text(footerParts.join(' | '), 105, footerY, { align: 'center' });
 
-  const html = `<!DOCTYPE html>
-<html lang="fr"><head><meta charset="UTF-8"/>
-<title>Devis ${d.numDevis} — ${TENANT.nomComplet}</title>
-<style>
-  * { margin:0; padding:0; box-sizing:border-box; }
-  body { font-family: Arial, sans-serif; font-size: 13px; color: #222; padding: 30px; display: flex; flex-direction: column; min-height: 100vh; }
-  @media print { body { padding: 15px; } .no-print { display: none; } }
-  .section-title { font-size: 15px; font-weight: 800; margin: 4px 0 8px 0; }
-  .info-box { background: #ececec; padding: 10px 14px; margin-bottom: 18px; display: flex; justify-content: space-between; gap: 20px; font-size: 11px; line-height: 1.6; }
-  .print-btn { position: fixed; top: 20px; right: 20px; background: #7b3fa0; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 600; }
-  .assure-box { border: 1px solid #333; font-size: 11px; }
-  .assure-box td { border: 1px solid #333; padding: 4px 8px; }
-  .totaux-box td { padding: 4px 10px; font-size: 12px; }
-  .totaux-box tr.net td { font-weight: 800; }
-  .footer { margin-top: auto; padding-top: 12px; border-top: 1px solid #333; font-size: 10px; color: #444; text-align: center; }
-</style></head>
-<body>
-  <button class="no-print print-btn" onclick="window.print()">🖨️ Imprimer</button>
-  ${printHeaderHTML(magasinId || '', { date: d.date })}
-
-  <div class="info-box">
-    <div>
-      <div style="font-weight:700;">(N° ${d.numeroClient || '—'}) ${(d.client || '').toUpperCase()}</div>
-      ${matricule ? `<div>Matricule: ${matricule}</div>` : ''}
-      <div>Téléphone: ${d.telephone || '—'}</div>
-      <div>Email: ${email}</div>
-    </div>
-    <div style="text-align:right;">
-      <div style="font-weight:700;">Édité par: ${(d.createdBy || '—').toUpperCase()}</div>
-      <div>Édité le, ${editeLe}</div>
-      <div style="font-weight:800;font-size:13px;margin-top:4px;">DEVIS | PROFORMA N° ${d.numDevis}</div>
-    </div>
-  </div>
-
-  ${verresSection}
-  ${monturesSection}
-  ${(!verresSection && !monturesSection) ? '<p style="color:#999;">Aucun élément renseigné.</p>' : ''}
-
-  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:20px;margin-bottom:14px;flex-wrap:wrap;">
-    <div>
-      <div class="section-title" style="font-size:13px;">CAS POUR UN ASSURÉ</div>
-      <table class="assure-box" style="border-collapse:collapse;">
-        <tr><td style="font-weight:600;">PART ASSURANCE</td><td style="width:120px;">&nbsp;</td></tr>
-        <tr><td style="font-weight:600;">PART ASSURÉ(E)</td><td style="width:120px;">&nbsp;</td></tr>
-      </table>
-    </div>
-    <table class="totaux-box" style="border-collapse:collapse;background:#ececec;">
-      <tr><td>TOTAL</td><td style="text-align:right;font-weight:600;">${money(totalBrut)} F CFA</td></tr>
-      <tr><td>REMISE(${remisePct}%)</td><td style="text-align:right;font-weight:600;">${money(valeurRemise || 0)} F CFA</td></tr>
-      <tr class="net"><td>TOTAL NET</td><td style="text-align:right;">${money(totalNet)} F CFA</td></tr>
-    </table>
-  </div>
-
-  <div style="font-size:12px;font-weight:600;text-transform:uppercase;margin-bottom:40px;">
-    Arrêté le présent devis à la somme de : <strong>${montantEnLettresDevis(totalNet)}</strong>
-  </div>
-
-  <div style="text-align:right;font-size:12px;margin-bottom:20px;">Signature &amp; Cachet</div>
-
-  <div class="footer">
-    ${e.adresse} Téléphone: ${e.telephone} Email: ${e.email}
-  </div>
-</body></html>`;
-
-
-  const w = window.open('', '_blank');
-  if (w) {
-    // Cas normal (desktop / navigateur classique) : un nouvel onglet s'ouvre.
-    // On force le focus + l'impression automatique dès le chargement : sans
-    // cela l'onglet pouvait s'ouvrir discrètement en arrière-plan (comportement
-    // de certains navigateurs) et donnait l'impression que rien ne s'était
-    // passé, alors qu'il fallait aller cliquer soi-même sur l'onglet ouvert.
-    w.document.write(html);
-    w.document.close();
-    w.focus();
-    w.onload = () => { try { w.print(); } catch { /* le bouton manuel reste disponible dans l'aperçu */ } };
-    return;
-  }
-
-  // Repli robuste : sur mobile, dans une PWA installée, ou dans certains
-  // navigateurs intégrés (WebView), `window.open` peut être bloqué ou ne
-  // renvoyer aucune fenêtre SANS déclencher d'erreur — le bouton « Imprimer »
-  // semblait alors ne « rien faire ». On imprime dans ce cas via un iframe
-  // caché : cette méthode n'est jamais bloquée par un bloqueur de pop-up
-  // puisqu'aucune nouvelle fenêtre/onglet n'est ouvert(e).
-  try {
-    const iframe = document.createElement('iframe');
-    iframe.style.position = 'fixed';
-    iframe.style.right = '0';
-    iframe.style.bottom = '0';
-    iframe.style.width = '0';
-    iframe.style.height = '0';
-    iframe.style.border = '0';
-    document.body.appendChild(iframe);
-
-    const cleanup = () => setTimeout(() => iframe.parentNode?.removeChild(iframe), 1000);
-
-    const doc = iframe.contentWindow?.document;
-    if (!doc) throw new Error('Aperçu d\'impression indisponible sur ce navigateur.');
-    doc.open();
-    doc.write(html);
-    doc.close();
-
-    iframe.onload = () => {
-      try {
-        iframe.contentWindow?.focus();
-        iframe.contentWindow?.print();
-      } catch {
-        alert('Impossible de lancer l\'impression automatiquement. Utilisez le bouton "Imprimer" dans l\'aperçu.');
-      } finally {
-        cleanup();
-      }
-    };
-  } catch (e) {
-    alert('Impossible d\'imprimer le devis : ' + ((e as Error)?.message || 'erreur inconnue') + '. Autorisez les fenêtres pop-up puis réessayez.');
-  }
+  doc.save(`Devis_${d.numDevis}_${(d.client || '').replace(/\s+/g, '_')}.pdf`);
 }
 
 // ── Étape I ───────────────────────────────────────────────────────────────────
@@ -444,17 +349,10 @@ function EtapeI({ data, onChange, magasinId }: { data: ClientInfo; onChange: (d:
       <div className="grid grid-cols-6 gap-3">
         <div><ReqLbl>N° Client</ReqLbl><input className={roCls + ' font-mono font-bold text-blue-700'} readOnly value={data.numeroClient} /></div>
         <div><Lbl>Civilité</Lbl>
-          <input
-            list="civilite-options-devis"
-            className={iCls}
-            placeholder="Civilité..."
-            value={data.civilite}
-            onChange={set('civilite')}
-            autoComplete="off"
-          />
-          <datalist id="civilite-options-devis">
-            <option value="M." /><option value="Mme" /><option value="Mlle" /><option value="Dr" />
-          </datalist>
+          <select className={selCls} value={data.civilite} onChange={set('civilite')}>
+            <option value="">Civilité...</option>
+            <option>M.</option><option>Mme</option><option>Mlle</option><option>Dr</option>
+          </select>
         </div>
         <div className="col-span-2 relative" ref={clientBoxRef}><ReqLbl>Nom & Prénoms Client</ReqLbl>
           <input
@@ -526,7 +424,7 @@ function EtapeI({ data, onChange, magasinId }: { data: ClientInfo; onChange: (d:
           <input className={iCls} placeholder="Entreprise..." value={data.entreprise} onChange={set('entreprise')} />
         </div>
       </div>
-      <div className="grid grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <div><Lbl>Ophtalmologue</Lbl>
           <input className={iCls} placeholder="Ophtalmologue..." list="devis-ophtalmo-list" value={data.ophtalmologue} onChange={set('ophtalmologue')} />
           <datalist id="devis-ophtalmo-list">
@@ -624,8 +522,6 @@ function VerreBlock({ data, index, total, onChange, onRemove }: { data: VerreInf
       traitement: v.traitement || data.traitement,
       matiere: v.matiere || data.matiere,
       diametre: v.diametre || data.diametre,
-      fournisseur: v.fournisseur || data.fournisseur,
-      garantie: v.garantie || data.garantie,
       oeilDroit,
       oeilGauche,
       total: calcTotal(oeilDroit, oeilGauche),
@@ -646,8 +542,6 @@ function VerreBlock({ data, index, total, onChange, onRemove }: { data: VerreInf
       traitement: found ? found.traitement : data.traitement,
       matiere: found ? found.matiere : data.matiere,
       diametre: found ? found.diametre : data.diametre,
-      fournisseur: found ? found.fournisseur : data.fournisseur,
-      garantie: found ? found.garantie : data.garantie,
       oeilDroit,
       oeilGauche,
       total: calcTotal(oeilDroit, oeilGauche),
@@ -761,17 +655,9 @@ function ArticlesBlock({ articles, onChange, magasinId, idSuffix }: { articles: 
   const montureDl = `dev-monture-acc-${idSuffix}`;
   const traitDl = `dev-trait-service-${idSuffix}`;
 
-  // Montures / accessoires : on ne propose QUE les articles réellement présents
-  // dans CE magasin (stock reçu par bon de distribution ou de transfert > 0).
-  // Un article détenu par un autre magasin, mais absent de celui-ci, ne doit
-  // pas apparaître dans la liste de choix du devis (même règle que la Facture).
-  const disponible = (p: VenteProduct) => p.stock == null || p.stock > 0;
-  const allOptions = [...new Set(
-    products.filter(disponible).flatMap(p => [p.label, p.codeBarre].filter(Boolean))
-  )];
+  const allOptions = [...new Set(products.flatMap(p => [p.label, p.codeBarre].filter(Boolean)))];
   const montureAccOptions = [...new Set(
-    products.filter(p => (p.type === 'monture' || p.type === 'accessoire') && (p.stock ?? 0) > 0)
-      .flatMap(p => [p.label, p.codeBarre].filter(Boolean))
+    products.filter(p => p.type === 'monture' || p.type === 'accessoire').flatMap(p => [p.label, p.codeBarre].filter(Boolean))
   )];
   const traitServiceOptions = [...new Set(
     products.filter(p => p.type === 'verre' || p.type === 'service').map(p => p.label).filter(Boolean)
@@ -788,9 +674,6 @@ function ArticlesBlock({ articles, onChange, magasinId, idSuffix }: { articles: 
     remise: '0',
     quantite: '1',
     total: String(Math.round(p.prix || 0)),
-    fournisseur: p.fournisseur || '',
-    garantie: p.garantie || '',
-    detailMonture: p.detailMonture || '',
   });
 
   const addFromSearch = (value: string, filter: (p: VenteProduct) => boolean, clear: () => void) => {
@@ -816,9 +699,6 @@ function ArticlesBlock({ articles, onChange, magasinId, idSuffix }: { articles: 
             type: found.type === 'verre' ? 'traitement' : (found.type as ArticleLigne['type']),
             stock: found.stock === null ? updated.stock : String(found.stock),
             prix: String(found.prix ?? ''),
-            fournisseur: found.fournisseur || '',
-            garantie: found.garantie || '',
-            detailMonture: found.detailMonture || '',
           };
         }
       }
@@ -1119,7 +999,7 @@ function EtapeII({ propositions, onChange, magasinId, client }: { propositions: 
               </div>
               <button type="button" onClick={() => setShowOrdo(false)} className="text-gray-500 hover:text-gray-800"><X size={18} /></button>
             </div>
-            <div className="overflow-y-auto flex-1 min-h-0 p-4 flex flex-col gap-3">
+            <div className="overflow-y-auto p-4 flex flex-col gap-3">
               {loadingOrdo && ordoList.length === 0 && (
                 <div className="text-center text-sm text-gray-500 py-8">Chargement des ordonnances…</div>
               )}
@@ -1319,16 +1199,34 @@ function FormulaireDevis({ magasinId, onRetour, onSaved, devisInitial }: { magas
   return (
     <div className="flex flex-col min-h-screen" style={{ backgroundColor: '#d6e4ea' }}>
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-3 bg-white shadow-sm">
-        <span className="text-lg font-bold text-gray-800">{enEdition ? 'Modifier Devis | Proforma' : 'Nouveau Devis | Proforma'}</span>
-        <button onClick={onRetour} className="px-4 py-1.5 rounded text-white text-sm font-semibold" style={{ backgroundColor: '#1a7a96' }}>
-          Devis | Proforma
+      <div className="flex items-center justify-between px-3 md:px-6 py-2 md:py-3 bg-white shadow-sm">
+        <span className="text-sm md:text-lg font-bold text-gray-800 truncate">{enEdition ? 'Modifier Devis | Proforma' : 'Nouveau Devis | Proforma'}</span>
+        <button onClick={onRetour} className="px-3 py-1.5 rounded text-white text-xs md:text-sm font-semibold whitespace-nowrap ml-2" style={{ backgroundColor: '#1a7a96' }}>
+          ← Retour
         </button>
       </div>
 
-      <div className="flex flex-1">
-        {/* Sidebar */}
-        <div className="w-48 flex-shrink-0 bg-white shadow-sm flex flex-col py-4 gap-1">
+      {/* Mobile step tabs */}
+      <div className="flex md:hidden overflow-x-auto bg-white border-b border-gray-200 shrink-0" style={{ WebkitOverflowScrolling: 'touch' }}>
+        {SIDEBAR_STEPS.map((s, i) => (
+          <button
+            key={i}
+            onClick={() => setStep(i)}
+            className="flex-shrink-0 px-4 py-2.5 text-xs font-bold whitespace-nowrap border-b-2 transition-colors"
+            style={{
+              borderColor: step === i ? '#1a7a96' : 'transparent',
+              color: step === i ? '#dc2626' : '#6b7280',
+              backgroundColor: step === i ? '#eff8fb' : 'transparent',
+            }}
+          >
+            {s.label.split('\n')[0]}
+          </button>
+        ))}
+      </div>
+
+      <div className="flex flex-1 overflow-hidden">
+        {/* Sidebar — masquée sur mobile */}
+        <div className="hidden md:flex w-48 flex-shrink-0 bg-white shadow-sm flex-col py-4 gap-1">
           {SIDEBAR_STEPS.map((s, i) => (
             <button
               key={i}
@@ -1342,203 +1240,25 @@ function FormulaireDevis({ magasinId, onRetour, onSaved, devisInitial }: { magas
         </div>
 
         {/* Contenu */}
-        <div className="flex-1 bg-white m-4 rounded-lg shadow-sm overflow-hidden">
+        <div className="flex-1 bg-white m-2 md:m-4 rounded-lg shadow-sm overflow-y-auto">
           {step === 0 && <EtapeI data={client} onChange={setClient} magasinId={magasinId} />}
           {step === 1 && <EtapeII propositions={propositions} onChange={setPropositions} magasinId={magasinId} client={client} />}
           {step === 2 && <EtapeIII propositions={propositions} onChange={setPropositions} onEnregistrer={handleEnregistrer} />}
 
           {step < 2 && (
-            <div className="px-5 pb-5 flex justify-end border-t border-gray-100 pt-4">
+            <div className="px-4 pb-4 flex justify-between border-t border-gray-100 pt-3">
+              <button
+                onClick={() => setStep(s => Math.max(0, s - 1))}
+                disabled={step === 0}
+                className="px-4 py-2 rounded border border-gray-300 text-gray-700 text-sm font-medium disabled:opacity-40"
+              >
+                ← Précédent
+              </button>
               <button onClick={() => setStep(s => s + 1)} className="px-5 py-2 rounded text-white text-sm font-semibold" style={{ backgroundColor: '#1a7a96' }}>
                 Suivant →
               </button>
             </div>
           )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Modal Détail Devis (vue riche : client, ophtalmologue, propositions) ───────
-function DetailDevisModal({ detail, magasinId, onClose, onConvertir }: { detail: DevisRecord; magasinId: string; onClose: () => void; onConvertir: (d: DevisRecord) => void }) {
-  const [tab, setTab] = useState(0);
-  const client = detail._raw ? venteToClientInfo(detail._raw) : null;
-  const props = detail.propositions && detail.propositions.length > 0 ? detail.propositions : [emptyProp()];
-  const p = props[tab] || props[0];
-  const teal = '#1a7a96';
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}>
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl mx-4 max-h-[90vh] overflow-hidden flex flex-col">
-        <div className="flex items-center justify-between px-6 py-4 shrink-0" style={{ backgroundColor: teal }}>
-          <span className="text-white font-semibold">Détail — {detail.numDevis}</span>
-          <button onClick={onClose} className="text-white"><X size={18} /></button>
-        </div>
-
-        <div className="overflow-y-auto flex-1 min-h-0 grid grid-cols-[260px_1fr_190px]">
-          {/* Colonne gauche : infos client / ophtalmologue */}
-          <div className="border-r border-gray-200 p-4 flex flex-col gap-4 text-sm">
-            <div>
-              <div className="flex items-center gap-1.5 font-semibold text-gray-700 mb-2 text-xs uppercase tracking-wide">
-                <FileText size={14} /> Informations Client | {fmt(detail.date)}
-              </div>
-              <div className="rounded-lg p-3 text-white text-xs leading-relaxed" style={{ backgroundColor: teal }}>
-                <div className="font-bold">N° {detail.numeroClient} | {[client?.civilite, client?.nom || detail.client].filter(Boolean).join(' ').toUpperCase()}</div>
-                {(client?.telephone1 || detail.telephone) && <div className="mt-1">Téléphone: {client?.telephone1 || detail.telephone}</div>}
-                {client?.matriculeAssurance && <div>Matricule: {client.matriculeAssurance}</div>}
-                {client?.entreprise && <div>Entreprise: {client.entreprise}</div>}
-                {(client?.jourNaissance || client?.moisNaissance || client?.anneeNaissance) && (
-                  <div>{[client?.jourNaissance, client?.moisNaissance, client?.anneeNaissance].filter(Boolean).join('-')}</div>
-                )}
-              </div>
-            </div>
-
-            {(client?.ophtalmologue || client?.cabinetOphtalmologue) && (
-              <div>
-                <div className="font-semibold text-gray-700 mb-2 text-xs uppercase tracking-wide">Informations Ophtalmologue</div>
-                <div className="rounded-lg p-3 text-white text-xs leading-relaxed" style={{ backgroundColor: teal }}>
-                  {client?.ophtalmologue && <div className="font-bold">{client.ophtalmologue}</div>}
-                  {client?.telOphtalmologue && <div>{client.telOphtalmologue}</div>}
-                  {client?.cabinetOphtalmologue && <div className="mt-1 font-semibold">{client.cabinetOphtalmologue}</div>}
-                  {client?.telCabinet && <div>{client.telCabinet}</div>}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Colonne centrale : détails du dossier */}
-          <div className="p-4 border-r border-gray-200">
-            <div className="font-semibold text-gray-700 mb-2 text-xs uppercase tracking-wide">Détails Dossier</div>
-
-            {props.length > 1 && (
-              <div className="flex gap-1 border-b border-gray-200 mb-4">
-                {props.map((_, i) => (
-                  <button
-                    key={i}
-                    onClick={() => setTab(i)}
-                    className={'px-3 py-2 text-sm font-semibold ' + (tab === i ? 'border-b-2' : 'text-gray-400')}
-                    style={tab === i ? { borderColor: teal, color: teal } : {}}
-                  >
-                    Proposition {toRoman(i + 1)}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {p.verres.length > 0 && (
-              <div className="mb-5">
-                <div className="font-semibold text-gray-700 mb-2 text-sm">Informations Verre</div>
-                {p.verres.map((v, vi) => (
-                  <div key={vi} className="mb-3 rounded-lg overflow-hidden text-white" style={{ backgroundColor: teal }}>
-                    <div className="px-3 py-2 text-sm font-semibold">
-                      {[v.typeVerre, v.verre, v.traitement].filter(Boolean).join(' | ') || 'Verre'}
-                      {(v.matiere || v.diametre) && (
-                        <div className="text-xs font-normal">{[v.matiere, v.diametre].filter(Boolean).join(' | ')}</div>
-                      )}
-                    </div>
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-[11px] whitespace-nowrap">
-                        <thead>
-                          <tr className="border-t border-white/25">
-                            {['', 'Sphère', 'Cylindre', 'Axe', 'Dec', 'Addition', 'Hauteur', 'EV Loin', 'EV Près', 'Qté', 'Prix', 'Remise', 'Total'].map((h, hi) => (
-                              <th key={hi} className="px-2 py-1 text-left font-semibold">{h}</th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {(['oeilDroit', 'oeilGauche'] as const).map((key) => {
-                            const o = v[key];
-                            const rowTotal = (Number(o.prix) || 0) * (Number(o.quantite) || 1) - (Number(o.remise) || 0);
-                            return (
-                              <tr key={key} className="border-t border-white/20">
-                                <td className="px-2 py-1 font-semibold">{key === 'oeilDroit' ? 'Oeil Droit' : 'Oeil Gauche'}</td>
-                                <td className="px-2 py-1">{o.sphere}</td>
-                                <td className="px-2 py-1">{o.cylindre}</td>
-                                <td className="px-2 py-1">{o.axe}</td>
-                                <td className="px-2 py-1">{o.dec}</td>
-                                <td className="px-2 py-1">{o.addition}</td>
-                                <td className="px-2 py-1">{o.hauteur}</td>
-                                <td className="px-2 py-1">{o.evLoin}</td>
-                                <td className="px-2 py-1">{o.evPres}</td>
-                                <td className="px-2 py-1">{o.quantite}</td>
-                                <td className="px-2 py-1">{money(Number(o.prix) || 0)}</td>
-                                <td className="px-2 py-1">{money(Number(o.remise) || 0)}</td>
-                                <td className="px-2 py-1 font-semibold">{money(rowTotal)}</td>
-                              </tr>
-                            );
-                          })}
-                          <tr className="border-t border-white/30 bg-black/10">
-                            <td colSpan={12} className="px-2 py-1 text-right font-semibold">Total</td>
-                            <td className="px-2 py-1 font-bold">{money(Number(v.total) || 0)}</td>
-                          </tr>
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {p.articles.length > 0 && (
-              <div className="mb-4">
-                <div className="font-semibold text-gray-700 mb-2 text-sm">Informations Traitements Montures Accessoires Autres</div>
-                <div className="rounded-lg overflow-hidden text-white">
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-[11px] whitespace-nowrap" style={{ backgroundColor: teal }}>
-                      <thead>
-                        <tr>
-                          <th className="px-2 py-2 text-left font-semibold">Désignation</th>
-                          <th className="px-2 py-2 text-right font-semibold">Prix</th>
-                          <th className="px-2 py-2 text-right font-semibold">Remise</th>
-                          <th className="px-2 py-2 text-right font-semibold">Quantité</th>
-                          <th className="px-2 py-2 text-right font-semibold">Total</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {p.articles.map((a, ai) => (
-                          <tr key={ai} className="border-t border-white/20">
-                            <td className="px-2 py-2">{a.designation}</td>
-                            <td className="px-2 py-2 text-right">{money(Number(a.prix) || 0)}</td>
-                            <td className="px-2 py-2 text-right">{money(Number(a.remise) || 0)}</td>
-                            <td className="px-2 py-2 text-right">{a.quantite}</td>
-                            <td className="px-2 py-2 text-right font-semibold">{money(Number(a.total) || 0)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div className="grid grid-cols-3 gap-3">
-              <div className="rounded-lg p-3 text-white text-center" style={{ backgroundColor: teal }}>
-                <div className="text-xs opacity-80">Total</div>
-                <div className="font-bold">{money((p.totalVerres || 0) + (p.totalArticles || 0))}</div>
-              </div>
-              <div className="rounded-lg p-3 text-white text-center" style={{ backgroundColor: teal }}>
-                <div className="text-xs opacity-80">Remise ({p.remisePct}%)</div>
-                <div className="font-bold">{money(p.valeurRemise || 0)}</div>
-              </div>
-              <div className="rounded-lg p-3 text-white text-center" style={{ backgroundColor: teal }}>
-                <div className="text-xs opacity-80">Total Net</div>
-                <div className="font-bold">{money(p.totalNet || 0)}</div>
-              </div>
-            </div>
-          </div>
-
-          {/* Colonne droite : actions */}
-          <div className="p-4 flex flex-col gap-2">
-            <div className="font-semibold text-gray-700 mb-1 text-xs uppercase tracking-wide">Actions</div>
-            <button onClick={() => imprimerDevis(detail, magasinId)} className="flex items-center gap-1.5 px-3 py-2 rounded text-white text-sm font-semibold justify-center" style={{ backgroundColor: '#7b3fa0' }}>
-              <Printer size={15} /> Imprimer
-            </button>
-            <button onClick={() => onConvertir(detail)} className="flex items-center gap-1.5 px-3 py-2 rounded text-white text-sm font-semibold justify-center" style={{ backgroundColor: '#1a9c5b' }}>
-              <ArrowRightLeft size={15} /> Convertir en vente
-            </button>
-            <button onClick={onClose} className="px-3 py-2 rounded border border-gray-300 text-sm mt-2">Fermer</button>
-          </div>
         </div>
       </div>
     </div>
@@ -1558,6 +1278,8 @@ function ListeDevis({ magasinId, onNouveau, onModifier }: { magasinId: string; o
   );
   const [search, setSearch] = useState('');
   const [detail, setDetail] = useState<DevisRecord | null>(null);
+  const [editingObsDevis, setEditingObsDevis] = useState(false);
+  const [obsDevisLocal, setObsDevisLocal] = useState('');
 
   useEffect(() => {
     let annule = false;
@@ -1638,135 +1360,434 @@ function ListeDevis({ magasinId, onNouveau, onModifier }: { magasinId: string; o
     }
   };
 
+  const [detailPropIdx, setDetailPropIdx] = useState(0);
+
   return (
     <>
-      {detail && (
-        <DetailDevisModal
-          detail={detail}
-          magasinId={magasinId}
-          onClose={() => setDetail(null)}
-          onConvertir={(d) => { setDetail(null); handleConvertir(d); }}
-        />
-      )}
+      {detail && (() => {
+        const raw = detail._raw;
+        const props = (detail.propositions || []) as any[];
+        const prop = props[detailPropIdx] || props[0] || { verres: [], articles: [], totalVerres: 0, totalArticles: 0, remisePct: '0', totalNet: 0, valeurRemise: 0 };
+        const verres: VerreInfo[] = prop.verres || [];
+        const articles: ArticleLigne[] = prop.articles || [];
+        const totalBrut = (prop.totalVerres || 0) + (prop.totalArticles || 0);
+        const totalNet = prop.totalNet || totalBrut;
+        const fmtN2 = (n: number) => (Number(n) || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const obs = (raw?.observation as any) || '';
+        const hasProps = props.filter((p: any) => (p.verres?.length || 0) + (p.articles?.length || 0) > 0).length;
 
-      <div className="flex flex-col gap-5 p-6">
-        <div className="flex items-center justify-between flex-wrap gap-4">
-          <div>
-            <h1 className="text-xl font-bold text-gray-800">Devis | Proforma</h1>
-            <p className="text-sm text-gray-500 mt-0.5">Devis proforma enregistrés</p>
+        return (
+          <div className="fixed inset-0 z-50 flex items-start overflow-y-auto" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+            <div className="relative bg-gray-100 w-full min-h-screen">
+              {/* Top bar */}
+              <div className="flex items-center justify-between px-6 py-3 text-white text-sm font-semibold" style={{ backgroundColor: '#1a7a96' }}>
+                <span>Informations Client | {fmt(detail.date)}</span>
+                <span className="font-bold tracking-wide">Détails Dossier</span>
+                <div className="flex items-center gap-3">
+                  <span className="opacity-70">Actions</span>
+                  <button onClick={() => { setDetail(null); setDetailPropIdx(0); }} className="text-white hover:opacity-80"><X size={18} /></button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-4 p-4 items-start">
+
+                {/* ── Left column: client + ophtalmo + observation */}
+                <div className="col-span-12 md:col-span-3 flex flex-col gap-3">
+
+                  {/* Client card */}
+                  <div className="rounded-lg p-3 text-white text-sm font-semibold" style={{ backgroundColor: '#1a7a96' }}>
+                    <div className="font-bold">N°{detail.numeroClient} | {detail.client}</div>
+                    {raw?.matricule_assurance && <div className="text-xs mt-1 opacity-90">Matricule: {raw.matricule_assurance}</div>}
+                    {raw?.telephone && <div className="text-xs opacity-90">{raw.telephone}{raw?.telephone2 ? ' / ' + raw.telephone2 : ''}</div>}
+                    {raw?.entreprise && <div className="text-xs opacity-90">Entreprise: {raw.entreprise}</div>}
+                    {raw?.date_naissance && <div className="text-xs opacity-90">{raw.date_naissance}</div>}
+                    {raw?.adresse && <div className="text-xs opacity-90">{raw.adresse}</div>}
+                  </div>
+
+                  {/* Ophthalmologist */}
+                  {(raw?.ophtalmologue || raw?.cabinet_ophtalmologue) && (
+                    <>
+                      <div className="text-xs font-semibold text-gray-600 uppercase flex items-center gap-1">🏥 Informations Ophtalmologue</div>
+                      <div className="rounded-lg p-3 text-white text-sm" style={{ backgroundColor: '#1a7a96' }}>
+                        {raw?.ophtalmologue && <div className="font-bold">{raw.ophtalmologue}</div>}
+                        {raw?.tel_ophtalmologue && <div className="text-xs opacity-90">{raw.tel_ophtalmologue}</div>}
+                        {raw?.cabinet_ophtalmologue && <div className="text-xs opacity-90 mt-1">{raw.cabinet_ophtalmologue}</div>}
+                        {(raw?.recap as any)?.datePresciption && <div className="text-xs opacity-90 mt-1">Date Presciption: {fmt((raw?.recap as any)?.datePresciption)}</div>}
+                      </div>
+                    </>
+                  )}
+
+                  {/* Observation */}
+                  <div className="text-xs font-semibold text-gray-600 uppercase flex items-center gap-1">✏️ Observation</div>
+                  <div className="rounded-lg p-3 text-white text-sm" style={{ backgroundColor: '#1a7a96' }}>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="text-xs opacity-80 truncate">{obs || 'Aucune observation'}</div>
+                    </div>
+                    {editingObsDevis ? (
+                      <div>
+                        <textarea
+                          className="w-full rounded px-2 py-1.5 text-xs text-gray-900 bg-white/90 outline-none resize-none"
+                          rows={3}
+                          value={obsDevisLocal}
+                          onChange={e => setObsDevisLocal(e.target.value)}
+                          placeholder="Saisir une observation..."
+                        />
+                        <div className="flex gap-2 mt-1">
+                          <button
+                            onClick={async () => {
+                              try {
+                                await mettreAJourVente(detail.id, { observation: obsDevisLocal } as any);
+                                setDetail(prev => prev ? { ...prev, _raw: prev._raw ? { ...prev._raw, observation: obsDevisLocal as any } : prev._raw } : prev);
+                                setEditingObsDevis(false);
+                              } catch { alert('Enregistrement échoué.'); }
+                            }}
+                            className="flex-1 py-1 rounded text-xs font-bold text-white"
+                            style={{ backgroundColor: '#1a5c75' }}
+                          >Enregistrer</button>
+                          <button onClick={() => setEditingObsDevis(false)} className="px-3 py-1 rounded text-xs text-white bg-white/20">Annuler</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => { setEditingObsDevis(true); setObsDevisLocal(obs); }}
+                        className="mt-1 flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold text-white"
+                        style={{ backgroundColor: '#1a5c75' }}
+                      >✏️ Modifier Observation</button>
+                    )}
+                  </div>
+                </div>
+
+                {/* ── Center: proposition tabs + verre/article tables */}
+                <div className="col-span-12 md:col-span-7 bg-white rounded-xl shadow-sm overflow-hidden">
+                  {/* Tabs */}
+                  <div className="flex items-center gap-1 px-4 pt-3 pb-0 border-b border-gray-200">
+                    {props.map((_p: any, i: number) => (
+                      <button
+                        key={i}
+                        onClick={() => setDetailPropIdx(i)}
+                        className={`px-4 py-2 text-sm font-medium rounded-t-lg border border-b-0 transition-colors ${detailPropIdx === i ? 'bg-white border-gray-200 text-gray-800' : 'bg-gray-50 border-transparent text-gray-500 hover:text-gray-700'}`}
+                      >
+                        Proposition {toRoman(i + 1)}
+                      </button>
+                    ))}
+                    <div className="ml-auto flex items-center gap-2 pb-1">
+                      <button
+                        onClick={() => telechargerDevisPDF(detail, magasinId)}
+                        title="Télécharger PDF"
+                        className="flex items-center gap-1 px-3 py-1.5 rounded text-white text-xs font-semibold"
+                        style={{ backgroundColor: '#c0392b' }}
+                      >
+                        <FileText size={13} /> PDF
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="p-4">
+                    {/* VERRES */}
+                    {verres.length > 0 && (
+                      <div className="mb-4">
+                        <div className="text-sm font-bold text-gray-800 mb-2">Informations Verre</div>
+                        {verres.map((v: VerreInfo, vi: number) => (
+                          <div key={vi} className="border border-gray-300 rounded-lg overflow-hidden mb-3">
+                            <div className="px-3 py-2 font-bold text-sm border-b border-gray-300" style={{ backgroundColor: '#1a7a96', color: 'white' }}>
+                              {v.typeVerre}{v.verre ? ' | ' + v.verre : ''}
+                              {v.traitement && <span className="ml-2 font-normal opacity-90">{v.traitement}</span>}
+                              {v.matiere && <span className="ml-2 font-normal opacity-90">{v.matiere}{v.diametre ? ' | ' + v.diametre : ''}</span>}
+                            </div>
+                            {/* Garantie */}
+                            <div className="px-3 py-1.5 text-xs font-semibold border-b border-gray-200" style={{ backgroundColor: '#fde8b8' }}>
+                              Garantie: 2 ANS
+                            </div>
+                            {/* Prescription table */}
+                            <div className="overflow-x-auto">
+                              <table className="w-full text-xs border-collapse">
+                                <thead>
+                                  <tr style={{ backgroundColor: '#1a7a96', color: 'white' }}>
+                                    {['', 'Sphère', 'Cylindre', 'Axe', 'Dec', 'Addition', 'Hauteur', 'E V Loin', 'E V Près', 'Quantité', 'Prix', 'Remise', 'Total'].map(h => (
+                                      <th key={h} className="px-2 py-1.5 text-center font-semibold whitespace-nowrap">{h}</th>
+                                    ))}
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {[
+                                    { label: 'Oeil Droit', d: v.oeilDroit },
+                                    { label: 'Oeil Gauche', d: v.oeilGauche },
+                                  ].map(({ label, d: od }) => (
+                                    <tr key={label} className="border-b border-gray-200">
+                                      <td className="px-2 py-1.5 font-semibold whitespace-nowrap text-gray-700">{label}</td>
+                                      {[od?.sphere, od?.cylindre, od?.axe, od?.dec, od?.addition, od?.hauteur, od?.evLoin, od?.evPres].map((val, ci) => (
+                                        <td key={ci} className="px-2 py-1.5 text-center text-gray-600">{val || ''}</td>
+                                      ))}
+                                      <td className="px-2 py-1.5 text-center">{od?.quantite || '1'}</td>
+                                      <td className="px-2 py-1.5 text-right">{fmtN2(Number(od?.prix || 0))}</td>
+                                      <td className="px-2 py-1.5 text-right">{od?.remise || '0'}</td>
+                                      <td className="px-2 py-1.5 text-right font-semibold">{fmtN2(Number(od?.prix || 0))}</td>
+                                    </tr>
+                                  ))}
+                                  <tr className="font-bold text-right" style={{ backgroundColor: '#1a7a96', color: 'white' }}>
+                                    <td colSpan={12} className="px-2 py-1.5 text-right">Total</td>
+                                    <td className="px-2 py-1.5">{fmtN2(prop.totalVerres || 0)}</td>
+                                  </tr>
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* ARTICLES */}
+                    {articles.length > 0 && (
+                      <div className="mb-4">
+                        <div className="text-sm font-bold text-gray-800 mb-2">Informations Traitements Montures Accessoires Autres</div>
+                        <div className="border border-gray-300 rounded-lg overflow-hidden">
+                          <table className="w-full text-xs border-collapse">
+                            <thead>
+                              <tr style={{ backgroundColor: '#1a7a96', color: 'white' }}>
+                                <th className="px-3 py-2 text-left">Désignation</th>
+                                <th className="px-3 py-2 text-right">Prix</th>
+                                <th className="px-3 py-2 text-right">Remise</th>
+                                <th className="px-3 py-2 text-center">Quantité</th>
+                                <th className="px-3 py-2 text-right">Total</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {articles.map((a: ArticleLigne, ai: number) => (
+                                <tr key={ai} className="border-b border-gray-200">
+                                  <td className="px-3 py-2">
+                                    <div className="font-semibold text-gray-800">{a.designation}</div>
+                                    <div className="text-gray-400 text-xs" style={{ backgroundColor: '#fde8b8', display: 'inline-block', padding: '1px 6px', borderRadius: 3, marginTop: 2 }}>Garantie: 2 ANS</div>
+                                  </td>
+                                  <td className="px-3 py-2 text-right">{fmtN2(Number(a.prix || 0))}</td>
+                                  <td className="px-3 py-2 text-right">{fmtN2(Number(a.remise || 0))}</td>
+                                  <td className="px-3 py-2 text-center">{a.quantite || '1'}</td>
+                                  <td className="px-3 py-2 text-right font-semibold">{fmtN2(Number(a.total || 0))}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+
+                    {verres.length === 0 && articles.length === 0 && (
+                      <div className="text-center text-gray-400 py-10 text-sm">Aucun élément dans cette proposition</div>
+                    )}
+
+                    {/* Totaux */}
+                    <div className="grid grid-cols-3 gap-0 border border-gray-300 rounded-lg overflow-hidden mt-2">
+                      {[
+                        { label: 'Total', value: fmtN2(totalBrut) + ' FCFA' },
+                        { label: `Remise(${prop.remisePct || '0'}%)`, value: fmtN2(prop.valeurRemise || 0) + ' FCFA' },
+                        { label: 'Total Net', value: fmtN2(totalNet) + ' FCFA' },
+                      ].map(({ label, value }) => (
+                        <div key={label} className="px-4 py-3 text-center border-r border-gray-300 last:border-r-0" style={{ backgroundColor: '#1a7a96' }}>
+                          <div className="text-white text-xs font-bold uppercase mb-1">{label}</div>
+                          <div className="text-white text-base font-bold">{value}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* ── Right: actions */}
+                <div className="col-span-12 md:col-span-2 flex flex-col gap-2">
+                  <button
+                    onClick={() => { const d = detail; setDetail(null); setDetailPropIdx(0); handleConvertir(d); }}
+                    className="w-full py-2.5 rounded-lg text-white text-sm font-semibold flex items-center justify-center gap-2"
+                    style={{ backgroundColor: '#e67e22' }}
+                  >
+                    <ArrowRightLeft size={15} /> Migrer
+                  </button>
+                  {peutModifier && (
+                    <button
+                      onClick={() => { if (onModifier) { onModifier(detail); setDetail(null); setDetailPropIdx(0); } }}
+                      className="w-full py-2.5 rounded-lg text-white text-sm font-semibold flex items-center justify-center gap-2"
+                      style={{ backgroundColor: '#1a7a96' }}
+                    >
+                      ✏️ Modifier
+                    </button>
+                  )}
+                  <button
+                    className="w-full py-2.5 rounded-lg text-white text-sm font-semibold"
+                    style={{ backgroundColor: '#27ae60' }}
+                  >
+                    🔒 Verouiller
+                  </button>
+                  <div className="mt-2 border-t border-gray-300 pt-3">
+                    <button className="w-full py-2 rounded-lg text-white text-sm font-semibold flex items-center justify-center gap-1" style={{ backgroundColor: '#27ae60' }}>
+                      <Plus size={14} /> Charger Ordonnance
+                    </button>
+                  </div>
+                  <div className="mt-1">
+                    <button onClick={() => { setDetail(null); setDetailPropIdx(0); }} className="w-full py-2 rounded border border-gray-300 text-sm text-gray-600 hover:bg-gray-50">Fermer</button>
+                  </div>
+                </div>
+
+              </div>
+            </div>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="rounded-lg px-4 py-2 text-center" style={{ backgroundColor: '#e3f2fd' }}>
-              <div className="text-lg font-bold text-blue-700">{devis.length}</div>
+        );
+      })()}
+
+      <div className="flex flex-col gap-4 p-3 md:p-6">
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div>
+            <h1 className="text-lg md:text-xl font-bold text-gray-800">Devis | Proforma</h1>
+            <p className="text-xs md:text-sm text-gray-500 mt-0.5">Devis proforma enregistrés</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="rounded-lg px-3 py-1.5 text-center" style={{ backgroundColor: '#e3f2fd' }}>
+              <div className="text-base font-bold text-blue-700">{devis.length}</div>
               <div className="text-xs text-blue-500">Devis</div>
             </div>
-            <AddButton onClick={onNouveau} className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-white font-semibold text-sm shadow" style={{ backgroundColor: '#1a7a96' }}>
-              <Plus size={16} /> Devis | Proforma
+            <AddButton onClick={onNouveau} className="flex items-center gap-2 px-4 py-2 rounded-lg text-white font-semibold text-sm shadow" style={{ backgroundColor: '#1a7a96' }}>
+              <Plus size={16} /> <span className="hidden sm:inline">Devis | Proforma</span><span className="sm:hidden">Nouveau</span>
             </AddButton>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 border border-gray-300 rounded-lg px-3 py-2 bg-white max-w-sm">
+        <div className="flex items-center gap-2 border border-gray-300 rounded-lg px-3 py-2 bg-white w-full md:max-w-sm">
           <FileText size={15} className="text-gray-400" />
           <input className="flex-1 text-sm outline-none bg-transparent" placeholder="Rechercher par client, N° devis..." value={search} onChange={e => setSearch(e.target.value)} />
         </div>
 
-        <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-          <table className="w-full text-sm border-collapse">
-            <thead>
-              <tr className="bg-gray-50 border-b border-gray-200 text-xs text-gray-600 uppercase tracking-wide">
-                <th className="text-center px-3 py-3 w-10">#</th>
-                <th className="text-left px-4 py-3">N° Devis</th>
-                <th className="text-left px-4 py-3">Client</th>
-                <th className="text-left px-4 py-3">Propositions</th>
-                <th className="text-left px-4 py-3">Édition</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.length === 0 ? (
-                <tr><td colSpan={5} className="text-center py-10 text-gray-400">Aucun devis enregistré</td></tr>
-              ) : filtered.map((d, idx) => {
-                const props = (d.propositions || []).filter(p => (p.verres?.length || 0) > 0 || (p.articles?.length || 0) > 0);
-                return (
-                <tr key={d.id} className="border-b border-gray-100 hover:bg-gray-50 align-top">
-                  <td className="px-3 py-3 text-center text-gray-500">{idx + 1}</td>
-                  <td className="px-4 py-3 font-mono text-blue-700">{d.numDevis}</td>
-                  <td className="px-4 py-3">
-                    <div className="text-sm">
-                      <span className="font-mono text-gray-500">N°({d.numeroClient})</span>{' '}
-                      <span className="font-semibold text-gray-800">{d.client}</span>
+        {filtered.length === 0 ? (
+          <div className="bg-white rounded-lg border border-gray-200 py-10 text-center text-gray-400 text-sm">Aucun devis enregistré</div>
+        ) : (<>
+          {/* ── Cartes mobiles (< md) ── */}
+          <div className="flex flex-col gap-3 md:hidden">
+            {filtered.map((d, idx) => {
+              const props = (d.propositions || []).filter(p => (p.verres?.length || 0) > 0 || (p.articles?.length || 0) > 0);
+              return (
+                <div key={d.id} className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                  {/* En-tête */}
+                  <div className="flex items-center justify-between px-3 py-2" style={{ backgroundColor: '#1a7a96' }}>
+                    <span className="font-mono font-bold text-sm text-white">{d.numDevis}</span>
+                    <span className="text-xs text-white/80">{formatDate(d.updatedAt || d.createdAt)}</span>
+                  </div>
+                  <div className="px-3 py-2 flex flex-col gap-2">
+                    {/* Client */}
+                    <div>
+                      <div className="text-xs text-gray-500">N°({d.numeroClient})</div>
+                      <div className="font-semibold text-gray-800">{d.client}</div>
+                      {d.telephone && <div className="text-xs text-gray-500">{d.telephone}</div>}
                     </div>
-                    {d.telephone && <div className="text-xs text-gray-500 mt-0.5">Téléphone: {d.telephone}</div>}
-                  </td>
-                  {/* Récapitulatif des propositions (calqué sur la maquette). */}
-                  <td className="px-4 py-3">
-                    {props.length === 0 ? (
-                      <span className="text-xs text-gray-400">—</span>
-                    ) : (
-                      <table className="border-collapse text-xs" style={{ minWidth: 420 }}>
-                        <thead>
-                          <tr className="text-white" style={{ backgroundColor: '#3b8ba5' }}>
-                            <th className="border border-white/40 px-2 py-1.5"></th>
-                            <th className="border border-white/40 px-2 py-1.5 text-left font-semibold">Verres</th>
-                            <th className="border border-white/40 px-2 py-1.5 text-left font-semibold">Traitements Montures<br/>Accessoires Autres</th>
-                            <th className="border border-white/40 px-2 py-1.5 text-left font-semibold whitespace-nowrap">Remise</th>
-                            <th className="border border-white/40 px-2 py-1.5 text-left font-semibold whitespace-nowrap">Total Net</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {props.map((p, pi) => {
-                            // La remise est un pourcentage appliqué au total (verres +
-                            // traitements/montures/…) ; le Total Net est la somme FINALE
-                            // après remise. On recalcule ici pour ne jamais dépendre
-                            // d'une valeur figée éventuellement périmée.
-                            const totalBrut = (p.totalVerres || 0) + (p.totalArticles || 0);
-                            const pct = parseFloat(p.remisePct || '0') || 0;
-                            const valeurRemise = totalBrut * pct / 100;
-                            const totalNet = totalBrut - valeurRemise;
-                            return (
-                            <tr key={pi} style={{ backgroundColor: '#eaf3f6' }}>
-                              <td className="border border-white px-2 py-1.5 font-bold text-[#1a6f8c] whitespace-nowrap">
-                                P-{toRoman(pi + 1)}
-                              </td>
-                              <td className="border border-white px-2 py-1.5 text-right font-semibold text-gray-700">{money(p.totalVerres)}</td>
-                              <td className="border border-white px-2 py-1.5 text-right font-semibold text-gray-700">{money(p.totalArticles)}</td>
-                              <td className="border border-white px-2 py-1.5 text-gray-700 whitespace-nowrap">
-                                {pct}%{valeurRemise > 0 && <span className="text-gray-500"> (-{money(valeurRemise)})</span>}
-                              </td>
-                              <td className="border border-white px-2 py-1.5 text-right font-bold text-gray-900">{money(totalNet)}</td>
-                            </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
+                    {/* Propositions */}
+                    {props.length > 0 && (
+                      <div className="flex flex-col gap-1">
+                        {props.map((p, pi) => {
+                          const totalBrut = (p.totalVerres || 0) + (p.totalArticles || 0);
+                          const pct = parseFloat(p.remisePct || '0') || 0;
+                          const totalNet = totalBrut - (totalBrut * pct / 100);
+                          return (
+                            <div key={pi} className="flex items-center justify-between rounded px-2 py-1 text-xs" style={{ backgroundColor: '#eaf3f6' }}>
+                              <span className="font-bold text-[#1a6f8c]">P-{toRoman(pi + 1)}</span>
+                              <span className="text-gray-600">Verres: {money(p.totalVerres)}</span>
+                              <span className="text-gray-600">Autres: {money(p.totalArticles)}</span>
+                              {pct > 0 && <span className="text-gray-500">-{pct}%</span>}
+                              <span className="font-bold text-gray-900">= {money(totalNet)}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
                     )}
-                  </td>
-                  {/* Édition : date/heure + éditeur puis grille de boutons d'action. */}
-                  <td className="px-4 py-3">
-                    <div className="flex items-start gap-3">
-                      <div className="text-xs text-gray-600 whitespace-nowrap">
-                        <div>{formatDate(d.updatedAt || d.createdAt)}</div>
-                        <div className="font-semibold text-gray-800 mt-0.5">{d.updatedBy || d.createdBy || '—'}</div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-1 flex-shrink-0">
-                        <button onClick={() => setDetail(d)} title="Voir / Détails" className="flex items-center justify-center rounded text-white" style={{ width: 30, height: 28, backgroundColor: '#475569' }}><MoreHorizontal size={15} /></button>
-                        <button onClick={() => imprimerDevis(d, magasinId)} title="Imprimer le devis" className="flex items-center justify-center rounded text-white" style={{ width: 30, height: 28, backgroundColor: '#f97316' }}><Printer size={15} /></button>
-                        {peutModifier && onModifier ? (
-                          <button onClick={() => onModifier(d)} title="Modifier" className="flex items-center justify-center rounded text-white" style={{ width: 30, height: 28, backgroundColor: '#f59e0b' }}><Pencil size={15} /></button>
-                        ) : <span />}
-                        <button onClick={() => handleConvertir(d)} title="Convertir en vente" className="flex items-center justify-center rounded text-white" style={{ width: 30, height: 28, backgroundColor: '#16a34a' }}><ArrowRightLeft size={15} /></button>
-                        {peutSupprimer && (
-                          <button onClick={() => handleSupprimer(d)} title="Supprimer" className="flex items-center justify-center rounded text-white" style={{ width: 30, height: 28, backgroundColor: '#dc2626' }}><Trash2 size={15} /></button>
-                        )}
+                    {/* Actions + éditeur */}
+                    <div className="flex items-center justify-between">
+                      <div className="text-xs text-gray-500">{d.updatedBy || d.createdBy || '—'}</div>
+                      <div className="flex items-center gap-1">
+                        <button onClick={() => setDetail(d)} className="flex items-center justify-center rounded text-white" style={{ width: 32, height: 32, backgroundColor: '#475569' }}><MoreHorizontal size={15} /></button>
+                        <button onClick={() => telechargerDevisPDF(d, magasinId)} className="flex items-center justify-center rounded text-white" style={{ width: 32, height: 32, backgroundColor: '#f97316' }}><Printer size={15} /></button>
+                        {peutModifier && onModifier && <button onClick={() => onModifier(d)} className="flex items-center justify-center rounded text-white" style={{ width: 32, height: 32, backgroundColor: '#f59e0b' }}><Pencil size={15} /></button>}
+                        <button onClick={() => handleConvertir(d)} className="flex items-center justify-center rounded text-white" style={{ width: 32, height: 32, backgroundColor: '#16a34a' }}><ArrowRightLeft size={15} /></button>
+                        {peutSupprimer && <button onClick={() => handleSupprimer(d)} className="flex items-center justify-center rounded text-white" style={{ width: 32, height: 32, backgroundColor: '#dc2626' }}><Trash2 size={15} /></button>}
                       </div>
                     </div>
-                  </td>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* ── Tableau desktop (≥ md) ── */}
+          <div className="hidden md:block bg-white rounded-lg shadow-sm overflow-hidden">
+            <div className="overflow-x-auto">
+            <table className="text-sm border-collapse" style={{ minWidth: 560 }}>
+              <thead>
+                <tr className="bg-gray-50 border-b border-gray-200 text-xs text-gray-600 uppercase tracking-wide">
+                  <th className="text-center px-3 py-3 w-10 whitespace-nowrap">#</th>
+                  <th className="text-left px-4 py-3 whitespace-nowrap">N° Devis</th>
+                  <th className="text-left px-4 py-3 whitespace-nowrap">Client</th>
+                  <th className="text-left px-4 py-3 whitespace-nowrap">Propositions</th>
+                  <th className="text-left px-4 py-3 whitespace-nowrap">Édition</th>
                 </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {filtered.map((d, idx) => {
+                  const props = (d.propositions || []).filter(p => (p.verres?.length || 0) > 0 || (p.articles?.length || 0) > 0);
+                  return (
+                  <tr key={d.id} className="border-b border-gray-100 hover:bg-gray-50 align-top">
+                    <td className="px-3 py-3 text-center text-gray-500">{idx + 1}</td>
+                    <td className="px-4 py-3 font-mono text-blue-700">{d.numDevis}</td>
+                    <td className="px-4 py-3">
+                      <div className="text-sm"><span className="font-mono text-gray-500">N°({d.numeroClient})</span>{' '}<span className="font-semibold text-gray-800">{d.client}</span></div>
+                      {d.telephone && <div className="text-xs text-gray-500 mt-0.5">Téléphone: {d.telephone}</div>}
+                    </td>
+                    <td className="px-4 py-3">
+                      {props.length === 0 ? <span className="text-xs text-gray-400">—</span> : (
+                        <table className="border-collapse text-xs" style={{ minWidth: 420 }}>
+                          <thead>
+                            <tr className="text-white" style={{ backgroundColor: '#3b8ba5' }}>
+                              <th className="border border-white/40 px-2 py-1.5"></th>
+                              <th className="border border-white/40 px-2 py-1.5 text-left font-semibold">Verres</th>
+                              <th className="border border-white/40 px-2 py-1.5 text-left font-semibold">Traitements Montures<br/>Accessoires Autres</th>
+                              <th className="border border-white/40 px-2 py-1.5 text-left font-semibold whitespace-nowrap">Remise</th>
+                              <th className="border border-white/40 px-2 py-1.5 text-left font-semibold whitespace-nowrap">Total Net</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {props.map((p, pi) => {
+                              const totalBrut = (p.totalVerres || 0) + (p.totalArticles || 0);
+                              const pct = parseFloat(p.remisePct || '0') || 0;
+                              const valeurRemise = totalBrut * pct / 100;
+                              const totalNet = totalBrut - valeurRemise;
+                              return (
+                              <tr key={pi} style={{ backgroundColor: '#eaf3f6' }}>
+                                <td className="border border-white px-2 py-1.5 font-bold text-[#1a6f8c] whitespace-nowrap">P-{toRoman(pi + 1)}</td>
+                                <td className="border border-white px-2 py-1.5 text-right font-semibold text-gray-700">{money(p.totalVerres)}</td>
+                                <td className="border border-white px-2 py-1.5 text-right font-semibold text-gray-700">{money(p.totalArticles)}</td>
+                                <td className="border border-white px-2 py-1.5 text-gray-700 whitespace-nowrap">{pct}%{valeurRemise > 0 && <span className="text-gray-500"> (-{money(valeurRemise)})</span>}</td>
+                                <td className="border border-white px-2 py-1.5 text-right font-bold text-gray-900">{money(totalNet)}</td>
+                              </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-start gap-3">
+                        <div className="text-xs text-gray-600 whitespace-nowrap">
+                          <div>{formatDate(d.updatedAt || d.createdAt)}</div>
+                          <div className="font-semibold text-gray-800 mt-0.5">{d.updatedBy || d.createdBy || '—'}</div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-1 flex-shrink-0">
+                          <button onClick={() => setDetail(d)} className="flex items-center justify-center rounded text-white" style={{ width: 30, height: 28, backgroundColor: '#475569' }}><MoreHorizontal size={15} /></button>
+                          <button onClick={() => telechargerDevisPDF(d, magasinId)} className="flex items-center justify-center rounded text-white" style={{ width: 30, height: 28, backgroundColor: '#f97316' }}><Printer size={15} /></button>
+                          {peutModifier && onModifier ? <button onClick={() => onModifier(d)} className="flex items-center justify-center rounded text-white" style={{ width: 30, height: 28, backgroundColor: '#f59e0b' }}><Pencil size={15} /></button> : <span />}
+                          <button onClick={() => handleConvertir(d)} className="flex items-center justify-center rounded text-white" style={{ width: 30, height: 28, backgroundColor: '#16a34a' }}><ArrowRightLeft size={15} /></button>
+                          {peutSupprimer && <button onClick={() => handleSupprimer(d)} className="flex items-center justify-center rounded text-white" style={{ width: 30, height: 28, backgroundColor: '#dc2626' }}><Trash2 size={15} /></button>}
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            </div>
+          </div>
+        </>)}
         <div className="text-xs text-gray-500">Total : {filtered.length} devis</div>
       </div>
     </>

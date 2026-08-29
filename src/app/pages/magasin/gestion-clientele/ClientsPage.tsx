@@ -227,9 +227,9 @@ export function ClientsPage() {
 
   return (
     <div className="flex flex-col min-h-screen bg-white">
-      <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200 bg-gray-50">
+      <div className="flex items-center justify-between flex-wrap gap-2 px-5 py-3 border-b border-gray-200 bg-gray-50">
         <span className="text-sm text-gray-600">Gestion Clientèle</span>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <button onClick={handleExport} className="flex items-center gap-1.5 px-4 py-1.5 rounded text-sm border border-gray-300 text-gray-700 hover:bg-gray-50 bg-white">
             <FileDown size={14}/> Exporter ICC.csv
           </button>
@@ -287,8 +287,9 @@ export function ClientsPage() {
             <button onClick={()=>goPage(totalPages)} disabled={page===totalPages} className="p-1 text-gray-500 disabled:opacity-30"><ChevronLast size={14}/></button>
           </div>
         </div>
-        <div className="border border-gray-200 rounded overflow-hidden">
-          <table className="w-full text-sm border-collapse">
+        {/* Table — desktop */}
+        <div className="hidden md:block border border-gray-200 rounded overflow-x-auto">
+          <table className="w-full text-sm border-collapse" style={{minWidth: '800px'}}>
             <thead>
               <tr className="bg-white border-b border-gray-200">
                 <th className="px-3 py-2.5 w-8"><input type="checkbox"/></th>
@@ -346,6 +347,45 @@ export function ClientsPage() {
               ))}
             </tbody>
           </table>
+        </div>
+
+        {/* Cartes — mobile */}
+        <div className="md:hidden flex flex-col gap-3">
+          {pageData.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '48px 16px', color: '#9ca3af', fontSize: 14 }}>Aucun client enregistré</div>
+          ) : pageData.map((c) => (
+            <div key={c.id} style={{ border: '1px solid #e5e7eb', borderRadius: 8, overflow: 'hidden', backgroundColor: '#fff' }}>
+              {/* Card header: name + phone */}
+              <div style={{ padding: '10px 14px', backgroundColor: '#f8fafc', borderBottom: '1px solid #e5e7eb', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: '#111827' }}>N°({c.numeroClient}) {c.nom}</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#1a7a96', marginTop: 2 }}>{c.telephone || '—'}</div>
+                  {c.telephone2 && <div style={{ fontSize: 12, color: '#6b7280' }}>{c.telephone2}</div>}
+                </div>
+                <span style={{ display: 'inline-block', padding: '2px 10px', borderRadius: 12, fontSize: 11, fontWeight: 700, backgroundColor: '#c8f0c8', color: '#166534' }}>
+                  Solde : {Number(c.solde).toFixed(2)}
+                </span>
+              </div>
+              {/* Card body */}
+              <div style={{ padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {c.adresse && <div style={{ fontSize: 12, color: '#374151' }}>Adresse : {c.adresse}</div>}
+                {c.profession && <div style={{ fontSize: 12, color: '#374151' }}>Profession : {c.profession}</div>}
+                {c.matriculeAssurance && <div style={{ fontSize: 12, color: '#374151' }}>NIF / Assurance : {c.matriculeAssurance}</div>}
+                {c.email && <div style={{ fontSize: 12, color: '#6b7280' }}>{c.email}</div>}
+                <div style={{ fontSize: 11, color: '#9ca3af' }}>Naissance : {fmtN(c)}</div>
+                <div style={{ fontSize: 11, color: '#9ca3af' }}>Édition : {fmtDate(c.dateEdition)}</div>
+              </div>
+              {/* Card actions */}
+              <div style={{ padding: '8px 14px', borderTop: '1px solid #f3f4f6', display: 'flex', gap: 8 }}>
+                <button className="p-1.5 rounded border border-gray-300 text-gray-500 flex items-center gap-1" style={{ fontSize: 12 }}>
+                  <MessageSquare size={12}/> SMS
+                </button>
+                <button onClick={() => setModal({ item: c })} className="p-1.5 rounded border border-amber-300 text-amber-600 flex items-center gap-1" style={{ fontSize: 12 }}>
+                  <Edit size={12}/> Modifier
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
         <div className="text-xs text-gray-500">{filtered.length} client(s) — page {page} / {totalPages}</div>
       </div>

@@ -133,14 +133,16 @@ export function BonRetourGlobalPage() {
   const bonsValides = filteredBons.filter(b => b.statut === 'Validé');
   const bonsRejetes = filteredBons.filter(b => b.statut === 'Rejeté');
 
+  const sortedBons = [...filteredBons].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
   return (
-    <div style={{ padding: '24px', backgroundColor: '#f9fafb', minHeight: '100vh' }}>
-      <h1 style={{ fontSize: '20px', fontWeight: 'bold', marginBottom: '24px' }}>
+    <div style={{ padding: 'clamp(12px, 3vw, 24px)', backgroundColor: '#f9fafb', minHeight: '100vh' }}>
+      <h1 style={{ fontSize: 'clamp(18px, 4vw, 24px)', fontWeight: 'bold', marginBottom: '24px' }}>
         Validation Bons de Retour - Directeur ({bons.length})
       </h1>
 
       {/* Statistiques */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '24px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '16px', marginBottom: '24px' }}>
         <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', borderLeft: '4px solid #f59e0b' }}>
           <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#f59e0b' }}>{bonsEnAttente.length}</div>
           <div style={{ fontSize: '14px', color: '#6b7280', marginTop: '4px' }}>En Attente de Validation</div>
@@ -160,13 +162,14 @@ export function BonRetourGlobalPage() {
         <p style={{ fontSize: '14px', color: '#374151', marginBottom: '8px' }}>
           Filtrer les bons de retour
         </p>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 200px 200px 250px auto', gap: '12px', alignItems: 'end' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'flex-end' }}>
           <input
             type="text"
             placeholder="N° Bon de Retour..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             style={{
+              flex: '1 1 180px',
               padding: '10px 16px',
               border: '1px solid #d1d5db',
               borderRadius: '6px',
@@ -178,6 +181,7 @@ export function BonRetourGlobalPage() {
             value={searchDate}
             onChange={(e) => setSearchDate(e.target.value)}
             style={{
+              flex: '0 1 150px',
               padding: '10px 16px',
               border: '1px solid #d1d5db',
               borderRadius: '6px',
@@ -188,6 +192,7 @@ export function BonRetourGlobalPage() {
             value={filterStatut}
             onChange={(e) => setFilterStatut(e.target.value)}
             style={{
+              flex: '0 1 160px',
               padding: '10px 16px',
               border: '1px solid #d1d5db',
               borderRadius: '6px',
@@ -205,6 +210,7 @@ export function BonRetourGlobalPage() {
             value={filterMagasin}
             onChange={(e) => setFilterMagasin(e.target.value)}
             style={{
+              flex: '0 1 160px',
               padding: '10px 16px',
               border: '1px solid #d1d5db',
               borderRadius: '6px',
@@ -219,6 +225,7 @@ export function BonRetourGlobalPage() {
               border: 'none',
               borderRadius: '6px',
               cursor: 'pointer',
+              flexShrink: 0,
             }}
           >
             <Search size={20} />
@@ -226,8 +233,8 @@ export function BonRetourGlobalPage() {
         </div>
       </div>
 
-      {/* Table */}
-      <div style={{ backgroundColor: '#fff', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+      {/* Desktop Table */}
+      <div className="hidden md:block" style={{ backgroundColor: '#fff', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ backgroundColor: '#f9fafb', borderBottom: '2px solid #e5e7eb' }}>
@@ -263,7 +270,7 @@ export function BonRetourGlobalPage() {
                 </td>
               </tr>
             ) : (
-              [...filteredBons].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map((bon, idx) => (
+              sortedBons.map((bon, idx) => (
                 <tr key={bon.id} style={{ borderBottom: '1px solid #e5e7eb', backgroundColor: idx % 2 === 0 ? '#fff' : '#fafafa' }}>
                   <td style={{ padding: '12px', textAlign: 'center', fontSize: '12px', color: '#9ca3af', fontWeight: 500 }}>{idx + 1}</td>
                   <td style={{ padding: '12px', fontSize: '14px', fontWeight: '600' }}>{bon.numero || '-'}</td>
@@ -365,6 +372,146 @@ export function BonRetourGlobalPage() {
         </table>
       </div>
 
+      {/* Mobile Cards */}
+      <div className="md:hidden" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        {filteredBons.length === 0 ? (
+          <div style={{ padding: '40px', textAlign: 'center', color: '#9ca3af', backgroundColor: '#fff', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+            Aucun bon de retour trouvé
+          </div>
+        ) : (
+          sortedBons.map((bon) => (
+            <div key={bon.id} style={{ backgroundColor: '#fff', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', overflow: 'hidden' }}>
+              {/* Card header */}
+              <div style={{ backgroundColor: getStatutColor(bon.statut), padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+                <div>
+                  <div style={{ color: '#fff', fontWeight: '700', fontSize: '15px' }}>N° {bon.numero || '-'}</div>
+                  <div style={{ color: 'rgba(255,255,255,0.85)', fontSize: '12px', marginTop: '2px' }}>
+                    {getMagasinLabel(bon.magasin)}
+                  </div>
+                </div>
+                <span style={{
+                  backgroundColor: 'rgba(0,0,0,0.2)',
+                  color: '#fff',
+                  padding: '3px 10px',
+                  borderRadius: '12px',
+                  fontSize: '11px',
+                  fontWeight: '700',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0,
+                }}>
+                  {bon.statut || 'En attente'}
+                </span>
+              </div>
+              {/* Card body */}
+              <div style={{ padding: '12px 16px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '8px', marginBottom: '8px' }}>
+                  <div>
+                    <div style={{ fontSize: '11px', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Date</div>
+                    <div style={{ fontSize: '13px', fontWeight: '500', color: '#374151' }}>
+                      {bon.date ? new Date(bon.date).toLocaleDateString('fr-FR') : '-'}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '11px', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Articles</div>
+                    <div style={{ fontSize: '13px', fontWeight: '600', color: '#374151' }}>
+                      {bon.items?.length || 0} article{(bon.items?.length || 0) !== 1 ? 's' : ''}
+                    </div>
+                  </div>
+                </div>
+                {bon.responsable && (
+                  <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '6px' }}>
+                    <span style={{ fontWeight: '500', color: '#374151' }}>Responsable:</span> {bon.responsable}
+                  </div>
+                )}
+                {/* Preview items */}
+                {bon.items && bon.items.length > 0 && (
+                  <div style={{ marginTop: '6px' }}>
+                    {bon.items.slice(0, 3).map((item, i) => (
+                      <div key={i} style={{ fontSize: '12px', color: '#6b7280', padding: '2px 0', borderBottom: i < Math.min(bon.items.length, 3) - 1 ? '1px solid #f3f4f6' : 'none' }}>
+                        {item.designation} · qté {item.quantite}
+                        {item.motif && <span style={{ color: '#9ca3af' }}> · {item.motif}</span>}
+                      </div>
+                    ))}
+                    {bon.items.length > 3 && (
+                      <div style={{ fontSize: '12px', color: '#9ca3af', marginTop: '4px' }}>
+                        + {bon.items.length - 3} autre{bon.items.length - 3 > 1 ? 's' : ''}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+              {/* Card footer */}
+              <div style={{ padding: '10px 16px', borderTop: '1px solid #f3f4f6', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <button
+                  onClick={() => {
+                    setSelectedBon(bon);
+                    setShowDetailModal(true);
+                  }}
+                  style={{
+                    padding: '6px 12px',
+                    backgroundColor: '#3b82f6',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontSize: '12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                  }}
+                >
+                  <Eye size={13} /> Voir
+                </button>
+                {(bon.statut === 'En attente' || !bon.statut) && (
+                  <>
+                    <button
+                      onClick={() => {
+                        setSelectedBon(bon);
+                        setShowValidationModal(true);
+                      }}
+                      style={{
+                        padding: '6px 12px',
+                        backgroundColor: '#10b981',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        fontSize: '12px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                      }}
+                    >
+                      <CheckCircle size={13} /> Valider
+                    </button>
+                    <button
+                      onClick={() => {
+                        setSelectedBon(bon);
+                        setShowRejetModal(true);
+                      }}
+                      style={{
+                        padding: '6px 12px',
+                        backgroundColor: '#ef4444',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        fontSize: '12px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                      }}
+                    >
+                      <XCircle size={13} /> Rejeter
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
       {/* Modal Détails */}
       {showDetailModal && selectedBon && (
         <div style={{
@@ -391,7 +538,7 @@ export function BonRetourGlobalPage() {
               </h2>
             </div>
             <div style={{ padding: '20px' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px', marginBottom: '20px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '16px', marginBottom: '20px' }}>
                 <div><strong>N° Bon:</strong> {selectedBon.numero}</div>
                 <div><strong>Date:</strong> {new Date(selectedBon.date).toLocaleDateString('fr-FR')}</div>
                 <div><strong>Magasin:</strong> {getMagasinLabel(selectedBon.magasin)}</div>
@@ -514,10 +661,11 @@ export function BonRetourGlobalPage() {
                   fontSize: '14px',
                   minHeight: '80px',
                   resize: 'vertical',
+                  boxSizing: 'border-box',
                 }}
               />
             </div>
-            <div style={{ padding: '16px 20px', borderTop: '1px solid #e5e7eb', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+            <div style={{ padding: '16px 20px', borderTop: '1px solid #e5e7eb', display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: '8px' }}>
               <button
                 onClick={() => {
                   setShowValidationModal(false);
@@ -598,10 +746,11 @@ export function BonRetourGlobalPage() {
                   fontSize: '14px',
                   minHeight: '100px',
                   resize: 'vertical',
+                  boxSizing: 'border-box',
                 }}
               />
             </div>
-            <div style={{ padding: '16px 20px', borderTop: '1px solid #e5e7eb', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+            <div style={{ padding: '16px 20px', borderTop: '1px solid #e5e7eb', display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: '8px' }}>
               <button
                 onClick={() => {
                   setShowRejetModal(false);

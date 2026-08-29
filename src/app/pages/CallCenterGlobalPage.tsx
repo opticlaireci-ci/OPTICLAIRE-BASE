@@ -734,6 +734,8 @@ export function CallCenterGlobalPage() {
                               {groupe.contacts.length} client{groupe.contacts.length > 1 ? 's' : ''}
                             </span>
                           </div>
+                          {/* Desktop table */}
+                          <div className="hidden md:block">
                           <table className="w-full text-sm border-collapse">
                             <thead>
                               <tr className="bg-gray-50 border-b border-gray-200">
@@ -797,6 +799,58 @@ export function CallCenterGlobalPage() {
                               })}
                             </tbody>
                           </table>
+                          </div>
+                          {/* Mobile cards */}
+                          <div className="md:hidden" style={{ display: 'flex', flexDirection: 'column', gap: '10px', padding: '10px' }}>
+                            {groupe.contacts.map(r => {
+                              const last = lastCallByRdv[r.id] || lastCallByRdv[r.numRef] || lastCallByRdv[r.client];
+                              const nb = nbAppelsByRdv[r.id] || nbAppelsByRdv[r.numRef] || nbAppelsByRdv[r.client] || 0;
+                              return (
+                                <div key={r.id} style={{ backgroundColor: r.source === 'import' ? '#fff7ed' : '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '8px', padding: '12px' }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '6px', flexWrap: 'wrap', gap: '6px' }}>
+                                    <span style={{ fontWeight: 700, fontSize: 'clamp(13px, 3.5vw, 15px)', color: '#1f2937' }}>{r.client}</span>
+                                    {r.source === 'import' ? (
+                                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 600, backgroundColor: '#fed7aa', color: '#9a3412' }}>
+                                        <Upload size={10} /> Importé
+                                      </span>
+                                    ) : (
+                                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 600, backgroundColor: TEAL + '22', color: TEAL }}>
+                                        <Store size={10} /> {r.motif || 'Vente'}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div style={{ fontSize: '13px', color: '#374151', marginBottom: '4px' }}>
+                                    <PhoneCall size={12} style={{ display: 'inline', marginRight: 4, color: TEAL }} />{r.telephone || <span style={{ color: '#9ca3af' }}>— aucun —</span>}
+                                  </div>
+                                  <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '8px' }}>
+                                    Dernier achat: {fmtDate(r.rendezVous)}
+                                    {last && (
+                                      <span style={{ marginLeft: 8 }}>
+                                        · <span style={{ display: 'inline', padding: '1px 6px', borderRadius: '4px', fontSize: '11px', fontWeight: 600, color: '#fff', backgroundColor: issueColor[last.statut] || resultatColor(last.resultat) }}>{last.statut || last.resultat}</span>
+                                        {nb > 1 && <span style={{ marginLeft: 4, color: '#9ca3af' }}>{nb} appels</span>}
+                                      </span>
+                                    )}
+                                    {!last && <span style={{ marginLeft: 8, color: '#9ca3af' }}>· Jamais appelé</span>}
+                                  </div>
+                                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                    <button
+                                      onClick={() => demarrerAppel(r, magasin.id)}
+                                      disabled={!r.telephone}
+                                      style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '7px 14px', borderRadius: '6px', backgroundColor: '#16a34a', color: '#fff', border: 'none', fontSize: '13px', fontWeight: 600, cursor: 'pointer', opacity: r.telephone ? 1 : 0.4 }}>
+                                      <Phone size={13} /> Appeler
+                                    </button>
+                                    {peutModifierClients && r.source === 'import' && r.extraId && (
+                                      <button
+                                        onClick={() => { if (window.confirm('Retirer ce client importé ?')) removeExtra(magasin.id, r.extraId!); }}
+                                        style={{ display: 'inline-flex', alignItems: 'center', padding: '7px 10px', borderRadius: '6px', border: '1px solid #d1d5db', backgroundColor: '#fff', color: '#ef4444', cursor: 'pointer' }}>
+                                        <Trash2 size={13} />
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -806,136 +860,225 @@ export function CallCenterGlobalPage() {
             </div>
           )
         ) : tab === 'decroches' ? (
-          <div className="border border-gray-200 rounded overflow-hidden">
-            <table className="w-full text-sm border-collapse">
-              <thead>
-                <tr className="bg-gray-50 border-b border-gray-200">
-                  <th className="text-left px-3 py-2.5 font-semibold text-gray-700">Client</th>
-                  <th className="text-left px-3 py-2.5 font-semibold text-gray-700">Téléphone</th>
-                  <th className="text-left px-3 py-2.5 font-semibold text-gray-700">Magasin</th>
-                  <th className="text-left px-3 py-2.5 font-semibold text-gray-700"><span className="inline-flex items-center gap-1"><Clock size={12} /> Heure</span></th>
-                  <th className="text-left px-3 py-2.5 font-semibold text-gray-700">Durée</th>
-                  <th className="text-left px-3 py-2.5 font-semibold text-gray-700">Conseillère</th>
-                  <th className="text-left px-3 py-2.5 font-semibold text-gray-700">Résultat</th>
-                  <th className="text-left px-3 py-2.5 font-semibold text-gray-700">Commentaire</th>
-                  <th className="text-center px-3 py-2.5 font-semibold text-gray-700">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {decrochesList.length === 0 ? (
-                  <tr><td colSpan={9} className="text-center py-12 text-gray-400">Aucun appel décroché aujourd'hui</td></tr>
-                ) : decrochesList.map(l => (
-                  <tr key={l.id} className="border-b border-gray-100 hover:bg-gray-50">
-                    <td className="px-3 py-2 font-semibold text-gray-800">{l.client}</td>
-                    <td className="px-3 py-2 text-gray-700 font-mono">{l.telephone || '—'}</td>
-                    <td className="px-3 py-2 text-gray-700 font-semibold">{getMagasinLabel(l.magasinId)}</td>
-                    <td className="px-3 py-2 text-gray-600 text-xs">{fmtDateTime(l.debut)}</td>
-                    <td className="px-3 py-2 font-mono text-gray-700">{fmtDuree(l.duree)}</td>
-                    <td className="px-3 py-2 text-gray-700">{l.conseillere || '—'}</td>
-                    <td className="px-3 py-2">
-                      <span className="px-2 py-0.5 rounded text-xs font-semibold text-white" style={{ backgroundColor: resultatColor(l.resultat) }}>{l.resultat || '—'}</span>
-                    </td>
-                    <td className="px-3 py-2 text-gray-600 max-w-xs truncate">{l.commentaire || '—'}</td>
-                    <td className="px-3 py-2 text-center">
-                      <button
-                        onClick={() => rappeler(l)}
-                        disabled={!l.telephone}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-white text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
-                        style={{ backgroundColor: '#16a34a' }}>
-                        <Phone size={13} /> Rappeler
-                      </button>
-                    </td>
+          <>
+            {/* Desktop table */}
+            <div className="hidden md:block border border-gray-200 rounded overflow-hidden">
+              <table className="w-full text-sm border-collapse">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-200">
+                    <th className="text-left px-3 py-2.5 font-semibold text-gray-700">Client</th>
+                    <th className="text-left px-3 py-2.5 font-semibold text-gray-700">Téléphone</th>
+                    <th className="text-left px-3 py-2.5 font-semibold text-gray-700">Magasin</th>
+                    <th className="text-left px-3 py-2.5 font-semibold text-gray-700"><span className="inline-flex items-center gap-1"><Clock size={12} /> Heure</span></th>
+                    <th className="text-left px-3 py-2.5 font-semibold text-gray-700">Durée</th>
+                    <th className="text-left px-3 py-2.5 font-semibold text-gray-700">Conseillère</th>
+                    <th className="text-left px-3 py-2.5 font-semibold text-gray-700">Résultat</th>
+                    <th className="text-left px-3 py-2.5 font-semibold text-gray-700">Commentaire</th>
+                    <th className="text-center px-3 py-2.5 font-semibold text-gray-700">Action</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {decrochesList.length === 0 ? (
+                    <tr><td colSpan={9} className="text-center py-12 text-gray-400">Aucun appel décroché aujourd'hui</td></tr>
+                  ) : decrochesList.map(l => (
+                    <tr key={l.id} className="border-b border-gray-100 hover:bg-gray-50">
+                      <td className="px-3 py-2 font-semibold text-gray-800">{l.client}</td>
+                      <td className="px-3 py-2 text-gray-700 font-mono">{l.telephone || '—'}</td>
+                      <td className="px-3 py-2 text-gray-700 font-semibold">{getMagasinLabel(l.magasinId)}</td>
+                      <td className="px-3 py-2 text-gray-600 text-xs">{fmtDateTime(l.debut)}</td>
+                      <td className="px-3 py-2 font-mono text-gray-700">{fmtDuree(l.duree)}</td>
+                      <td className="px-3 py-2 text-gray-700">{l.conseillere || '—'}</td>
+                      <td className="px-3 py-2">
+                        <span className="px-2 py-0.5 rounded text-xs font-semibold text-white" style={{ backgroundColor: resultatColor(l.resultat) }}>{l.resultat || '—'}</span>
+                      </td>
+                      <td className="px-3 py-2 text-gray-600 max-w-xs truncate">{l.commentaire || '—'}</td>
+                      <td className="px-3 py-2 text-center">
+                        <button
+                          onClick={() => rappeler(l)}
+                          disabled={!l.telephone}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-white text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
+                          style={{ backgroundColor: '#16a34a' }}>
+                          <Phone size={13} /> Rappeler
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {/* Mobile cards */}
+            <div className="md:hidden" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {decrochesList.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '48px 0', color: '#9ca3af' }}>Aucun appel décroché aujourd'hui</div>
+              ) : decrochesList.map(l => (
+                <div key={l.id} style={{ backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px', padding: '12px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '6px', flexWrap: 'wrap', gap: '6px' }}>
+                    <span style={{ fontWeight: 700, fontSize: 'clamp(13px, 3.5vw, 15px)', color: '#1f2937' }}>{l.client}</span>
+                    <span style={{ padding: '2px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 700, color: '#fff', backgroundColor: resultatColor(l.resultat) }}>{l.resultat || '—'}</span>
+                  </div>
+                  <div style={{ fontSize: '13px', color: '#374151', marginBottom: '3px' }}><PhoneCall size={12} style={{ display: 'inline', marginRight: 4, color: '#16a34a' }} />{l.telephone || '—'}</div>
+                  <div style={{ display: 'flex', gap: '8px', fontSize: '12px', color: '#6b7280', marginBottom: '8px', flexWrap: 'wrap' }}>
+                    <span><Store size={11} style={{ display: 'inline', marginRight: 3 }} />{getMagasinLabel(l.magasinId)}</span>
+                    <span><Clock size={11} style={{ display: 'inline', marginRight: 3 }} />{fmtDateTime(l.debut)}</span>
+                    <span>Durée: {fmtDuree(l.duree)}</span>
+                    {l.conseillere && <span>· {l.conseillere}</span>}
+                  </div>
+                  {l.commentaire && <div style={{ fontSize: '12px', color: '#4b5563', marginBottom: '8px', fontStyle: 'italic' }}>{l.commentaire}</div>}
+                  <button
+                    onClick={() => rappeler(l)}
+                    disabled={!l.telephone}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '7px 14px', borderRadius: '6px', backgroundColor: '#16a34a', color: '#fff', border: 'none', fontSize: '13px', fontWeight: 600, cursor: 'pointer', opacity: l.telephone ? 1 : 0.4 }}>
+                    <Phone size={13} /> Rappeler
+                  </button>
+                </div>
+              ))}
+            </div>
+          </>
         ) : tab === 'rappeler' ? (
-          <div className="border border-gray-200 rounded overflow-hidden">
-            <table className="w-full text-sm border-collapse">
-              <thead>
-                <tr className="bg-gray-50 border-b border-gray-200">
-                  <th className="text-left px-3 py-2.5 font-semibold text-gray-700">Client</th>
-                  <th className="text-left px-3 py-2.5 font-semibold text-gray-700">Téléphone</th>
-                  <th className="text-left px-3 py-2.5 font-semibold text-gray-700">Magasin</th>
-                  <th className="text-left px-3 py-2.5 font-semibold text-gray-700"><span className="inline-flex items-center gap-1"><Clock size={12} /> Dernier appel</span></th>
-                  <th className="text-left px-3 py-2.5 font-semibold text-gray-700">Statut</th>
-                  <th className="text-left px-3 py-2.5 font-semibold text-gray-700">Résultat</th>
-                  <th className="text-left px-3 py-2.5 font-semibold text-gray-700">Conseillère</th>
-                  <th className="text-left px-3 py-2.5 font-semibold text-gray-700">Commentaire</th>
-                  <th className="text-center px-3 py-2.5 font-semibold text-gray-700">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {aRappelerList.length === 0 ? (
-                  <tr><td colSpan={9} className="text-center py-12 text-gray-400">Aucun numéro à rappeler 🎉</td></tr>
-                ) : aRappelerList.map(l => (
-                  <tr key={l.id} className="border-b border-gray-100 hover:bg-gray-50">
-                    <td className="px-3 py-2 font-semibold text-gray-800">{l.client}</td>
-                    <td className="px-3 py-2 text-gray-700 font-mono">{l.telephone || '—'}</td>
-                    <td className="px-3 py-2 text-gray-700 font-semibold">{getMagasinLabel(l.magasinId)}</td>
-                    <td className="px-3 py-2 text-gray-600 text-xs">{fmtDateTime(l.debut)}</td>
-                    <td className="px-3 py-2">
-                      <span className="px-2 py-0.5 rounded text-xs font-semibold text-white" style={{ backgroundColor: issueColor[l.statut] || '#6b7280' }}>{l.statut || '—'}</span>
-                    </td>
-                    <td className="px-3 py-2">
-                      <span className="px-2 py-0.5 rounded text-xs font-semibold text-white" style={{ backgroundColor: resultatColor(l.resultat) }}>{l.resultat || '—'}</span>
-                    </td>
-                    <td className="px-3 py-2 text-gray-700">{l.conseillere || '—'}</td>
-                    <td className="px-3 py-2 text-gray-600 max-w-xs truncate">{l.commentaire || '—'}</td>
-                    <td className="px-3 py-2 text-center">
-                      <button
-                        onClick={() => rappeler(l)}
-                        disabled={!l.telephone}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-white text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
-                        style={{ backgroundColor: '#d97706' }}>
-                        <Phone size={13} /> Rappeler
-                      </button>
-                    </td>
+          <>
+            {/* Desktop table */}
+            <div className="hidden md:block border border-gray-200 rounded overflow-hidden">
+              <table className="w-full text-sm border-collapse">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-200">
+                    <th className="text-left px-3 py-2.5 font-semibold text-gray-700">Client</th>
+                    <th className="text-left px-3 py-2.5 font-semibold text-gray-700">Téléphone</th>
+                    <th className="text-left px-3 py-2.5 font-semibold text-gray-700">Magasin</th>
+                    <th className="text-left px-3 py-2.5 font-semibold text-gray-700"><span className="inline-flex items-center gap-1"><Clock size={12} /> Dernier appel</span></th>
+                    <th className="text-left px-3 py-2.5 font-semibold text-gray-700">Statut</th>
+                    <th className="text-left px-3 py-2.5 font-semibold text-gray-700">Résultat</th>
+                    <th className="text-left px-3 py-2.5 font-semibold text-gray-700">Conseillère</th>
+                    <th className="text-left px-3 py-2.5 font-semibold text-gray-700">Commentaire</th>
+                    <th className="text-center px-3 py-2.5 font-semibold text-gray-700">Action</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {aRappelerList.length === 0 ? (
+                    <tr><td colSpan={9} className="text-center py-12 text-gray-400">Aucun numéro à rappeler 🎉</td></tr>
+                  ) : aRappelerList.map(l => (
+                    <tr key={l.id} className="border-b border-gray-100 hover:bg-gray-50">
+                      <td className="px-3 py-2 font-semibold text-gray-800">{l.client}</td>
+                      <td className="px-3 py-2 text-gray-700 font-mono">{l.telephone || '—'}</td>
+                      <td className="px-3 py-2 text-gray-700 font-semibold">{getMagasinLabel(l.magasinId)}</td>
+                      <td className="px-3 py-2 text-gray-600 text-xs">{fmtDateTime(l.debut)}</td>
+                      <td className="px-3 py-2">
+                        <span className="px-2 py-0.5 rounded text-xs font-semibold text-white" style={{ backgroundColor: issueColor[l.statut] || '#6b7280' }}>{l.statut || '—'}</span>
+                      </td>
+                      <td className="px-3 py-2">
+                        <span className="px-2 py-0.5 rounded text-xs font-semibold text-white" style={{ backgroundColor: resultatColor(l.resultat) }}>{l.resultat || '—'}</span>
+                      </td>
+                      <td className="px-3 py-2 text-gray-700">{l.conseillere || '—'}</td>
+                      <td className="px-3 py-2 text-gray-600 max-w-xs truncate">{l.commentaire || '—'}</td>
+                      <td className="px-3 py-2 text-center">
+                        <button
+                          onClick={() => rappeler(l)}
+                          disabled={!l.telephone}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-white text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
+                          style={{ backgroundColor: '#d97706' }}>
+                          <Phone size={13} /> Rappeler
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {/* Mobile cards */}
+            <div className="md:hidden" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {aRappelerList.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '48px 0', color: '#9ca3af' }}>Aucun numéro à rappeler</div>
+              ) : aRappelerList.map(l => (
+                <div key={l.id} style={{ backgroundColor: '#fffbeb', border: '1px solid #fde68a', borderRadius: '8px', padding: '12px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '6px', flexWrap: 'wrap', gap: '6px' }}>
+                    <span style={{ fontWeight: 700, fontSize: 'clamp(13px, 3.5vw, 15px)', color: '#1f2937' }}>{l.client}</span>
+                    <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                      <span style={{ padding: '2px 7px', borderRadius: '12px', fontSize: '11px', fontWeight: 700, color: '#fff', backgroundColor: issueColor[l.statut] || '#6b7280' }}>{l.statut || '—'}</span>
+                      <span style={{ padding: '2px 7px', borderRadius: '12px', fontSize: '11px', fontWeight: 700, color: '#fff', backgroundColor: resultatColor(l.resultat) }}>{l.resultat || '—'}</span>
+                    </div>
+                  </div>
+                  <div style={{ fontSize: '13px', color: '#374151', marginBottom: '3px' }}><PhoneCall size={12} style={{ display: 'inline', marginRight: 4, color: '#d97706' }} />{l.telephone || '—'}</div>
+                  <div style={{ display: 'flex', gap: '8px', fontSize: '12px', color: '#6b7280', marginBottom: '8px', flexWrap: 'wrap' }}>
+                    <span><Store size={11} style={{ display: 'inline', marginRight: 3 }} />{getMagasinLabel(l.magasinId)}</span>
+                    <span><Clock size={11} style={{ display: 'inline', marginRight: 3 }} />{fmtDateTime(l.debut)}</span>
+                    {l.conseillere && <span>· {l.conseillere}</span>}
+                  </div>
+                  {l.commentaire && <div style={{ fontSize: '12px', color: '#4b5563', marginBottom: '8px', fontStyle: 'italic' }}>{l.commentaire}</div>}
+                  <button
+                    onClick={() => rappeler(l)}
+                    disabled={!l.telephone}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '7px 14px', borderRadius: '6px', backgroundColor: '#d97706', color: '#fff', border: 'none', fontSize: '13px', fontWeight: 600, cursor: 'pointer', opacity: l.telephone ? 1 : 0.4 }}>
+                    <Phone size={13} /> Rappeler
+                  </button>
+                </div>
+              ))}
+            </div>
+          </>
         ) : (
-          <div className="border border-gray-200 rounded overflow-hidden">
-            <table className="w-full text-sm border-collapse">
-              <thead>
-                <tr className="bg-gray-50 border-b border-gray-200">
-                  <th className="text-left px-3 py-2.5 font-semibold text-gray-700"><span className="inline-flex items-center gap-1"><Clock size={12} /> Heure d'appel</span></th>
-                  <th className="text-left px-3 py-2.5 font-semibold text-gray-700">Client</th>
-                  <th className="text-left px-3 py-2.5 font-semibold text-gray-700">Magasin</th>
-                  <th className="text-left px-3 py-2.5 font-semibold text-gray-700">Téléphone</th>
-                  <th className="text-left px-3 py-2.5 font-semibold text-gray-700">Statut</th>
-                  <th className="text-left px-3 py-2.5 font-semibold text-gray-700">Durée</th>
-                  <th className="text-left px-3 py-2.5 font-semibold text-gray-700">Conseillère</th>
-                  <th className="text-left px-3 py-2.5 font-semibold text-gray-700">Résultat</th>
-                  <th className="text-left px-3 py-2.5 font-semibold text-gray-700">Commentaire</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredLogs.length === 0 ? (
-                  <tr><td colSpan={9} className="text-center py-12 text-gray-400">Aucun appel enregistré</td></tr>
-                ) : filteredLogs.map(l => (
-                  <tr key={l.id} className="border-b border-gray-100 hover:bg-gray-50">
-                    <td className="px-3 py-2 text-gray-700 text-xs">{fmtDateTime(l.debut)}</td>
-                    <td className="px-3 py-2 font-semibold text-gray-800">{l.client}</td>
-                    <td className="px-3 py-2 text-gray-700 font-semibold">{getMagasinLabel(l.magasinId)}</td>
-                    <td className="px-3 py-2 text-gray-700">{l.telephone || '—'}</td>
-                    <td className="px-3 py-2">
-                      <span className="px-2 py-0.5 rounded text-xs font-semibold text-white" style={{ backgroundColor: issueColor[l.statut] || '#6b7280' }}>{l.statut || '—'}</span>
-                    </td>
-                    <td className="px-3 py-2 font-mono text-gray-700">{l.statut === 'Décroché' ? fmtDuree(l.duree) : '—'}</td>
-                    <td className="px-3 py-2 text-gray-700">{l.conseillere}</td>
-                    <td className="px-3 py-2">
-                      <span className="px-2 py-0.5 rounded text-xs font-semibold text-white" style={{ backgroundColor: resultatColor(l.resultat) }}>{l.resultat}</span>
-                    </td>
-                    <td className="px-3 py-2 text-gray-600 max-w-xs truncate">{l.commentaire || '—'}</td>
+          <>
+            {/* Desktop table */}
+            <div className="hidden md:block border border-gray-200 rounded overflow-hidden">
+              <table className="w-full text-sm border-collapse">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-200">
+                    <th className="text-left px-3 py-2.5 font-semibold text-gray-700"><span className="inline-flex items-center gap-1"><Clock size={12} /> Heure d'appel</span></th>
+                    <th className="text-left px-3 py-2.5 font-semibold text-gray-700">Client</th>
+                    <th className="text-left px-3 py-2.5 font-semibold text-gray-700">Magasin</th>
+                    <th className="text-left px-3 py-2.5 font-semibold text-gray-700">Téléphone</th>
+                    <th className="text-left px-3 py-2.5 font-semibold text-gray-700">Statut</th>
+                    <th className="text-left px-3 py-2.5 font-semibold text-gray-700">Durée</th>
+                    <th className="text-left px-3 py-2.5 font-semibold text-gray-700">Conseillère</th>
+                    <th className="text-left px-3 py-2.5 font-semibold text-gray-700">Résultat</th>
+                    <th className="text-left px-3 py-2.5 font-semibold text-gray-700">Commentaire</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {filteredLogs.length === 0 ? (
+                    <tr><td colSpan={9} className="text-center py-12 text-gray-400">Aucun appel enregistré</td></tr>
+                  ) : filteredLogs.map(l => (
+                    <tr key={l.id} className="border-b border-gray-100 hover:bg-gray-50">
+                      <td className="px-3 py-2 text-gray-700 text-xs">{fmtDateTime(l.debut)}</td>
+                      <td className="px-3 py-2 font-semibold text-gray-800">{l.client}</td>
+                      <td className="px-3 py-2 text-gray-700 font-semibold">{getMagasinLabel(l.magasinId)}</td>
+                      <td className="px-3 py-2 text-gray-700">{l.telephone || '—'}</td>
+                      <td className="px-3 py-2">
+                        <span className="px-2 py-0.5 rounded text-xs font-semibold text-white" style={{ backgroundColor: issueColor[l.statut] || '#6b7280' }}>{l.statut || '—'}</span>
+                      </td>
+                      <td className="px-3 py-2 font-mono text-gray-700">{l.statut === 'Décroché' ? fmtDuree(l.duree) : '—'}</td>
+                      <td className="px-3 py-2 text-gray-700">{l.conseillere}</td>
+                      <td className="px-3 py-2">
+                        <span className="px-2 py-0.5 rounded text-xs font-semibold text-white" style={{ backgroundColor: resultatColor(l.resultat) }}>{l.resultat}</span>
+                      </td>
+                      <td className="px-3 py-2 text-gray-600 max-w-xs truncate">{l.commentaire || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {/* Mobile cards */}
+            <div className="md:hidden" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {filteredLogs.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '48px 0', color: '#9ca3af' }}>Aucun appel enregistré</div>
+              ) : filteredLogs.map(l => (
+                <div key={l.id} style={{ backgroundColor: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '8px', padding: '12px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '6px', flexWrap: 'wrap', gap: '6px' }}>
+                    <span style={{ fontWeight: 700, fontSize: 'clamp(13px, 3.5vw, 15px)', color: '#1f2937' }}>{l.client}</span>
+                    <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                      <span style={{ padding: '2px 7px', borderRadius: '12px', fontSize: '11px', fontWeight: 700, color: '#fff', backgroundColor: issueColor[l.statut] || '#6b7280' }}>{l.statut || '—'}</span>
+                      {l.resultat && <span style={{ padding: '2px 7px', borderRadius: '12px', fontSize: '11px', fontWeight: 700, color: '#fff', backgroundColor: resultatColor(l.resultat) }}>{l.resultat}</span>}
+                    </div>
+                  </div>
+                  <div style={{ fontSize: '13px', color: '#374151', marginBottom: '3px' }}><PhoneCall size={12} style={{ display: 'inline', marginRight: 4, color: TEAL }} />{l.telephone || '—'}</div>
+                  <div style={{ display: 'flex', gap: '8px', fontSize: '12px', color: '#6b7280', marginBottom: l.commentaire ? '6px' : '0', flexWrap: 'wrap' }}>
+                    <span><Store size={11} style={{ display: 'inline', marginRight: 3 }} />{getMagasinLabel(l.magasinId)}</span>
+                    <span><Clock size={11} style={{ display: 'inline', marginRight: 3 }} />{fmtDateTime(l.debut)}</span>
+                    {l.statut === 'Décroché' && <span>· {fmtDuree(l.duree)}</span>}
+                    {l.conseillere && <span>· {l.conseillere}</span>}
+                  </div>
+                  {l.commentaire && <div style={{ fontSize: '12px', color: '#4b5563', marginTop: '4px', fontStyle: 'italic' }}>{l.commentaire}</div>}
+                </div>
+              ))}
+            </div>
+          </>
         )}
       </div>
 

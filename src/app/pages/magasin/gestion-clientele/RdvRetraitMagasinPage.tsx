@@ -246,9 +246,9 @@ export function RdvRetraitMagasinPage() {
   const pageData = filtered.slice((page - 1) * PAGE, page * PAGE);
 
   return (
-    <div className="flex gap-0" style={{ backgroundColor: '#d6e4ea', minHeight: '100vh' }}>
+    <div className="flex flex-col md:flex-row gap-0" style={{ backgroundColor: '#d6e4ea', minHeight: '100vh' }}>
       {/* Left — list */}
-      <div className="flex flex-col p-4 gap-3" style={{ width: 480, minWidth: 380, flexShrink: 0 }}>
+      <div className="flex flex-col p-4 gap-3 w-full" style={{ flexShrink: 0, minWidth: 0 }}>
         <div className="bg-white rounded-lg shadow-sm p-4 flex flex-col gap-3">
           <h1 className="text-sm font-bold text-gray-800">
             Ventes | Factures | Rendez-vous ({allVentes.length})
@@ -264,7 +264,7 @@ export function RdvRetraitMagasinPage() {
           />
 
           {/* Cards */}
-          <div className="flex flex-col gap-2" style={{ maxHeight: 'calc(100vh - 360px)', overflowY: 'auto' }}>
+          <div className="flex flex-col gap-2 md:overflow-y-auto" style={{ maxHeight: 'calc(100vh - 360px)', overflowY: 'auto' }}>
             {pageData.length === 0 ? (
               <div className="text-center py-10 text-gray-400 text-sm">Aucun rendez-vous retrait enregistré</div>
             ) : pageData.map(v => {

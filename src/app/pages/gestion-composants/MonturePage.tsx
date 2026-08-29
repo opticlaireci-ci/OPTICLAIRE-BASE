@@ -601,12 +601,12 @@ export function MonturePage() {
   return (
     <Box sx={{ p: 3 }}>
       {/* Header */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3, flexWrap: 'wrap', gap: 1 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <Box component="span" sx={{ fontSize: 20 }}>👓</Box>
-          <Typography variant="h6">Gestion des Composants: {TENANT.nom}</Typography>
+          <Typography variant="h6" sx={{ fontSize: 'clamp(0.9rem, 3vw, 1.25rem)' }}>Gestion des Composants: {TENANT.nom}</Typography>
         </Box>
-        <Box sx={{ display: 'flex', gap: 2 }}>
+        <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
           {/* Le catalogue de l'état de stock est aussi proposé dans la boîte
               d'import, mais il doit rester visible sans l'ouvrir : c'est
               l'action attendue tant que la table est vide. */}
@@ -703,7 +703,8 @@ export function MonturePage() {
         })()}
       </Box>
 
-      {/* Table */}
+      {/* Table - Desktop */}
+      <div className="hidden md:block">
       <TableContainer component={Paper} sx={{ boxShadow: '0 1px 4px rgba(0,0,0,0.1)', borderRadius: 1 }}>
         <Table size="small" sx={{ minWidth: 1100 }}>
           <TableHead>
@@ -827,6 +828,83 @@ export function MonturePage() {
           </TableBody>
         </Table>
       </TableContainer>
+      </div>
+
+      {/* Mobile Cards */}
+      <div className="md:hidden">
+        {(() => {
+          const PER_PAGE = 20;
+          const sorted = [...montures].sort((a, b) => (a.marque||'').localeCompare(b.marque||'','fr'));
+          const fil = sorted.filter(m => {
+            if (!searchTerm) return true;
+            const q = searchTerm.toLowerCase();
+            return [m.codeBarre,m.marque,m.categorie,m.famille,m.reference,m.couleur,m.taille,String(m.prix)].some(s=>(s||'').toLowerCase().includes(q));
+          });
+          const pag = fil.slice((page-1)*PER_PAGE, page*PER_PAGE);
+          if (pag.length === 0) return (
+            <div style={{ textAlign: 'center', padding: '32px 0', color: '#aaa', fontSize: '0.9rem' }}>Aucune monture</div>
+          );
+          return pag.map(m => (
+            <div key={m.id} style={{
+              background: 'white',
+              borderRadius: 8,
+              border: '1px solid #e0e0e0',
+              padding: '12px 14px',
+              marginBottom: 10,
+              boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+            }}>
+              {/* Card header: marque + status badge */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 'clamp(0.88rem, 3.5vw, 1rem)', color: '#1a237e' }}>{m.marque}</div>
+                  <div style={{ fontSize: '0.78rem', color: '#555', marginTop: 2 }}>{m.reference}</div>
+                </div>
+                <span style={{
+                  padding: '3px 10px', borderRadius: 12, fontSize: '0.7rem', fontWeight: 600, flexShrink: 0,
+                  background: m.gestionStocks === 'actif' ? '#e8f5e9' : '#fff3e0',
+                  color: m.gestionStocks === 'actif' ? '#2e7d32' : '#e65100',
+                }}>
+                  {m.gestionStocks === 'actif' ? 'Actif' : 'Inactif'}
+                </span>
+              </div>
+              {/* Info grid: couleur + taille + stock + prix */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 8, marginBottom: 10 }}>
+                <div>
+                  <div style={{ fontSize: '0.67rem', color: '#888', marginBottom: 2 }}>Couleur</div>
+                  <div style={{ fontSize: '0.82rem', fontWeight: 500 }}>{m.couleur || '—'}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.67rem', color: '#888', marginBottom: 2 }}>Taille</div>
+                  <div style={{ fontSize: '0.82rem', fontWeight: 500 }}>{m.taille || '—'}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.67rem', color: '#888', marginBottom: 2 }}>Stock</div>
+                  <div style={{ fontSize: '0.82rem', fontWeight: 700, color: m.stock <= (m.seuil ?? 0) ? '#c62828' : '#2e7d32' }}>{m.stock}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.67rem', color: '#888', marginBottom: 2 }}>Prix</div>
+                  <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#1565c0' }}>{m.prix?.toLocaleString('fr-FR')} F</div>
+                </div>
+              </div>
+              {/* Actions */}
+              <div style={{ display: 'flex', gap: 8, borderTop: '1px solid #f0f0f0', paddingTop: 10 }}>
+                <button onClick={() => handleEditMonture(m)} style={{
+                  flex: 1, padding: '7px 0', border: '1px solid #ffe082', borderRadius: 4,
+                  background: '#fffde7', color: '#f57f17', fontSize: '0.8rem', cursor: 'pointer', fontWeight: 600,
+                }}>
+                  Modifier
+                </button>
+                <button onClick={() => handleDeleteMonture(m)} style={{
+                  flex: 1, padding: '7px 0', border: 'none', borderRadius: 4,
+                  background: '#f44336', color: 'white', fontSize: '0.8rem', cursor: 'pointer', fontWeight: 600,
+                }}>
+                  Supprimer
+                </button>
+              </div>
+            </div>
+          ));
+        })()}
+      </div>
 
       {/* Import Dialog */}
       <Dialog open={openImportDialog} onClose={() => setOpenImportDialog(false)} maxWidth="md" fullWidth>

@@ -97,10 +97,10 @@ function CalendarView({ onAjouter, onEdit }: { onAjouter: () => void; onEdit: (m
   return (
     <div style={{ fontFamily: 'Arial, sans-serif', fontSize: 13 }}>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', borderBottom: '1px solid #e5e7eb', backgroundColor: '#f9fafb' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', borderBottom: '1px solid #e5e7eb', backgroundColor: '#f9fafb', flexWrap: 'wrap', gap: 8 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: 16 }}>📅</span>
-          <span style={{ fontWeight: 600, fontSize: 14 }}>Emploi du Temps: {TENANT.nom}</span>
+          <span style={{ fontWeight: 600, fontSize: 'clamp(13px, 3.5vw, 14px)' }}>Emploi du Temps: {TENANT.nom}</span>
         </div>
         <AddButton
           onClick={onAjouter}
@@ -110,7 +110,8 @@ function CalendarView({ onAjouter, onEdit }: { onAjouter: () => void; onEdit: (m
         </AddButton>
       </div>
 
-      <div style={{ display: 'flex', height: 'calc(100vh - 130px)' }}>
+      {/* Desktop layout: sidebar + calendar */}
+      <div className="hidden md:flex" style={{ height: 'calc(100vh - 130px)' }}>
         {/* Left panel: magasins */}
         <div style={{ width: 220, borderRight: '1px solid #e5e7eb', padding: '12px 0', flexShrink: 0 }}>
           <div style={{ fontWeight: 700, fontSize: 13, padding: '0 12px 8px', borderBottom: '1px solid #e5e7eb', marginBottom: 4 }}>MAGASIN</div>
@@ -193,6 +194,58 @@ function CalendarView({ onAjouter, onEdit }: { onAjouter: () => void; onEdit: (m
           </table>
         </div>
       </div>
+
+      {/* Mobile layout: calendar month nav + magasin cards */}
+      <div className="md:hidden" style={{ padding: '12px', overflowY: 'auto' }}>
+        {/* Month navigation */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button onClick={prevMonth} style={{ border: '1px solid #d1d5db', background: '#fff', borderRadius: 4, width: 34, height: 34, cursor: 'pointer', fontWeight: 700, fontSize: 16 }}>‹</button>
+            <button onClick={nextMonth} style={{ border: '1px solid #d1d5db', background: '#fff', borderRadius: 4, width: 34, height: 34, cursor: 'pointer', fontWeight: 700, fontSize: 16 }}>›</button>
+            <button onClick={() => { setViewYear(today.getFullYear()); setViewMonth(today.getMonth()); }} style={{ border: '1px solid #d1d5db', background: '#fff', borderRadius: 4, padding: '6px 12px', cursor: 'pointer', fontSize: 12 }}>Aujourd'hui</button>
+          </div>
+          <span style={{ fontWeight: 700, fontSize: 'clamp(14px, 4vw, 18px)' }}>{MOIS_LABELS[viewMonth]} {viewYear}</span>
+        </div>
+        {/* Magasin schedule cards */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {MAGASINS.map(magasinItem => {
+            const emploiMag = emplois.find(e => e.magasinId === magasinItem.id && e.annee === viewYear && e.mois === viewMonth);
+            const joursActifs = emploiMag ? JOURS.filter(j => emploiMag.horaires[j]?.actif) : [];
+            return (
+              <div key={magasinItem.id} style={{ backgroundColor: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '8px', padding: '12px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <span style={{ fontWeight: 700, fontSize: 'clamp(13px, 3.5vw, 15px)', color: '#1f2937' }}>{magasinItem.label}</span>
+                  <button
+                    onClick={() => onEdit(magasinItem.id)}
+                    style={{ background: '#0d9488', border: 'none', borderRadius: 4, padding: '5px 10px', cursor: 'pointer', color: '#fff', fontSize: 12, fontWeight: 600 }}
+                  >
+                    ✏️ Modifier
+                  </button>
+                </div>
+                {joursActifs.length === 0 ? (
+                  <div style={{ fontSize: 12, color: '#9ca3af' }}>Aucun horaire défini pour ce mois</div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    {joursActifs.map(jour => (
+                      <div key={jour} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#374151' }}>
+                        <span style={{ fontWeight: 600, minWidth: 90 }}>{jour}</span>
+                        <span style={{ backgroundColor: '#0d9488', color: '#fff', borderRadius: 4, padding: '1px 8px', fontWeight: 600 }}>
+                          {emploiMag!.horaires[jour].debut} – {emploiMag!.horaires[jour].fin}
+                        </span>
+                      </div>
+                    ))}
+                    {emploiMag && emploiMag.joursExceptionnels.length > 0 && (
+                      <div style={{ fontSize: 11, color: '#6b7280', marginTop: 4 }}>
+                        Jours fériés/exceptionnels: {emploiMag.joursExceptionnels.join(', ')}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }
@@ -250,19 +303,19 @@ function AjouterView({ editMagasinId, onBack }: { editMagasinId?: string; onBack
   return (
     <div style={{ fontFamily: 'Arial, sans-serif', fontSize: 13 }}>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', borderBottom: '1px solid #e5e7eb', backgroundColor: '#f9fafb' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', borderBottom: '1px solid #e5e7eb', backgroundColor: '#f9fafb', flexWrap: 'wrap', gap: 8 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: 16 }}>📅</span>
-          <span style={{ fontWeight: 600, fontSize: 14 }}>Emploi du Temps: {TENANT.nom}</span>
+          <span style={{ fontWeight: 600, fontSize: 'clamp(13px, 3.5vw, 14px)' }}>Emploi du Temps: {TENANT.nom}</span>
         </div>
         <button onClick={onBack} style={{ backgroundColor: '#0d9488', color: '#fff', border: 'none', borderRadius: 4, padding: '6px 14px', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
           Emploi du Temps
         </button>
       </div>
 
-      <div style={{ padding: 20, overflowY: 'auto', maxHeight: 'calc(100vh - 140px)' }}>
+      <div style={{ padding: '16px', overflowY: 'auto', maxHeight: 'calc(100vh - 140px)' }}>
         {/* Filters row */}
-        <div style={{ display: 'flex', gap: 24, alignItems: 'flex-end', marginBottom: 24, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 16, alignItems: 'flex-end', marginBottom: 24, flexWrap: 'wrap' }}>
           <div style={{ minWidth: 140 }}>
             <label style={labelStyle}>Année</label>
             <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -290,9 +343,9 @@ function AjouterView({ editMagasinId, onBack }: { editMagasinId?: string; onBack
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: 32, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
           {/* HORAIRES */}
-          <div style={{ flex: '0 0 auto', minWidth: 320 }}>
+          <div style={{ flex: '1 1 280px', minWidth: 0 }}>
             <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.05em' }}>HORAIRES</div>
             <table style={{ borderCollapse: 'collapse', width: '100%' }}>
               <tbody>

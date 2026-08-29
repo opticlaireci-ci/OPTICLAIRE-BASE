@@ -39,7 +39,7 @@ export function SelectMagasinPage() {
   };
 
   const handleSelectMagasin = (magasinId: string) => {
-    navigate(`/magasin/${magasinId}`);
+    navigate(`/magasin/${magasinId}/dashboard`);
   };
 
   if (loading) {

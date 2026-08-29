@@ -36,6 +36,15 @@ interface BonCommande extends AuditInfo {
   dateCreation: string;
 }
 
+const getStatutColor = (statut: string) => {
+  switch (statut) {
+    case 'Validé': return '#10b981';
+    case 'Livré': return '#3b82f6';
+    case 'En attente': return '#f59e0b';
+    default: return '#9ca3af';
+  }
+};
+
 export function BonCommandePage() {
   const [bons, setBons] = useLiveData<BonCommande>('leclaire_bons_commande');
   const [showModal, setShowModal] = useState(false);
@@ -168,10 +177,10 @@ export function BonCommandePage() {
             selectedItems={items}
           />
         )}
-        <div style={{ padding: '24px', backgroundColor: '#f9fafb', minHeight: '100vh' }}>
+        <div style={{ padding: 'clamp(12px, 3vw, 24px)', backgroundColor: '#f9fafb', minHeight: '100vh' }}>
         {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-          <h1 style={{ fontSize: '20px', fontWeight: 'bold', margin: 0 }}>Nouveau Bon de Commande</h1>
+        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+          <h1 style={{ fontSize: 'clamp(16px, 4vw, 20px)', fontWeight: 'bold', margin: 0 }}>Nouveau Bon de Commande</h1>
           <button
             onClick={() => setShowModal(false)}
             style={{
@@ -190,8 +199,8 @@ export function BonCommandePage() {
         </div>
 
         {/* Form */}
-        <div style={{ backgroundColor: '#fff', padding: '24px', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '20px', marginBottom: '24px' }}>
+        <div style={{ backgroundColor: '#fff', padding: 'clamp(12px, 3vw, 24px)', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginBottom: '24px' }}>
             <div>
               <label style={{ display: 'block', fontSize: '14px', fontWeight: '500', marginBottom: '6px' }}>
                 Référence <span style={{ color: '#dc2626' }}>*</span>
@@ -206,6 +215,7 @@ export function BonCommandePage() {
                   border: '1px solid #d1d5db',
                   borderRadius: '6px',
                   fontSize: '14px',
+                  boxSizing: 'border-box',
                 }}
               />
             </div>
@@ -244,6 +254,7 @@ export function BonCommandePage() {
                   border: '1px solid #d1d5db',
                   borderRadius: '6px',
                   fontSize: '14px',
+                  boxSizing: 'border-box',
                 }}
               />
             </div>
@@ -251,7 +262,7 @@ export function BonCommandePage() {
 
           {/* Votre sélection */}
           <div style={{ marginBottom: '24px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
               <div style={{
                 padding: '8px 16px',
                 backgroundColor: '#9ca3af',
@@ -275,7 +286,7 @@ export function BonCommandePage() {
                   fontWeight: '600',
                 }}
               >
-                Ajouter Monture & Accessoire
+                Ajouter Monture &amp; Accessoire
               </AddButton>
             </div>
 
@@ -393,7 +404,7 @@ export function BonCommandePage() {
           </div>
 
           {/* Bottom form */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '20px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '16px', marginBottom: '20px' }}>
             <div>
               <label style={{ display: 'block', fontSize: '14px', fontWeight: '500', marginBottom: '6px' }}>
                 Devise <span style={{ color: '#dc2626' }}>*</span>
@@ -428,6 +439,7 @@ export function BonCommandePage() {
                   border: '1px solid #d1d5db',
                   borderRadius: '6px',
                   fontSize: '14px',
+                  boxSizing: 'border-box',
                 }}
               />
             </div>
@@ -445,6 +457,7 @@ export function BonCommandePage() {
                   border: '1px solid #d1d5db',
                   borderRadius: '6px',
                   fontSize: '14px',
+                  boxSizing: 'border-box',
                 }}
               />
             </div>
@@ -462,12 +475,13 @@ export function BonCommandePage() {
                   border: '1px solid #d1d5db',
                   borderRadius: '6px',
                   fontSize: '14px',
+                  boxSizing: 'border-box',
                 }}
               />
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '20px' }}>
             <div>
               <label style={{ display: 'block', fontSize: '14px', fontWeight: '500', marginBottom: '6px' }}>
                 Total
@@ -482,6 +496,7 @@ export function BonCommandePage() {
                   border: '1px solid #d1d5db',
                   borderRadius: '6px',
                   fontSize: '14px',
+                  boxSizing: 'border-box',
                 }}
               />
             </div>
@@ -521,6 +536,7 @@ export function BonCommandePage() {
                 border: '1px solid #d1d5db',
                 borderRadius: '6px',
                 fontSize: '14px',
+                boxSizing: 'border-box',
               }}
             />
           </div>
@@ -538,7 +554,7 @@ export function BonCommandePage() {
           </div>
 
           {/* Buttons */}
-          <div style={{ display: 'flex', gap: '12px' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
             <button
               onClick={handleClose}
               style={{
@@ -577,9 +593,9 @@ export function BonCommandePage() {
   }
 
   return (
-    <div style={{ padding: '24px', backgroundColor: '#f9fafb', minHeight: '100vh' }}>
+    <div style={{ padding: 'clamp(12px, 3vw, 24px)', backgroundColor: '#f9fafb', minHeight: '100vh' }}>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
         <div>
           <p style={{ fontSize: '14px', color: '#6b7280', margin: 0 }}>Gestion Stocks: {TENANT.nom}</p>
         </div>
@@ -600,7 +616,7 @@ export function BonCommandePage() {
         </AddButton>
       </div>
 
-      <h1 style={{ fontSize: '20px', fontWeight: 'bold', marginBottom: '24px' }}>
+      <h1 style={{ fontSize: 'clamp(18px, 4vw, 24px)', fontWeight: 'bold', marginBottom: '24px' }}>
         Bons de Commande ({bons.length})
       </h1>
 
@@ -609,13 +625,14 @@ export function BonCommandePage() {
         <p style={{ fontSize: '14px', color: '#374151', marginBottom: '8px' }}>
           (N° Bon de Commande, Fournisseur)
         </p>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 200px 200px auto', gap: '12px', alignItems: 'end' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'flex-end' }}>
           <input
             type="text"
             placeholder="Recherche..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             style={{
+              flex: '1 1 180px',
               padding: '10px 16px',
               border: '1px solid #d1d5db',
               borderRadius: '6px',
@@ -628,6 +645,7 @@ export function BonCommandePage() {
             value={searchDate}
             onChange={(e) => setSearchDate(e.target.value)}
             style={{
+              flex: '0 1 160px',
               padding: '10px 16px',
               border: '1px solid #d1d5db',
               borderRadius: '6px',
@@ -638,6 +656,7 @@ export function BonCommandePage() {
             value={filterStatut}
             onChange={(e) => setFilterStatut(e.target.value)}
             style={{
+              flex: '0 1 160px',
               padding: '10px 16px',
               border: '1px solid #d1d5db',
               borderRadius: '6px',
@@ -657,6 +676,7 @@ export function BonCommandePage() {
               border: 'none',
               borderRadius: '6px',
               cursor: 'pointer',
+              flexShrink: 0,
             }}
           >
             <Search size={20} />
@@ -669,11 +689,12 @@ export function BonCommandePage() {
         <p style={{ fontSize: '14px', color: '#374151', marginBottom: '8px' }}>
           (N° Bon de Commande, Fournisseur)
         </p>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 200px 200px auto', gap: '12px', alignItems: 'end' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'flex-end' }}>
           <input
             type="text"
             placeholder="Recherche..."
             style={{
+              flex: '1 1 180px',
               padding: '10px 16px',
               border: '1px solid #d1d5db',
               borderRadius: '6px',
@@ -684,6 +705,7 @@ export function BonCommandePage() {
             type="text"
             placeholder="jj/mm/aaaa"
             style={{
+              flex: '0 1 160px',
               padding: '10px 16px',
               border: '1px solid #d1d5db',
               borderRadius: '6px',
@@ -692,6 +714,7 @@ export function BonCommandePage() {
           />
           <select
             style={{
+              flex: '0 1 160px',
               padding: '10px 16px',
               border: '1px solid #d1d5db',
               borderRadius: '6px',
@@ -708,6 +731,7 @@ export function BonCommandePage() {
               border: 'none',
               borderRadius: '6px',
               cursor: 'pointer',
+              flexShrink: 0,
             }}
           >
             <Search size={20} />
@@ -715,8 +739,8 @@ export function BonCommandePage() {
         </div>
       </div>
 
-      {/* Table */}
-      <div style={{ backgroundColor: '#fff', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+      {/* Desktop Table */}
+      <div className="hidden md:block" style={{ backgroundColor: '#fff', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
@@ -825,6 +849,99 @@ export function BonCommandePage() {
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* Mobile Cards */}
+      <div className="md:hidden" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        {filteredBons.length === 0 ? (
+          <div style={{ padding: '40px', textAlign: 'center', color: '#9ca3af', backgroundColor: '#fff', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+            Aucun bon de commande trouvé
+          </div>
+        ) : (
+          [...filteredBons].sort((a, b) => (a.reference || '').localeCompare(b.reference || '', 'fr')).map((bon) => (
+            <div key={bon.id} style={{ backgroundColor: '#fff', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', overflow: 'hidden' }}>
+              {/* Card header */}
+              <div style={{ backgroundColor: '#0369a1', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+                <div>
+                  <div style={{ color: '#fff', fontWeight: '700', fontSize: '15px' }}>N° {bon.reference}</div>
+                  <div style={{ color: '#bae6fd', fontSize: '13px', marginTop: '2px' }}>{bon.fournisseur}</div>
+                </div>
+                <span style={{
+                  backgroundColor: getStatutColor(bon.statut),
+                  color: '#fff',
+                  padding: '3px 10px',
+                  borderRadius: '12px',
+                  fontSize: '11px',
+                  fontWeight: '700',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0,
+                }}>
+                  {bon.statut}
+                </span>
+              </div>
+              {/* Card body */}
+              <div style={{ padding: '12px 16px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '8px', marginBottom: '8px' }}>
+                  <div>
+                    <div style={{ fontSize: '11px', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total</div>
+                    <div style={{ fontSize: '14px', fontWeight: '600', color: '#111827' }}>{(bon.total || 0).toLocaleString('fr-FR')} F</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '11px', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total Net</div>
+                    <div style={{ fontSize: '14px', fontWeight: '600', color: '#111827' }}>{(bon.totalNet || 0).toLocaleString('fr-FR')} F</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '11px', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Reste</div>
+                    <div style={{ fontSize: '14px', fontWeight: '600', color: bon.totalReste > 0 ? '#ef4444' : '#10b981' }}>{(bon.totalReste || 0).toLocaleString('fr-FR')} F</div>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: '16px', fontSize: '12px', color: '#6b7280', flexWrap: 'wrap' }}>
+                  {bon.taxe && <span>Taxe: {bon.taxe}%</span>}
+                  {bon.valeurRemise > 0 && <span>Remise: {bon.valeurRemise.toLocaleString('fr-FR')} F</span>}
+                  {bon.totalPaiement > 0 && <span>Payé: {bon.totalPaiement.toLocaleString('fr-FR')} F</span>}
+                </div>
+                {bon.createdBy && (
+                  <div style={{ marginTop: '8px', fontSize: '12px', color: '#9ca3af' }}>
+                    Par {bon.createdBy} · {formatDate(bon.createdAt)}
+                  </div>
+                )}
+              </div>
+              {/* Card footer */}
+              <div style={{ padding: '10px 16px', borderTop: '1px solid #f3f4f6', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <button
+                  onClick={() => handleDelete(bon.id)}
+                  style={{
+                    padding: '6px 14px',
+                    backgroundColor: '#dc2626',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontSize: '13px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                  }}
+                >
+                  <Trash2 size={13} /> Supprimer
+                </button>
+                <button
+                  style={{
+                    padding: '6px 14px',
+                    backgroundColor: '#3b82f6',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontSize: '13px',
+                  }}
+                >
+                  Éditer
+                </button>
+              </div>
+            </div>
+          ))
+        )}
       </div>
 
       {/* Pagination */}

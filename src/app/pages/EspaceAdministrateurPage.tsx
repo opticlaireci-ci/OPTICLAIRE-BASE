@@ -1,7 +1,7 @@
 import { logger } from '../utils/logger';
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
-import { Monitor, Settings, Plus, Home, X, Trash2, AlertTriangle, Loader2, RotateCcw } from 'lucide-react';
+import { Monitor, Settings, Plus, Home, X, Trash2, AlertTriangle, Loader2 } from 'lucide-react';
 import { getActiveMagasins } from '../constants/magasins';
 import {
   ACCUEIL_CONTENT_KEY, readAccueilContent, saveAccueilContent, newAccueilBlock, type AccueilContent,
@@ -35,16 +35,6 @@ export function EspaceAdministrateurPage() {
   const MOT_CONFIRMATION = 'REINITIALISER';
 
   const toggleResetCible = (c: ResetCible) => setResetCibles(prev => ({ ...prev, [c]: !prev[c] }));
-
-  // Ouvre la boîte de réinitialisation déjà pré-réglée sur UN magasin précis
-  // (bouton "Réinitialiser" sur la carte du magasin) — évite à l'admin de
-  // devoir rouvrir le dialogue général puis choisir le magasin dans la liste.
-  const ouvrirResetMagasin = (idMagasin: string) => {
-    setResetCibles({ ventes: true, reglements: true, clients: false });
-    setResetMagasin(idMagasin);
-    setResetConfirm('');
-    setResetOpen(true);
-  };
 
   const lancerReset = async () => {
     const cibles = (Object.keys(resetCibles) as ResetCible[]).filter(c => resetCibles[c]);
@@ -108,7 +98,7 @@ export function EspaceAdministrateurPage() {
   };
 
   function ouvrirMagasin(idMagasin: string) {
-    navigate(`/magasin/${idMagasin}`);
+    navigate(`/magasin/${idMagasin}/dashboard`);
   }
 
   function gererMagasin(idMagasin: string) {
@@ -223,7 +213,7 @@ export function EspaceAdministrateurPage() {
               <span className="font-semibold text-gray-800">Personnaliser la page d'accueil</span>
               <button onClick={() => setAccueilOpen(false)} className="text-gray-500 hover:text-gray-700"><X size={18} /></button>
             </div>
-            <div className="p-5 flex flex-col gap-4 overflow-y-auto flex-1 min-h-0">
+            <div className="p-5 flex flex-col gap-4 overflow-y-auto">
               <p className="text-xs text-blue-800 bg-blue-50 border border-blue-200 rounded px-3 py-2">
                 Ce contenu s'affiche sur la page d'accueil de <b>tous les utilisateurs</b> (synchronisé sur tous les appareils).
               </p>
@@ -295,7 +285,7 @@ export function EspaceAdministrateurPage() {
 
       <div className="flex flex-wrap gap-5">
         {magasins.map((magasin) => {
-          const accederUrl = `/magasin/${magasin.id}`;
+          const accederUrl = `/magasin/${magasin.id}/dashboard`;
           const gererUrl = `/gerer-magasin?magasin=${magasin.id}`;
 
           return (
@@ -365,16 +355,6 @@ export function EspaceAdministrateurPage() {
                   <Settings size={12} />
                   Gérer le magasin
                 </button>
-                {peut('action:reinitialiser-donnees') && (
-                  <button
-                    onClick={() => ouvrirResetMagasin(magasin.id)}
-                    title={`Réinitialiser les données de ${magasin.label}`}
-                    className="flex items-center gap-1.5 text-white text-xs font-medium px-2 py-1.5 rounded shadow active:scale-95 transition-all w-full justify-center bg-red-600 hover:bg-red-700"
-                  >
-                    <RotateCcw size={12} />
-                    Réinitialiser
-                  </button>
-                )}
               </div>
             </div>
           );

@@ -211,85 +211,77 @@ export function BonPeremptionPage() {
             />
           </div>
 
-          {/* Table */}
-          <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '24px' }}>
-            <thead>
-              <tr style={{ backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
-                <th style={{ padding: '12px', textAlign: 'center', fontSize: '14px', fontWeight: '600', border: '1px solid #e5e7eb' }}>
-                  #
-                </th>
-                <th style={{ padding: '12px', textAlign: 'left', fontSize: '14px', fontWeight: '600', border: '1px solid #e5e7eb' }}>
-                  Monture / Accessoire
-                </th>
-                <th style={{ padding: '12px', textAlign: 'center', fontSize: '14px', fontWeight: '600', border: '1px solid #e5e7eb' }}>
-                  Stock Initial
-                </th>
-                <th style={{ padding: '12px', textAlign: 'left', fontSize: '14px', fontWeight: '600', border: '1px solid #e5e7eb' }}>
-                  Quantité
-                </th>
-                <th style={{ padding: '12px', textAlign: 'center', fontSize: '14px', fontWeight: '600', border: '1px solid #e5e7eb' }}>
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.length === 0 ? (
-                <tr>
-                  <td colSpan={5} style={{ padding: '20px', textAlign: 'center', color: '#9ca3af', border: '1px solid #e5e7eb' }}>
-                    Aucun article ajouté
-                  </td>
+          {/* Table articles — desktop */}
+          <div className="hidden md:block">
+            <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '24px' }}>
+              <thead>
+                <tr style={{ backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
+                  <th style={{ padding: '12px', textAlign: 'center', fontSize: '14px', fontWeight: '600', border: '1px solid #e5e7eb' }}>#</th>
+                  <th style={{ padding: '12px', textAlign: 'left', fontSize: '14px', fontWeight: '600', border: '1px solid #e5e7eb' }}>Monture / Accessoire</th>
+                  <th style={{ padding: '12px', textAlign: 'center', fontSize: '14px', fontWeight: '600', border: '1px solid #e5e7eb' }}>Stock Initial</th>
+                  <th style={{ padding: '12px', textAlign: 'left', fontSize: '14px', fontWeight: '600', border: '1px solid #e5e7eb' }}>Quantité</th>
+                  <th style={{ padding: '12px', textAlign: 'center', fontSize: '14px', fontWeight: '600', border: '1px solid #e5e7eb' }}>Actions</th>
                 </tr>
-              ) : (
-                items.map((item, index) => (
-                  <tr key={item.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
-                    <td style={{ padding: '12px', textAlign: 'center', fontSize: '14px', border: '1px solid #e5e7eb' }}>
-                      {index + 1}
-                    </td>
-                    <td style={{ padding: '12px', fontSize: '14px', border: '1px solid #e5e7eb' }}>
-                      <div style={{ fontWeight: '600' }}>{item.designation}</div>
-                      <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '4px' }}>
-                        {item.type === 'monture' ? '🔲 Monture' : '🔷 Accessoire'}
-                      </div>
-                    </td>
-                    <td style={{ padding: '12px', fontSize: '14px', textAlign: 'center', border: '1px solid #e5e7eb' }}>
-                      {item.stockInitial}
-                    </td>
-                    <td style={{ padding: '12px', border: '1px solid #e5e7eb' }}>
-                      <input
-                        type="number"
-                        min="0"
-                        value={item.quantite}
-                        onChange={(e) => handleUpdateQuantite(item.id, parseInt(e.target.value) || 0)}
-                        style={{
-                          width: '100px',
-                          padding: '8px',
-                          border: '1px solid #d1d5db',
-                          borderRadius: '4px',
-                          fontSize: '14px',
-                        }}
-                      />
-                    </td>
-                    <td style={{ padding: '12px', textAlign: 'center', border: '1px solid #e5e7eb' }}>
-                      <button
-                        onClick={() => handleRemoveItem(item.id)}
-                        style={{
-                          padding: '6px 12px',
-                          backgroundColor: '#ef4444',
-                          color: '#fff',
-                          border: 'none',
-                          borderRadius: '4px',
-                          cursor: 'pointer',
-                          fontSize: '13px',
-                        }}
-                      >
-                        <Trash2 size={14} />
-                      </button>
+              </thead>
+              <tbody>
+                {items.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} style={{ padding: '20px', textAlign: 'center', color: '#9ca3af', border: '1px solid #e5e7eb' }}>
+                      Aucun article ajouté
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                ) : (
+                  items.map((item, index) => (
+                    <tr key={item.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
+                      <td style={{ padding: '12px', textAlign: 'center', fontSize: '14px', border: '1px solid #e5e7eb' }}>{index + 1}</td>
+                      <td style={{ padding: '12px', fontSize: '14px', border: '1px solid #e5e7eb' }}>
+                        <div style={{ fontWeight: '600' }}>{item.designation}</div>
+                        <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '4px' }}>
+                          {item.type === 'monture' ? '🔲 Monture' : '🔷 Accessoire'}
+                        </div>
+                      </td>
+                      <td style={{ padding: '12px', fontSize: '14px', textAlign: 'center', border: '1px solid #e5e7eb' }}>{item.stockInitial}</td>
+                      <td style={{ padding: '12px', border: '1px solid #e5e7eb' }}>
+                        <input type="number" min="0" value={item.quantite} onChange={(e) => handleUpdateQuantite(item.id, parseInt(e.target.value) || 0)} style={{ width: '100px', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }} />
+                      </td>
+                      <td style={{ padding: '12px', textAlign: 'center', border: '1px solid #e5e7eb' }}>
+                        <button onClick={() => handleRemoveItem(item.id)} style={{ padding: '6px 12px', backgroundColor: '#ef4444', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '13px' }}>
+                          <Trash2 size={14} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Cartes articles — mobile */}
+          <div className="md:hidden" style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '24px' }}>
+            {items.length === 0 ? (
+              <div style={{ padding: '20px', textAlign: 'center', color: '#9ca3af', border: '1px solid #e5e7eb', borderRadius: '6px' }}>
+                Aucun article ajouté
+              </div>
+            ) : items.map((item) => (
+              <div key={item.id} style={{ backgroundColor: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '6px', padding: '12px 14px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 'clamp(12px, 3vw, 14px)', fontWeight: 700, color: '#111827' }}>{item.designation}</div>
+                    <div style={{ fontSize: '11px', color: '#6b7280', marginTop: '2px' }}>
+                      {item.type === 'monture' ? '🔲 Monture' : '🔷 Accessoire'} · Stock initial : {item.stockInitial}
+                    </div>
+                  </div>
+                  <button onClick={() => handleRemoveItem(item.id)} style={{ padding: '6px', backgroundColor: '#ef4444', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <label style={{ fontSize: '12px', color: '#374151', fontWeight: 600 }}>Quantité :</label>
+                  <input type="number" min="0" value={item.quantite} onChange={(e) => handleUpdateQuantite(item.id, parseInt(e.target.value) || 0)} style={{ width: '80px', padding: '6px 8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }} />
+                </div>
+              </div>
+            ))}
+          </div>
 
           {/* Buttons */}
           <div style={{ display: 'flex', gap: '12px' }}>
@@ -444,8 +436,8 @@ export function BonPeremptionPage() {
         </div>
       </div>
 
-      {/* Table */}
-      <div style={{ backgroundColor: '#fff', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+      {/* Table — desktop */}
+      <div className="hidden md:block" style={{ backgroundColor: '#fff', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
@@ -485,13 +477,7 @@ export function BonPeremptionPage() {
                   <td style={{ padding: '12px' }}>
                     <button
                       onClick={() => handleDelete(bon.id)}
-                      style={{
-                        padding: '8px',
-                        backgroundColor: '#dc2626',
-                        border: 'none',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
-                      }}
+                      style={{ padding: '8px', backgroundColor: '#dc2626', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
                     >
                       <Trash2 size={16} color="#fff" />
                     </button>
@@ -507,17 +493,7 @@ export function BonPeremptionPage() {
                     ) : '-'}
                   </td>
                   <td style={{ padding: '12px', fontSize: '14px' }}>
-                    <button
-                      style={{
-                        padding: '4px 12px',
-                        backgroundColor: '#3b82f6',
-                        color: '#fff',
-                        border: 'none',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
-                        fontSize: '12px',
-                      }}
-                    >
+                    <button style={{ padding: '4px 12px', backgroundColor: '#3b82f6', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' }}>
                       Éditer
                     </button>
                   </td>
@@ -526,6 +502,49 @@ export function BonPeremptionPage() {
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* Cartes bons péremption — mobile */}
+      <div className="md:hidden" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        {filteredBons.length === 0 ? (
+          <div style={{ padding: '32px', textAlign: 'center', color: '#9ca3af', fontSize: '14px', backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
+            Aucun bon de péremption-casse trouvé
+          </div>
+        ) : (
+          [...filteredBons].sort((a, b) => (a.reference || '').localeCompare(b.reference || '', 'fr')).map((bon) => (
+            <div key={bon.id} style={{ backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e5e7eb', padding: '14px 16px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px', gap: '8px' }}>
+                <div>
+                  <div style={{ fontSize: 'clamp(13px, 3.5vw, 15px)', fontWeight: 700, color: '#111827' }}>
+                    N° {bon.reference}
+                  </div>
+                  {bon.commentaire && (
+                    <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '2px' }}>{bon.commentaire}</div>
+                  )}
+                </div>
+                <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+                  <button
+                    style={{ padding: '6px 12px', backgroundColor: '#3b82f6', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' }}
+                  >
+                    Éditer
+                  </button>
+                  <button
+                    onClick={() => handleDelete(bon.id)}
+                    style={{ padding: '6px', backgroundColor: '#dc2626', border: 'none', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                  >
+                    <Trash2 size={14} color="#fff" />
+                  </button>
+                </div>
+              </div>
+              {bon.createdBy && (
+                <div style={{ fontSize: '11px', color: '#6b7280', borderTop: '1px solid #f3f4f6', paddingTop: '8px' }}>
+                  <span style={{ fontWeight: 600, color: '#374151' }}>{bon.createdBy}</span>
+                  {bon.createdAt && <span style={{ marginLeft: '6px' }}>{formatDate(bon.createdAt)}</span>}
+                </div>
+              )}
+            </div>
+          ))
+        )}
       </div>
 
       {/* Pagination */}

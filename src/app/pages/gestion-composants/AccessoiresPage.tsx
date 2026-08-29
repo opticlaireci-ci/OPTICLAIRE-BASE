@@ -241,12 +241,12 @@ export function AccessoiresPage() {
   return (
     <Box sx={{ p: 3 }}>
       {/* Header */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3, flexWrap: 'wrap', gap: 1 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <Box component="span" sx={{ fontSize: 20 }}>👓</Box>
-          <Typography variant="h6">Gestion des Composants: {TENANT.nom}</Typography>
+          <Typography variant="h6" sx={{ fontSize: 'clamp(0.9rem, 3vw, 1.25rem)' }}>Gestion des Composants: {TENANT.nom}</Typography>
         </Box>
-        <Box sx={{ display: 'flex', gap: 1 }}>
+        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
           <Button
             variant="outlined"
             disabled={!peutAjouter}
@@ -341,7 +341,8 @@ export function AccessoiresPage() {
         <Pagination count={3} page={page} onChange={(_, value) => setPage(value)} />
       </Box>
 
-      {/* Table */}
+      {/* Table - Desktop */}
+      <div className="hidden md:block">
       <TableContainer component={Paper}>
         <Table>
           <TableHead>
@@ -407,6 +408,83 @@ export function AccessoiresPage() {
           </TableBody>
         </Table>
       </TableContainer>
+      </div>
+
+      {/* Mobile Cards */}
+      <div className="md:hidden">
+        {[...accessoires].sort((a, b) => (a.marque || '').localeCompare(b.marque || '', 'fr')).map(accessoire => {
+          const hasSearch = !searchTerm || [
+            accessoire.codeBarre, accessoire.marque, accessoire.categorie,
+            accessoire.designation, accessoire.couleur, accessoire.taille, String(accessoire.prix),
+          ].some(s => (s || '').toLowerCase().includes(searchTerm.toLowerCase()));
+          if (!hasSearch) return null;
+          return (
+            <div key={accessoire.id} style={{
+              background: 'white',
+              borderRadius: 8,
+              border: '1px solid #e0e0e0',
+              padding: '12px 14px',
+              marginBottom: 10,
+              boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+            }}>
+              {/* Card header: désignation + marque */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 'clamp(0.88rem, 3.5vw, 1rem)', color: '#1a237e' }}>{accessoire.designation || '—'}</div>
+                  <div style={{ fontSize: '0.78rem', color: '#555', marginTop: 2 }}>{accessoire.marque}</div>
+                </div>
+                <span style={{
+                  padding: '3px 10px', borderRadius: 12, fontSize: '0.7rem', fontWeight: 600, flexShrink: 0,
+                  background: '#e3f2fd', color: '#1565c0',
+                }}>
+                  {accessoire.categorie || '—'}
+                </span>
+              </div>
+              {/* Info grid: stock + prix */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 8, marginBottom: 10 }}>
+                <div>
+                  <div style={{ fontSize: '0.67rem', color: '#888', marginBottom: 2 }}>Stock</div>
+                  <div style={{ fontSize: '0.82rem', fontWeight: 700, color: accessoire.stock <= (accessoire.seuil ?? 0) ? '#c62828' : '#2e7d32' }}>{accessoire.stock}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.67rem', color: '#888', marginBottom: 2 }}>Prix</div>
+                  <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#1565c0' }}>{Number(accessoire.prix).toLocaleString('fr-FR')} F</div>
+                </div>
+                {accessoire.couleur ? (
+                  <div>
+                    <div style={{ fontSize: '0.67rem', color: '#888', marginBottom: 2 }}>Couleur</div>
+                    <div style={{ fontSize: '0.82rem', fontWeight: 500 }}>{accessoire.couleur}</div>
+                  </div>
+                ) : null}
+                {accessoire.taille ? (
+                  <div>
+                    <div style={{ fontSize: '0.67rem', color: '#888', marginBottom: 2 }}>Taille</div>
+                    <div style={{ fontSize: '0.82rem', fontWeight: 500 }}>{accessoire.taille}</div>
+                  </div>
+                ) : null}
+              </div>
+              {/* Actions */}
+              <div style={{ display: 'flex', gap: 8, borderTop: '1px solid #f0f0f0', paddingTop: 10 }}>
+                <button onClick={() => handleEditAccessoire(accessoire)} style={{
+                  flex: 1, padding: '7px 0', border: '1px solid #ffe082', borderRadius: 4,
+                  background: '#fffde7', color: '#f57f17', fontSize: '0.8rem', cursor: 'pointer', fontWeight: 600,
+                }}>
+                  Modifier
+                </button>
+                <button onClick={() => handleDeleteAccessoire(accessoire)} style={{
+                  flex: 1, padding: '7px 0', border: 'none', borderRadius: 4,
+                  background: '#f44336', color: 'white', fontSize: '0.8rem', cursor: 'pointer', fontWeight: 600,
+                }}>
+                  Supprimer
+                </button>
+              </div>
+            </div>
+          );
+        })}
+        {accessoires.length === 0 && (
+          <div style={{ textAlign: 'center', padding: '32px 0', color: '#aaa', fontSize: '0.9rem' }}>Aucun accessoire</div>
+        )}
+      </div>
 
       {/* Add Accessoire Dialog */}
       <Dialog open={openAddDialog} onClose={() => { setOpenAddDialog(false); setEditingAccessoire(null); resetForm(); }} maxWidth="lg" fullWidth>

@@ -359,85 +359,134 @@ export function GestionMagasinsPage() {
         </div>
       )}
 
-      {/* Liste des magasins */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <table className="w-full">
-          <thead className="bg-gray-100 border-b">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                ID
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                Nom
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                Adresse
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                Téléphone
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                Statut
-              </th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider">
-                Actions
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-200">
-            {magasins.map((magasin) => (
-              <tr key={magasin.id} className="hover:bg-gray-50">
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                  {magasin.id}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                  {magasin.label}
-                </td>
-                <td className="px-6 py-4 text-sm text-gray-600">
-                  {magasin.adresse || '-'}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                  {magasin.telephone || '-'}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span
-                    className={`px-2 py-1 text-xs font-medium rounded-full ${
-                      magasin.actif !== false
-                        ? 'bg-green-100 text-green-800'
-                        : 'bg-red-100 text-red-800'
-                    }`}
-                  >
-                    {magasin.actif !== false ? 'Actif' : 'Inactif'}
-                  </span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                  <div className="flex items-center justify-end gap-2">
-                    <button
-                      onClick={() => handleModifier(magasin)}
-                      className="text-blue-600 hover:text-blue-900"
-                      title="Modifier"
-                    >
-                      <Edit2 size={18} />
-                    </button>
-                    <button
-                      onClick={() => handleSupprimer(magasin.id)}
-                      className="text-red-600 hover:text-red-900"
-                      title="Supprimer"
-                    >
-                      <Trash2 size={18} />
-                    </button>
-                  </div>
-                </td>
+      {/* Liste des magasins — Desktop table */}
+      <div className="hidden md:block">
+        <div className="bg-white rounded-lg shadow overflow-hidden">
+          <table className="w-full">
+            <thead className="bg-gray-100 border-b">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                  ID
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                  Nom
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                  Adresse
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                  Téléphone
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                  Statut
+                </th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider">
+                  Actions
+                </th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-gray-200">
+              {magasins.map((magasin) => (
+                <tr key={magasin.id} className="hover:bg-gray-50">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                    {magasin.id}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    {magasin.label}
+                  </td>
+                  <td className="px-6 py-4 text-sm text-gray-600">
+                    {magasin.adresse || '-'}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                    {magasin.telephone || '-'}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span
+                      className={`px-2 py-1 text-xs font-medium rounded-full ${
+                        magasin.actif !== false
+                          ? 'bg-green-100 text-green-800'
+                          : 'bg-red-100 text-red-800'
+                      }`}
+                    >
+                      {magasin.actif !== false ? 'Actif' : 'Inactif'}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    <div className="flex items-center justify-end gap-2">
+                      <button
+                        onClick={() => handleModifier(magasin)}
+                        className="text-blue-600 hover:text-blue-900"
+                        title="Modifier"
+                      >
+                        <Edit2 size={18} />
+                      </button>
+                      <button
+                        onClick={() => handleSupprimer(magasin.id)}
+                        className="text-red-600 hover:text-red-900"
+                        title="Supprimer"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
 
-        {magasins.length === 0 && (
-          <div className="text-center py-12 text-gray-500">
+          {magasins.length === 0 && (
+            <div className="text-center py-12 text-gray-500">
+              Aucun magasin enregistré
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Mobile cards */}
+      <div className="md:hidden" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {magasins.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '48px 0', color: '#6b7280', background: 'white', borderRadius: 8 }}>
             Aucun magasin enregistré
           </div>
-        )}
+        ) : magasins.map((magasin) => (
+          <div key={magasin.id} style={{ background: 'white', borderRadius: 8, border: '1px solid #e5e7eb', padding: 12, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 'clamp(0.85rem, 3vw, 1rem)', color: '#111827' }}>{magasin.label}</div>
+                <div style={{ fontSize: '0.72rem', color: '#9ca3af', marginTop: 2 }}>ID: {magasin.id}</div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{
+                  padding: '2px 10px', borderRadius: 999, fontSize: '0.72rem', fontWeight: 600,
+                  background: magasin.actif !== false ? '#dcfce7' : '#fee2e2',
+                  color: magasin.actif !== false ? '#166534' : '#991b1b',
+                }}>
+                  {magasin.actif !== false ? 'Actif' : 'Inactif'}
+                </span>
+                <button
+                  onClick={() => handleModifier(magasin)}
+                  style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 4, padding: '4px 8px', color: '#2563eb', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                  title="Modifier"
+                >
+                  <Edit2 size={14} />
+                </button>
+                <button
+                  onClick={() => handleSupprimer(magasin.id)}
+                  style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 4, padding: '4px 8px', color: '#dc2626', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                  title="Supprimer"
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            </div>
+            {magasin.adresse && (
+              <div style={{ fontSize: '0.8rem', color: '#4b5563', marginBottom: 4 }}>📍 {magasin.adresse}</div>
+            )}
+            {magasin.telephone && (
+              <div style={{ fontSize: '0.8rem', color: '#4b5563' }}>📞 {magasin.telephone}</div>
+            )}
+          </div>
+        ))}
       </div>
 
       <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">

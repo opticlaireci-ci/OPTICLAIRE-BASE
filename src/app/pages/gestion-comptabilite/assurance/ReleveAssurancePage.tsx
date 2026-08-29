@@ -77,7 +77,7 @@ function NouveauReleve({ initial, onSave, onClose }: { initial?: Releve; onSave:
           </div>
         </div>
 
-        <div className="p-5 overflow-y-auto flex-1 min-h-0 flex flex-col gap-5">
+        <div className="p-5 overflow-y-auto flex flex-col gap-5">
           {/* Row 1 fields */}
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
             <div>
@@ -297,7 +297,7 @@ export function ReleveAssurancePage() {
       {modal && <NouveauReleve initial={modal.item} onSave={handleSave} onClose={() => setModal(null)} />}
 
       {/* Top filter + recap layout */}
-      <div className="flex gap-4">
+      <div className="flex flex-col md:flex-row gap-4">
         {/* Left panel */}
         <div className="bg-white rounded-lg shadow-sm p-4 flex flex-col gap-3" style={{ minWidth: 220 }}>
           <div className="flex items-center gap-2 text-gray-700">
@@ -326,9 +326,9 @@ export function ReleveAssurancePage() {
 
         {/* Right: recap + title + add button */}
         <div className="flex-1 flex flex-col gap-3">
-          <div className="flex items-center justify-between">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
             <div>
-              <div className="text-xs text-gray-500 font-semibold uppercase tracking-wide">
+              <div className="text-xs text-gray-500 font-semibold uppercase tracking-wide" style={{ fontSize: 'clamp(0.65rem, 1.5vw, 0.75rem)' }}>
                 RÉCAPITULATIF RELEVÉS ASSURANCES ({recap.total}) | ANNÉE: {annee}
               </div>
             </div>
@@ -341,8 +341,8 @@ export function ReleveAssurancePage() {
             </AddButton>
           </div>
 
-          {/* 3 recap boxes */}
-          <div className="grid grid-cols-3 gap-3">
+          {/* 3 recap boxes — auto-fit responsive */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '0.75rem' }}>
             <div className="bg-white rounded-lg p-4 border-l-4" style={{ borderColor: '#2563eb' }}>
               <div className="text-xs text-gray-500 mb-1">Total Relevés</div>
               <div className="text-2xl font-bold text-gray-800">{recap.total}</div>
@@ -370,7 +370,8 @@ export function ReleveAssurancePage() {
 
         <FilterBar {...filterBarProps} />
 
-        <div className="border border-gray-200 rounded overflow-hidden overflow-x-auto">
+        {/* Desktop table */}
+        <div className="hidden md:block border border-gray-200 rounded overflow-hidden overflow-x-auto">
           <table className="w-full text-sm border-collapse" style={{ minWidth: 900 }}>
             <thead>
               <tr className="bg-gray-100 border-b border-gray-200 text-gray-700 font-semibold text-xs">
@@ -430,6 +431,56 @@ export function ReleveAssurancePage() {
               ))}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile cards */}
+        <div className="md:hidden flex flex-col gap-3">
+          {filtered.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '2.5rem 0', color: '#9ca3af' }}>Aucun relevé assurance</div>
+          ) : filtered.map(r => (
+            <div key={r.id} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, padding: '0.875rem', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+              {/* Top: assurance + statut badge */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
+                <span style={{ fontWeight: 700, fontSize: '1rem', color: '#1e3a5f' }}>{r.assurance || '—'}</span>
+                <span style={{
+                  background: r.statut === 'Réglé' ? '#dcfce7' : '#fee2e2',
+                  color: r.statut === 'Réglé' ? '#166534' : '#991b1b',
+                  borderRadius: 9999, padding: '0.15rem 0.6rem', fontSize: '0.75rem', fontWeight: 600,
+                }}>
+                  {r.statut || 'Non réglé'}
+                </span>
+              </div>
+              {/* Reference + date */}
+              <div style={{ fontSize: '0.8125rem', color: '#6b7280', marginBottom: '0.3rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <span style={{ fontFamily: 'monospace', color: '#1d4ed8', fontWeight: 600 }}>{r.reference}</span>
+                <span>· {fmtDate(r.edition)}</span>
+              </div>
+              {/* Financial tiles */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(80px, 1fr))', gap: '0.375rem', marginTop: '0.5rem' }}>
+                <div style={{ background: '#eff6ff', borderRadius: 6, padding: '0.35rem 0.5rem' }}>
+                  <div style={{ fontSize: '0.65rem', color: '#6b7280', marginBottom: '0.1rem' }}>CA</div>
+                  <div style={{ fontWeight: 700, color: '#1d4ed8', fontSize: '0.8125rem' }}>{r.totalNet.toLocaleString('fr-FR')}</div>
+                </div>
+                <div style={{ background: '#f0fdf4', borderRadius: 6, padding: '0.35rem 0.5rem' }}>
+                  <div style={{ fontSize: '0.65rem', color: '#6b7280', marginBottom: '0.1rem' }}>Payé</div>
+                  <div style={{ fontWeight: 700, color: '#16a34a', fontSize: '0.8125rem' }}>{r.acompte.toLocaleString('fr-FR')}</div>
+                </div>
+                <div style={{ background: '#fef2f2', borderRadius: 6, padding: '0.35rem 0.5rem' }}>
+                  <div style={{ fontSize: '0.65rem', color: '#6b7280', marginBottom: '0.1rem' }}>Restant</div>
+                  <div style={{ fontWeight: 700, color: '#dc2626', fontSize: '0.8125rem' }}>{r.totalReste.toLocaleString('fr-FR')}</div>
+                </div>
+              </div>
+              {/* Officine + entreprise */}
+              <div style={{ fontSize: '0.8125rem', color: '#9ca3af', marginTop: '0.375rem' }}>
+                {r.officine}{r.entreprise ? ` · ${r.entreprise}` : ''}
+              </div>
+              {/* Actions */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.625rem', borderTop: '1px solid #f3f4f6', paddingTop: '0.5rem' }}>
+                <button onClick={() => setModal({ mode: 'edit', item: r })} style={{ color: '#3b82f6', padding: '0.25rem' }}><Edit size={15} /></button>
+                <button onClick={() => handleDelete(r.id)} style={{ color: '#ef4444', padding: '0.25rem' }}><Trash2 size={15} /></button>
+              </div>
+            </div>
+          ))}
         </div>
 
         <FilterBar {...filterBarProps} />

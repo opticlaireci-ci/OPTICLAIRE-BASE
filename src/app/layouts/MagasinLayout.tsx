@@ -453,7 +453,7 @@ export function MagasinLayout() {
   };
 
   const handleNavigate = (path: string) => {
-    setMobileOpen(false);
+    if (isMobile) setMobileOpen(false);
     navigate(path);
   };
 
@@ -553,10 +553,13 @@ export function MagasinLayout() {
 
   const drawerContent = (
     <>
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 2, py: 1, borderBottom: '1px solid #eee' }}>
-        <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>{magasinNom}</Typography>
-        <IconButton size="small" onClick={() => setMobileOpen(false)} title="Fermer le menu"><ArrowBack fontSize="small" /></IconButton>
-      </Box>
+      {!isMobile && <Toolbar />}
+      {isMobile && (
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 2, py: 1, borderBottom: '1px solid #eee' }}>
+          <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>{magasinNom}</Typography>
+          <IconButton size="small" onClick={() => setMobileOpen(false)}><ArrowBack fontSize="small" /></IconButton>
+        </Box>
+      )}
       <Box sx={{ overflow: 'auto', py: 0.5 }}>
         <List sx={{ py: 0 }}>
           {visibleMenuItems.map((item) => renderMenuItem(item))}
@@ -566,7 +569,7 @@ export function MagasinLayout() {
   );
 
   return (
-    <Box sx={{ display: 'flex', height: '100vh' }}>
+    <Box sx={{ display: 'flex', height: '100dvh', minHeight: '100svh' }}>
       <AppBar position="fixed" sx={{ zIndex: (theme) => theme.zIndex.drawer + 1, backgroundColor: '#000', color: '#fff' }}>
         <Toolbar variant="dense" sx={{ minHeight: 40, px: 1.5 }}>
           {isMobile ? (
@@ -574,14 +577,9 @@ export function MagasinLayout() {
               <MenuIcon />
             </IconButton>
           ) : (
-            <>
-              <IconButton edge="start" onClick={() => setMobileOpen(true)} sx={{ mr: 1, color: '#fff' }} title="Ouvrir le menu">
-                <MenuIcon />
-              </IconButton>
-              <IconButton onClick={handleBack} sx={{ mr: 2, color: '#fff' }} title="Retour">
-                <ArrowBack />
-              </IconButton>
-            </>
+            <IconButton edge="start" onClick={handleBack} sx={{ mr: 2, color: '#fff' }}>
+              <ArrowBack />
+            </IconButton>
           )}
           <SeasonLogo size={28} />
           <Typography variant={isMobile ? 'body2' : 'h6'} noWrap sx={{ fontWeight: 700, color: '#fff', flexShrink: 0 }}>
@@ -653,25 +651,42 @@ export function MagasinLayout() {
         )}
       </AppBar>
 
-      {/* Menu latéral : toujours "temporaire" (fermé par défaut, s'ouvre au clic
-          sur le bouton menu, se ferme automatiquement après un clic sur un
-          lien ou en dehors) — sur mobile ET sur ordinateur. Ainsi il ne peut
-          plus jamais rester affiché en permanence par-dessus une fenêtre. */}
-      <Drawer
-        variant="temporary"
-        open={mobileOpen}
-        onClose={() => setMobileOpen(false)}
-        ModalProps={{ keepMounted: true }}
-        sx={{
-          '& .MuiDrawer-paper': {
-            width: drawerWidth,
-            boxSizing: 'border-box',
-            backgroundColor: '#fff',
-          },
-        }}
-      >
-        {drawerContent}
-      </Drawer>
+      {/* Drawer permanent sur desktop, temporaire sur mobile */}
+      <Box component="nav" sx={{ width: { md: drawerWidth }, flexShrink: { md: 0 } }}>
+        {isMobile ? (
+          <Drawer
+            variant="temporary"
+            open={mobileOpen}
+            onClose={() => setMobileOpen(false)}
+            ModalProps={{ keepMounted: true }}
+            sx={{
+              '& .MuiDrawer-paper': {
+                width: drawerWidth,
+                boxSizing: 'border-box',
+                backgroundColor: '#fff',
+              },
+            }}
+          >
+            {drawerContent}
+          </Drawer>
+        ) : (
+          <Drawer
+            variant="permanent"
+            sx={{
+              width: drawerWidth,
+              flexShrink: 0,
+              '& .MuiDrawer-paper': {
+                width: drawerWidth,
+                boxSizing: 'border-box',
+                backgroundColor: '#fff',
+              },
+            }}
+            open
+          >
+            {drawerContent}
+          </Drawer>
+        )}
+      </Box>
 
       <Box
         component="main"
@@ -679,31 +694,25 @@ export function MagasinLayout() {
           flexGrow: 1,
           minWidth: 0,
           p: { xs: 1, sm: 2, md: 3 },
-          width: '100%',
+          width: { xs: '100%', md: `calc(100% - ${drawerWidth}px)` },
           maxWidth: '100vw',
           // Sur mobile : le contenu large défile horizontalement au lieu d'être
           // coupé ; sur desktop on masque le débordement comme avant.
-          overflowX: { xs: 'auto', md: 'hidden' },
+          overflowX: 'auto',
         }}
       >
         <Toolbar sx={{ minHeight: { xs: 40, md: 40 } }} />
         {/* Espace pour la barre raccourcis dépliée sur mobile */}
         {isMobile && shortcutsOpen && <Box sx={{ height: 52 }} />}
-        <div key={location.pathname} style={{ animation: 'pageFadeIn 0.15s ease-out both' }}>
+        <div key={location.pathname} style={{ animation: 'pageFadeIn 0.15s ease-out both', willChange: 'opacity, transform' }}>
           <Outlet />
         </div>
       </Box>
       <SessionIndicator />
       <style>{`
-        /* Pas de "transform" ici : un ancêtre avec un transform actif (même
-           translateY(0) en fin d'animation) devient le "containing block"
-           des enfants position: fixed (ex: les modales), qui ne se
-           positionnent alors plus par rapport à l'écran mais par rapport à
-           ce conteneur — d'où les modales tronquées en haut sur grand
-           écran. On anime uniquement l'opacité pour éviter ce piège. */
         @keyframes pageFadeIn {
-          from { opacity: 0; }
-          to   { opacity: 1; }
+          from { opacity: 0; transform: translateY(6px); }
+          to   { opacity: 1; transform: translateY(0); }
         }
       `}</style>
     </Box>

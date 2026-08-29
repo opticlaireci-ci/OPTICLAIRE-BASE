@@ -193,7 +193,8 @@ export function FactureAssuranceMagasinPage() {
           </div>
         </div>
 
-        <div className="border border-gray-200 rounded overflow-hidden">
+        {/* Desktop table */}
+        <div className="hidden md:block border border-gray-200 rounded overflow-hidden">
           <table className="w-full text-sm border-collapse">
             <thead>
               <tr className="bg-gray-100 border-b border-gray-200 text-gray-700 font-semibold text-xs">
@@ -249,6 +250,45 @@ export function FactureAssuranceMagasinPage() {
               ))}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile cards */}
+        <div className="md:hidden" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          {filtered.length === 0 ? (
+            <div style={{ padding: '40px', textAlign: 'center', color: '#9ca3af', fontSize: '14px' }}>Aucune facture assurance</div>
+          ) : filtered.map((f, i) => (
+            <div key={f.id} style={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '8px', padding: '14px', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexWrap: 'wrap', gap: '6px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ color: '#6b7280', fontSize: '12px' }}>#{i + 1}</span>
+                  <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '13px', color: '#1d4ed8' }}>{f.numeroFacture}</span>
+                </div>
+                <span style={{ backgroundColor: statusColor(f.statut), color: '#fff', borderRadius: '10px', padding: '2px 10px', fontSize: '11px', fontWeight: 600 }}>{f.statut}</span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '13px' }}>
+                <div>
+                  <span style={{ color: '#6b7280', fontSize: '11px' }}>Assurance</span>
+                  <div style={{ fontWeight: 600, color: '#111827' }}>{f.assurance}</div>
+                </div>
+                <div>
+                  <span style={{ color: '#6b7280', fontSize: '11px' }}>Date</span>
+                  <div style={{ color: '#374151' }}>{f.dateFacture ? new Date(f.dateFacture).toLocaleDateString('fr-FR') : '—'}</div>
+                </div>
+                <div>
+                  <span style={{ color: '#6b7280', fontSize: '11px' }}>Client</span>
+                  <div style={{ color: '#374151' }}>{f.client}</div>
+                </div>
+                <div>
+                  <span style={{ color: '#6b7280', fontSize: '11px' }}>Montant</span>
+                  <div style={{ fontWeight: 700, color: '#111827' }}>{f.montant.toLocaleString('fr-FR')} F CFA</div>
+                </div>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '10px', paddingTop: '10px', borderTop: '1px solid #f3f4f6' }}>
+                <button onClick={() => setModal({ mode: 'edit', item: f })} style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 12px', border: '1px solid #bfdbfe', borderRadius: '6px', backgroundColor: '#eff6ff', color: '#2563eb', fontSize: '12px', cursor: 'pointer' }}><Edit size={13} /> Modifier</button>
+                <button onClick={() => handleDelete(f.id)} style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 12px', border: '1px solid #fecaca', borderRadius: '6px', backgroundColor: '#fef2f2', color: '#dc2626', fontSize: '12px', cursor: 'pointer' }}><Trash2 size={13} /> Supprimer</button>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </div>

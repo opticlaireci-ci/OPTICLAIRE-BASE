@@ -297,16 +297,17 @@ export function ActeursListPage({
       <Box sx={{
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         px: 2, py: 1.5, bgcolor: '#e8edf2', borderBottom: '1px solid #d0d7de', mb: 2,
+        flexWrap: 'wrap', gap: 1,
       }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <Box sx={{ width: 28, height: 28, borderRadius: '50%', bgcolor: '#90a4ae', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <Typography sx={{ fontSize: 14, color: 'white' }}>👤</Typography>
           </Box>
-          <Typography variant="body2" sx={{ fontWeight: 500, color: '#333' }}>
+          <Typography variant="body2" sx={{ fontWeight: 500, color: '#333', fontSize: 'clamp(0.78rem, 3vw, 0.875rem)' }}>
             Gestion Acteurs: {TENANT.nom}
           </Typography>
         </Box>
-        <Box sx={{ display: 'flex', gap: 1 }}>
+        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
           {showImporter && modeleCsv && (
             <>
               <Button
@@ -407,89 +408,145 @@ export function ActeursListPage({
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}><CircularProgress /></Box>
         ) : (
-          <TableContainer component={Paper} sx={{ boxShadow: 'none', border: '1px solid #e0e0e0' }}>
-            <Table size="small">
-              <TableHead>
-                <TableRow sx={{ bgcolor: '#f5f5f5' }}>
-                  <TableCell padding="checkbox" sx={{ width: 36 }}>
-                    <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
-                      <Checkbox
-                        size="small"
-                        checked={allSelected}
-                        indeterminate={selected.size > 0 && !allSelected}
-                        onChange={toggleAll}
-                      />
-                      {selected.size > 0 && (
-                        <IconButton size="small" sx={{ bgcolor: '#ef5350', color: 'white', borderRadius: 0.5, p: 0.5 }}
-                          onClick={handleDeleteSelected}>
-                          <DeleteIcon sx={{ fontSize: 14 }} />
-                        </IconButton>
-                      )}
-                    </Box>
-                  </TableCell>
-                  <TableCell sx={{ fontWeight: 700, width: 36, textAlign: 'center', py: 1 }}>#</TableCell>
-                  {columns.map(col => (
-                    <TableCell key={col.id} sx={{ fontWeight: 700, minWidth: col.minWidth, py: 1 }}>{col.label}</TableCell>
-                  ))}
-                  {showSolde && <TableCell sx={{ fontWeight: 700, py: 1 }}>Solde</TableCell>}
-                  <TableCell sx={{ fontWeight: 700, py: 1 }}>Édition</TableCell>
-                  <TableCell sx={{ width: 80 }} />
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {paginated.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={columns.length + (showSolde ? 5 : 4)} align="center" sx={{ py: 4, color: '#999' }}>
-                      Aucune donnée disponible
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  paginated.map((row, idx) => {
-                    const isEditable = !row.systeme;
-                    return (
-                      <TableRow key={row.id ?? idx} hover sx={{ '&:hover': { bgcolor: '#f9f9f9' } }}>
-                        <TableCell padding="checkbox">
-                          {isEditable && (
-                            <Checkbox size="small" checked={selected.has(row.id)} onChange={() => toggleRow(row.id)} />
+          <>
+            {/* Desktop table */}
+            <div className="hidden md:block">
+              <TableContainer component={Paper} sx={{ boxShadow: 'none', border: '1px solid #e0e0e0' }}>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow sx={{ bgcolor: '#f5f5f5' }}>
+                      <TableCell padding="checkbox" sx={{ width: 36 }}>
+                        <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
+                          <Checkbox
+                            size="small"
+                            checked={allSelected}
+                            indeterminate={selected.size > 0 && !allSelected}
+                            onChange={toggleAll}
+                          />
+                          {selected.size > 0 && (
+                            <IconButton size="small" sx={{ bgcolor: '#ef5350', color: 'white', borderRadius: 0.5, p: 0.5 }}
+                              onClick={handleDeleteSelected}>
+                              <DeleteIcon sx={{ fontSize: 14 }} />
+                            </IconButton>
                           )}
-                        </TableCell>
-                        <TableCell sx={{ textAlign: 'center', color: '#aaa', fontSize: '0.75rem' }}>
-                          {(page - 1) * itemsPerPage + idx + 1}
-                        </TableCell>
-                        {columns.map(col => (
-                          <TableCell key={col.id} sx={{ py: 0.75, fontSize: '0.85rem' }}>
-                            {col.format ? col.format(row[col.id], row) : (row[col.id] ?? '')}
-                          </TableCell>
-                        ))}
-                        {showSolde && (
-                          <TableCell sx={{ py: 0.75 }}>
-                            <SoldeCell value={row.solde ?? 0} />
-                          </TableCell>
-                        )}
-                        <TableCell sx={{ py: 0.75 }}>{formatEdition(row)}</TableCell>
-                        <TableCell sx={{ py: 0.75, textAlign: 'right' }}>
-                          {isEditable && (
-                            <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'flex-end' }}>
-                              <IconButton size="small"
-                                sx={{ bgcolor: '#fff9c4', border: '1px solid #f9a825', borderRadius: 0.5, p: 0.5 }}
-                                onClick={() => openEdit(row)}>
-                                <EditIcon sx={{ fontSize: 14, color: '#f9a825' }} />
-                              </IconButton>
-                              <IconButton size="small"
-                                sx={{ bgcolor: '#ef5350', borderRadius: 0.5, p: 0.5 }}
-                                onClick={() => handleDelete(row)}>
-                                <DeleteIcon sx={{ fontSize: 14, color: 'white' }} />
-                              </IconButton>
-                            </Box>
-                          )}
+                        </Box>
+                      </TableCell>
+                      <TableCell sx={{ fontWeight: 700, width: 36, textAlign: 'center', py: 1 }}>#</TableCell>
+                      {columns.map(col => (
+                        <TableCell key={col.id} sx={{ fontWeight: 700, minWidth: col.minWidth, py: 1 }}>{col.label}</TableCell>
+                      ))}
+                      {showSolde && <TableCell sx={{ fontWeight: 700, py: 1 }}>Solde</TableCell>}
+                      <TableCell sx={{ fontWeight: 700, py: 1 }}>Édition</TableCell>
+                      <TableCell sx={{ width: 80 }} />
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {paginated.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={columns.length + (showSolde ? 5 : 4)} align="center" sx={{ py: 4, color: '#999' }}>
+                          Aucune donnée disponible
                         </TableCell>
                       </TableRow>
-                    );
-                  })
-                )}
-              </TableBody>
-            </Table>
-          </TableContainer>
+                    ) : (
+                      paginated.map((row, idx) => {
+                        const isEditable = !row.systeme;
+                        return (
+                          <TableRow key={row.id ?? idx} hover sx={{ '&:hover': { bgcolor: '#f9f9f9' } }}>
+                            <TableCell padding="checkbox">
+                              {isEditable && (
+                                <Checkbox size="small" checked={selected.has(row.id)} onChange={() => toggleRow(row.id)} />
+                              )}
+                            </TableCell>
+                            <TableCell sx={{ textAlign: 'center', color: '#aaa', fontSize: '0.75rem' }}>
+                              {(page - 1) * itemsPerPage + idx + 1}
+                            </TableCell>
+                            {columns.map(col => (
+                              <TableCell key={col.id} sx={{ py: 0.75, fontSize: '0.85rem' }}>
+                                {col.format ? col.format(row[col.id], row) : (row[col.id] ?? '')}
+                              </TableCell>
+                            ))}
+                            {showSolde && (
+                              <TableCell sx={{ py: 0.75 }}>
+                                <SoldeCell value={row.solde ?? 0} />
+                              </TableCell>
+                            )}
+                            <TableCell sx={{ py: 0.75 }}>{formatEdition(row)}</TableCell>
+                            <TableCell sx={{ py: 0.75, textAlign: 'right' }}>
+                              {isEditable && (
+                                <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'flex-end' }}>
+                                  <IconButton size="small"
+                                    sx={{ bgcolor: '#fff9c4', border: '1px solid #f9a825', borderRadius: 0.5, p: 0.5 }}
+                                    onClick={() => openEdit(row)}>
+                                    <EditIcon sx={{ fontSize: 14, color: '#f9a825' }} />
+                                  </IconButton>
+                                  <IconButton size="small"
+                                    sx={{ bgcolor: '#ef5350', borderRadius: 0.5, p: 0.5 }}
+                                    onClick={() => handleDelete(row)}>
+                                    <DeleteIcon sx={{ fontSize: 14, color: 'white' }} />
+                                  </IconButton>
+                                </Box>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })
+                    )}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </div>
+
+            {/* Mobile cards */}
+            <div className="md:hidden" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {paginated.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '32px 0', color: '#9ca3af' }}>Aucune donnée disponible</div>
+              ) : paginated.map((row, idx) => {
+                const isEditable = !row.systeme;
+                const [firstCol, ...restCols] = columns;
+                const titleVal = firstCol
+                  ? (firstCol.format ? firstCol.format(row[firstCol.id], row) : (row[firstCol.id] ?? ''))
+                  : '';
+                return (
+                  <div key={row.id ?? idx} style={{ background: 'white', border: '1px solid #e0e0e0', borderRadius: 6, padding: 12 }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6, marginBottom: restCols.length > 0 ? 8 : 0 }}>
+                      <div style={{ fontWeight: 600, fontSize: 'clamp(0.82rem, 3vw, 0.95rem)', color: '#111827', flex: 1 }}>
+                        {titleVal}
+                      </div>
+                      {isEditable && (
+                        <div style={{ display: 'flex', gap: 4 }}>
+                          <IconButton size="small"
+                            sx={{ bgcolor: '#fff9c4', border: '1px solid #f9a825', borderRadius: 0.5, p: 0.5 }}
+                            onClick={() => openEdit(row)}>
+                            <EditIcon sx={{ fontSize: 14, color: '#f9a825' }} />
+                          </IconButton>
+                          <IconButton size="small"
+                            sx={{ bgcolor: '#ef5350', borderRadius: 0.5, p: 0.5 }}
+                            onClick={() => handleDelete(row)}>
+                            <DeleteIcon sx={{ fontSize: 14, color: 'white' }} />
+                          </IconButton>
+                        </div>
+                      )}
+                    </div>
+                    {restCols.map(col => {
+                      const val = col.format ? col.format(row[col.id], row) : (row[col.id] ?? '');
+                      if (val === '' || val === null || val === undefined) return null;
+                      return (
+                        <div key={col.id} style={{ display: 'flex', gap: 6, fontSize: '0.78rem', color: '#374151', marginBottom: 4 }}>
+                          <span style={{ color: '#9ca3af', minWidth: 72, flexShrink: 0 }}>{col.label}:</span>
+                          <span>{val}</span>
+                        </div>
+                      );
+                    })}
+                    {showSolde && (
+                      <div style={{ marginTop: 6 }}>
+                        <SoldeCell value={row.solde ?? 0} />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </>
         )}
 
         {/* Bottom pagination */}

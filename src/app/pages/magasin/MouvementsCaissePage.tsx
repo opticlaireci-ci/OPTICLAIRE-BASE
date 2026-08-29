@@ -245,8 +245,8 @@ export function MouvementsCaissePage() {
 
   return (
     <Box sx={{ p: 3 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h4">
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3, flexWrap: 'wrap', gap: 2 }}>
+        <Typography variant="h4" sx={{ fontSize: 'clamp(18px,4vw,24px)' }}>
           Mouvements Entrées et Sorties - {getMagasinLabel(magasinId || '')}
         </Typography>
         <Button
@@ -361,57 +361,97 @@ export function MouvementsCaissePage() {
         </Box>
       </Paper>
 
-      {/* Tableau */}
-      <TableContainer component={Paper}>
-        <Table>
-          <TableHead>
-            <TableRow sx={{ bgcolor: '#f5f5f5' }}>
-              <TableCell sx={{ fontWeight: 'bold' }}>Date</TableCell>
-              <TableCell sx={{ fontWeight: 'bold' }}>Type</TableCell>
-              <TableCell sx={{ fontWeight: 'bold' }}>Catégorie</TableCell>
-              <TableCell sx={{ fontWeight: 'bold' }}>Libellé</TableCell>
-              <TableCell sx={{ fontWeight: 'bold' }}>Montant</TableCell>
-              <TableCell sx={{ fontWeight: 'bold' }}>Mode de Paiement</TableCell>
-              <TableCell sx={{ fontWeight: 'bold' }}>Référence</TableCell>
-              <TableCell sx={{ fontWeight: 'bold' }}>Responsable</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {filteredMouvements.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={8} align="center" sx={{ py: 4 }}>
-                  <Typography color="textSecondary">
-                    Aucun mouvement trouvé
-                  </Typography>
-                </TableCell>
+      {/* Tableau — desktop */}
+      <div className="hidden md:block">
+        <TableContainer component={Paper}>
+          <Table>
+            <TableHead>
+              <TableRow sx={{ bgcolor: '#f5f5f5' }}>
+                <TableCell sx={{ fontWeight: 'bold' }}>Date</TableCell>
+                <TableCell sx={{ fontWeight: 'bold' }}>Type</TableCell>
+                <TableCell sx={{ fontWeight: 'bold' }}>Catégorie</TableCell>
+                <TableCell sx={{ fontWeight: 'bold' }}>Libellé</TableCell>
+                <TableCell sx={{ fontWeight: 'bold' }}>Montant</TableCell>
+                <TableCell sx={{ fontWeight: 'bold' }}>Mode de Paiement</TableCell>
+                <TableCell sx={{ fontWeight: 'bold' }}>Référence</TableCell>
+                <TableCell sx={{ fontWeight: 'bold' }}>Responsable</TableCell>
               </TableRow>
-            ) : (
-              filteredMouvements.map((mouvement) => (
-                <TableRow key={mouvement.id} hover>
-                  <TableCell>
-                    {new Date(mouvement.date).toLocaleDateString('fr-FR')}
+            </TableHead>
+            <TableBody>
+              {filteredMouvements.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={8} align="center" sx={{ py: 4 }}>
+                    <Typography color="textSecondary">
+                      Aucun mouvement trouvé
+                    </Typography>
                   </TableCell>
-                  <TableCell>
-                    <Chip
-                      label={mouvement.type === 'entree' ? 'Entrée' : 'Sortie'}
-                      color={mouvement.type === 'entree' ? 'success' : 'error'}
-                      size="small"
-                    />
-                  </TableCell>
-                  <TableCell>{mouvement.categorie}</TableCell>
-                  <TableCell>{mouvement.libelle}</TableCell>
-                  <TableCell sx={{ fontWeight: 'bold', color: mouvement.type === 'entree' ? '#4caf50' : '#f44336' }}>
-                    {mouvement.type === 'entree' ? '+' : '-'}{mouvement.montant.toLocaleString('fr-FR')} FCFA
-                  </TableCell>
-                  <TableCell>{mouvement.modePaiement}</TableCell>
-                  <TableCell>{mouvement.reference || '-'}</TableCell>
-                  <TableCell>{mouvement.responsable}</TableCell>
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </TableContainer>
+              ) : (
+                filteredMouvements.map((mouvement) => (
+                  <TableRow key={mouvement.id} hover>
+                    <TableCell>
+                      {new Date(mouvement.date).toLocaleDateString('fr-FR')}
+                    </TableCell>
+                    <TableCell>
+                      <Chip
+                        label={mouvement.type === 'entree' ? 'Entrée' : 'Sortie'}
+                        color={mouvement.type === 'entree' ? 'success' : 'error'}
+                        size="small"
+                      />
+                    </TableCell>
+                    <TableCell>{mouvement.categorie}</TableCell>
+                    <TableCell>{mouvement.libelle}</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', color: mouvement.type === 'entree' ? '#4caf50' : '#f44336' }}>
+                      {mouvement.type === 'entree' ? '+' : '-'}{mouvement.montant.toLocaleString('fr-FR')} FCFA
+                    </TableCell>
+                    <TableCell>{mouvement.modePaiement}</TableCell>
+                    <TableCell>{mouvement.reference || '-'}</TableCell>
+                    <TableCell>{mouvement.responsable}</TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </div>
+
+      {/* Cartes — mobile */}
+      <div className="md:hidden">
+        {filteredMouvements.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '32px 16px', color: '#9ca3af', fontSize: 14 }}>
+            Aucun mouvement trouvé
+          </div>
+        ) : filteredMouvements.map((mouvement) => {
+          const isEntree = mouvement.type === 'entree';
+          return (
+            <div key={mouvement.id} style={{ border: `1px solid ${isEntree ? '#bbf7d0' : '#fecaca'}`, borderRadius: 8, marginBottom: 10, overflow: 'hidden', backgroundColor: '#fff' }}>
+              {/* Card header */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6, padding: '10px 14px', backgroundColor: isEntree ? '#f0fdf4' : '#fff5f5' }}>
+                <span style={{ fontSize: 13, color: '#374151' }}>
+                  {new Date(mouvement.date).toLocaleDateString('fr-FR')}
+                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ padding: '2px 10px', borderRadius: 12, fontSize: 11, fontWeight: 700, backgroundColor: isEntree ? '#16a34a' : '#dc2626', color: '#fff' }}>
+                    {isEntree ? 'Entrée' : 'Sortie'}
+                  </span>
+                  <span style={{ fontSize: 15, fontWeight: 700, color: isEntree ? '#16a34a' : '#dc2626' }}>
+                    {isEntree ? '+' : '-'}{mouvement.montant.toLocaleString('fr-FR')} FCFA
+                  </span>
+                </div>
+              </div>
+              {/* Card body */}
+              <div style={{ padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <div style={{ fontSize: 13, color: '#111827', fontWeight: 500 }}>{mouvement.libelle}</div>
+                <div style={{ fontSize: 12, color: '#6b7280' }}>{mouvement.categorie} · {mouvement.modePaiement}</div>
+                {mouvement.reference && (
+                  <div style={{ fontSize: 12, color: '#6b7280' }}>Réf : {mouvement.reference}</div>
+                )}
+                <div style={{ fontSize: 11, color: '#9ca3af' }}>Par : {mouvement.responsable}</div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
 
       {/* Dialog Création */}
       <Dialog open={showCreateDialog} onClose={() => setShowCreateDialog(false)} maxWidth="sm" fullWidth>

@@ -779,6 +779,9 @@ function NavigationMenu() {
           <head>
             <title>État de Stock - Montures</title>
             <style>
+              @page { margin: 0; size: A4; }
+              @media screen { body { visibility: hidden; } }
+              @media print { body { visibility: visible; } }
               body { font-family: Arial, sans-serif; padding: 20px; }
               h1 { text-align: center; margin-bottom: 30px; }
               table { width: 100%; border-collapse: collapse; margin-top: 20px; }
@@ -893,6 +896,9 @@ function NavigationMenu() {
           <head>
             <title>État de Stock - Accessoires</title>
             <style>
+              @page { margin: 0; size: A4; }
+              @media screen { body { visibility: hidden; } }
+              @media print { body { visibility: visible; } }
               body { font-family: Arial, sans-serif; padding: 20px; }
               h1 { text-align: center; margin-bottom: 30px; }
               table { width: 100%; border-collapse: collapse; margin-top: 20px; }
@@ -1320,7 +1326,7 @@ function MainLayoutContent() {
     if ((user?.role === 'conseillere' || user?.role === 'employee' || user?.role === 'caissier') && magasinDest) {
       if (!location.pathname.includes('/magasin/') && !hasRedirected.current) {
         hasRedirected.current = true;
-        navigate(`/magasin/${magasinDest}`, { replace: true });
+        navigate(`/magasin/${magasinDest}/dashboard`, { replace: true });
       }
     }
   }, [isLoading, isAuthenticated, user, location.pathname, navigate]);
@@ -1355,21 +1361,15 @@ function MainLayoutContent() {
   }
 
   return (
-    <Box sx={{ display: 'flex' }}>
+    <Box sx={{ display: 'flex', minHeight: '100dvh' }}>
       <style>{`
-        /* Pas de "transform" ici (ni de will-change: transform) : un ancêtre
-           avec un transform actif devient le "containing block" des enfants
-           position: fixed (ex: les modales), qui ne se positionnent alors
-           plus par rapport à l'écran mais par rapport à ce conteneur — d'où
-           les modales tronquées en haut sur grand écran. On anime
-           uniquement l'opacité pour éviter ce piège. */
         @keyframes pageFadeIn {
-          from { opacity: 0; }
-          to   { opacity: 1; }
+          from { opacity: 0; transform: translateY(6px); }
+          to   { opacity: 1; transform: translateY(0); }
         }
         .page-transition {
           animation: pageFadeIn 0.15s ease-out both;
-          will-change: opacity;
+          will-change: opacity, transform;
         }
       `}</style>
       <NavigationMenu />

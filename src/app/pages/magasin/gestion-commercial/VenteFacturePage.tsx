@@ -1,6 +1,5 @@
 import { logger } from '../../../utils/logger';
 import { AddButton } from '../../../components/AddButton';
-import { ModalPortal } from '../../../components/ModalPortal';
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useParams } from 'react-router';
@@ -22,6 +21,7 @@ import { ajouterReglement, chargerReglements, chargerTousLesReglements, readRegl
 import { ajouterVente, chargerVentes as chargerVentesSupabase, subscriberVentesMagasin, readVentesCache, supprimerVente, mettreAJourVente, VenteSupabase } from '../../../services/ventesService';
 import { enregistrerVente } from '../../../services/inventaireService';
 import { verifierStockVente, messageRuptures } from '../../../utils/stockVente';
+import { StockParMagasin } from '../../../components/StockParMagasin';
 import { useLentillesOpticStock } from '../../../hooks/useLentillesOpticStock';
 import { collection, onSnapshot } from '../../../utils/firestoreCompat';
 import { db } from '../../../utils/firebaseClient';
@@ -274,18 +274,19 @@ async function telechargerFacturePDF(factureData: {
   doc.setFontSize(11);
   doc.text('Signature & Cachet', 150, ty, { align: 'center' });
 
-  // Le pied de page suit directement le contenu (au lieu d'être figé en bas
-  // de page), pour éviter le grand vide inesthétique sur les reçus courts.
   const e = getEntete(magasinId);
-  ty += 20;
   doc.setDrawColor(200);
   doc.setLineWidth(0.2);
-  doc.line(14, ty, 196, ty);
+  doc.line(14, 285, 196, 285);
   doc.setFontSize(8);
   doc.setTextColor(120);
-  doc.text(`${e.adresse} Téléphone: ${e.telephone} Email: ${e.email}`, 105, ty + 5, { align: 'center' });
+  doc.text(`${e.adresse} Téléphone: ${e.telephone} Email: ${e.email}`, 105, 290, { align: 'center' });
 
-  doc.save(`Facture_${factureData.numFacture}_${factureData.client}.pdf`);
+  doc.autoPrint();
+  const blobFacture = doc.output('blob');
+  const urlFacture = URL.createObjectURL(blobFacture);
+  const winFacture = window.open(urlFacture, '_blank');
+  if (winFacture) winFacture.onload = () => { winFacture.print(); winFacture.onafterprint = () => winFacture.close(); };
 }
 
 async function telechargerFactureExcel(factureData: {
@@ -566,7 +567,11 @@ async function telechargerFichePDF(vente: any, magasinId?: string) {
   doc.text('INDICATIONS SPÉCIALES:', 17, y + 9.5);
   doc.text(assurance ? assurance.toUpperCase() : '', 17, y + 16);
 
-  doc.save(`Fiche_${vente.numeroClient}_${vente.client}.pdf`);
+  doc.autoPrint();
+  const blobFiche = doc.output('blob');
+  const urlFiche = URL.createObjectURL(blobFiche);
+  const winFiche = window.open(urlFiche, '_blank');
+  if (winFiche) winFiche.onload = () => { winFiche.print(); winFiche.onafterprint = () => winFiche.close(); };
 }
 
 async function telechargerDossierClientPDF(vente: any, magasinId?: string) {
@@ -727,18 +732,19 @@ async function telechargerDossierClientPDF(vente: any, magasinId?: string) {
   doc.text(assurance ? assurance.toUpperCase() : '', 17, y + 17);
 
   // ── Pied de page (coordonnées direction) ───────────────────────────────────
-  // Suit le contenu au lieu d'être figé en bas de page (même correctif que
-  // pour la facture et le reçu de règlement).
-  y += 20;
   doc.setDrawColor(210);
   doc.setLineWidth(0.2);
-  doc.line(30, y, 180, y);
+  doc.line(30, 280, 180, 280);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
   doc.setTextColor(80);
-  doc.text(`${directionEntete.telephone} | ${directionEntete.email} | 8 Pool, R.point de la rivera Palmeraie`, 105, y + 6, { align: 'center' });
+  doc.text(`${directionEntete.telephone} | ${directionEntete.email} | 8 Pool, R.point de la rivera Palmeraie`, 105, 286, { align: 'center' });
 
-  doc.save(`Dossier_Client_${vente.numeroClient}_${vente.client}.pdf`);
+  doc.autoPrint();
+  const blobDossier = doc.output('blob');
+  const urlDossier = URL.createObjectURL(blobDossier);
+  const winDossier = window.open(urlDossier, '_blank');
+  if (winDossier) winDossier.onload = () => { winDossier.print(); winDossier.onafterprint = () => winDossier.close(); };
 }
 
 async function telechargerReglementPDF(reglement: any, vente: any, magasinId?: string) {
@@ -800,12 +806,7 @@ async function telechargerReglementPDF(reglement: any, vente: any, magasinId?: s
   doc.setTextColor(0);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9);
-  // Le titre s'adapte : "BON ASSURANCE" seulement s'il y a réellement un bon
-  // d'assurance sur cette vente, sinon "RÈGLEMENT" pour un versement classique.
-  const titreInfos = (Array.isArray(vente.bonsAssurance) && vente.bonsAssurance.length > 0)
-    ? 'INFORMATIONS BON ASSURANCE'
-    : 'INFORMATIONS RÈGLEMENT';
-  doc.text(titreInfos, 16, y + 5);
+  doc.text('INFORMATIONS BON ASSURANCE', 16, y + 5);
   doc.text('ÉDITÉ LE', 110, y + 5);
   doc.text('MONTANT', 194, y + 5, { align: 'right' });
   doc.setDrawColor(0);
@@ -905,19 +906,132 @@ async function telechargerReglementPDF(reglement: any, vente: any, magasinId?: s
   doc.setFontSize(11);
   doc.text('Signature & Cachet', 105, y, { align: 'center' });
 
-  // Pied de page (coordonnées magasin) : suit le contenu au lieu d'être
-  // figé en bas de page, pour un rendu compact identique quel que soit
-  // le nombre de lignes du reçu (versement simple ou bon d'assurance).
+  // Pied de page (coordonnées magasin)
   const e = getEntete(magasinId);
-  y += 20;
   doc.setDrawColor(0);
   doc.setLineWidth(0.3);
-  doc.line(14, y, 196, y);
+  doc.line(14, 285, 196, 285);
   doc.setFontSize(9);
   doc.setTextColor(60);
-  doc.text(`${e.adresse}  Téléphone: ${e.telephone}  Email: ${e.email}`, 105, y + 6, { align: 'center' });
+  doc.text(`${e.adresse}  Téléphone: ${e.telephone}  Email: ${e.email}`, 105, 291, { align: 'center' });
 
-  doc.save(`Reglement_${reglement.recu}_${vente.client}.pdf`);
+  doc.autoPrint();
+  const blobReg = doc.output('blob');
+  const urlReg = URL.createObjectURL(blobReg);
+  const winReg = window.open(urlReg, '_blank');
+  if (winReg) winReg.onload = () => { winReg.print(); winReg.onafterprint = () => winReg.close(); };
+}
+
+// ── BON DE BONNE EXÉCUTION – LUNETTES ───────────────────────────────────────
+async function telechargerBonExecutionPDF(vente: any, magasinId?: string) {
+  const [{ default: jsPDF }] = await Promise.all([import('jspdf')]);
+  const doc = new jsPDF({ format: 'a4' });
+  const e = getEntete(magasinId);
+  const nomClient = `${vente.civilite ? vente.civilite + ' ' : ''}${vente.client || ''}`.trim().toUpperCase();
+  const numFacture = vente.recap?.numFacture || '—';
+  const dateRetrait = vente.recap?.rdvRetrait || vente.recap?.dateRecuperation || '';
+  const dateStr = dateRetrait ? new Date(dateRetrait).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '-') : new Date().toLocaleDateString('fr-FR').replace(/\//g, '-');
+  const abidjanDate = (dateRetrait ? new Date(dateRetrait) : new Date()).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+
+  // ── En-tête enseigne ───────────────────────────────────────────────────────
+  let y = pdfHeader(doc, magasinId, { date: dateRetrait || new Date().toISOString() });
+
+  // ── Date ville ────────────────────────────────────────────────────────────
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(11);
+  doc.setTextColor(0);
+  doc.text(`Abidjan, Le ${abidjanDate}`, 14, y + 4);
+  y += 14;
+
+  // ── Cadre BON ─────────────────────────────────────────────────────────────
+  doc.setDrawColor(0);
+  doc.setLineWidth(0.5);
+  doc.rect(14, y, 182, 130);
+
+  // Titre
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(16);
+  doc.text('BON DE BONNE EXÉCUTION – LUNETTES', 105, y + 14, { align: 'center' });
+
+  // Ligne sous le titre
+  doc.setLineWidth(0.3);
+  doc.line(20, y + 18, 190, y + 18);
+
+  // Date
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.text(`Date: ${dateStr}`, 20, y + 28);
+  doc.line(20, y + 30, 190, y + 30);
+
+  // Facture N°
+  doc.text(`Facture N° ${numFacture}`, 20, y + 40);
+  doc.line(20, y + 42, 190, y + 42);
+
+  // Déclaration
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.text('Déclaration du client:', 20, y + 52);
+
+  // Ligne avec nom en gras
+  const intro = 'Je soussigné(e), ';
+  const clientBold = `${nomClient} (N° ${vente.numeroClient || '—'})`;
+  const suite = ' atteste avoir reçu ce jour mes lunettes en parfait état, conformes à la commande effectuée.';
+  const xIntro = 20;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  const wIntro = doc.getTextWidth(intro);
+  doc.text(intro, xIntro, y + 60);
+  doc.setFont('helvetica', 'bold');
+  doc.text(clientBold, xIntro + wIntro, y + 60);
+  doc.setFont('helvetica', 'normal');
+  // Suite sur la même ligne puis coupure auto
+  const fullSentence = intro + clientBold + suite;
+  const lines1 = doc.splitTextToSize(fullSentence, 168);
+  // On ré-imprime tout proprement (la gestion inline bold/normal n'est pas supportée en split)
+  doc.setFont('helvetica', 'normal');
+  doc.text(lines1, xIntro, y + 60);
+  // Souligne le nom dans la première ligne
+  doc.setFont('helvetica', 'bold');
+  const boldStart = xIntro + doc.getTextWidth(intro);
+  doc.text(clientBold, boldStart, y + 60);
+  doc.setFont('helvetica', 'normal');
+
+  const ligne2 = 'Après vérification, je confirme la conformité de la monture, des verres ainsi que les ajustements réalisés. Je suis pleinement satisfait(e) de la qualité du service ainsi que des conseils reçus.';
+  const lines2 = doc.splitTextToSize(ligne2, 168);
+  doc.text(lines2, 20, y + 72);
+
+  // Observations (gras + souligné)
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.text('Observations:', 20, y + 92);
+  const obsW = doc.getTextWidth('Observations:');
+  doc.line(20, y + 93, 20 + obsW, y + 93);
+  doc.setFont('helvetica', 'normal');
+  const obsText = '* Le client a été informé des recommandations d\'entretien et d\'utilisation de ses lunettes.';
+  const linesObs = doc.splitTextToSize(obsText, 168);
+  doc.text(linesObs, 20, y + 99);
+
+  // Zone signature
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.text('Client Signature', 160, y + 118, { align: 'center' });
+
+  y += 138;
+
+  // ── Pied de page ──────────────────────────────────────────────────────────
+  doc.setDrawColor(200);
+  doc.setLineWidth(0.2);
+  doc.line(14, 282, 196, 282);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(80);
+  doc.text(`${e.telephone} | ${e.email} | ${e.adresse}`, 105, 287, { align: 'center' });
+
+  doc.autoPrint();
+  const blobBon = doc.output('blob');
+  const urlBon = URL.createObjectURL(blobBon);
+  const winBon = window.open(urlBon, '_blank');
+  if (winBon) winBon.onload = () => { winBon.print(); winBon.onafterprint = () => winBon.close(); };
 }
 
 function imprimerReglement(reglement: any, vente: any, magasinId?: string) {
@@ -925,8 +1039,7 @@ function imprimerReglement(reglement: any, vente: any, magasinId?: string) {
     const dt = d ? new Date(d) : new Date();
     return `${dt.toLocaleDateString('fr-FR')} ${dt.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
   };
-  // Remplace l'espace insécable du locale fr-FR pour éviter l'affichage comme barre.
-  const fmtF = (n: number) => { const v = Math.round((Number(n) || 0) * 100) / 100; const [int, dec] = v.toFixed(2).split('.'); return int.replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ',' + dec; };
+  const fmtF = (n: number) => { const v = Math.round((Number(n) || 0) * 100) / 100; const [int, dec] = v.toFixed(2).split('.'); return int.replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + '.' + dec; };
   const editePar = reglement.editePar || (vente as any).createdBy || 'LOUISE MARLÈNE';
   const dateReg = reglement.date || new Date().toISOString();
 
@@ -935,41 +1048,34 @@ function imprimerReglement(reglement: any, vente: any, magasinId?: string) {
   const remisePct = parseFloat(vente.recap?.remisePct) || 0;
   const totalBrut = remisePct > 0 ? Math.round(totalNet / (1 - remisePct / 100)) : totalNet;
   const remiseMontant = totalBrut - totalNet;
-  // `acompte` = montant du VERSEMENT courant (affiché dans la ligne jaune + en
-  // lettres). `totalPaye` = cumul déjà réglé (versement courant inclus) : il
-  // alimente la ligne ACOMPTE et le TOTAL RESTE, afin que le reçu se mette à jour
-  // quand le client revient solder (reste = net − cumul payé).
   const acompte = Number(reglement.montant) || 0;
   const totalPaye = reglement.totalPaye != null ? Number(reglement.totalPaye) : acompte;
-  // Retrait de la prise en charge assurance (comme sur la facture) pour que le
-  // reçu se solde correctement : reste = net − assurance − cumul payé.
   const totalAssurance = Array.isArray(vente.bonsAssurance)
     ? vente.bonsAssurance.reduce((s: number, b: any) => s + (Number(b.montantPrisEnCharge) || 0), 0)
     : 0;
   const reste = totalNet - totalAssurance - totalPaye;
 
-  // Lignes « bon assurance » (jaune) — sinon la ligne du versement
+  // Lignes de paiement (4 colonnes : MODE | DÉTAILS | ÉDITÉ LE | MONTANT)
+  const tdY = 'padding:10px 8px;vertical-align:top;word-break:break-word;';
   const bons: any[] = Array.isArray(vente.bonsAssurance) ? vente.bonsAssurance : [];
   const lignesInfos = bons.length > 0
     ? bons.map((b: any) => `
       <tr style="background:#ffff00;">
-        <td style="padding:10px 8px;vertical-align:top;word-break:break-word;">Bon Assurance N° ${b.numeroBon || '—'} ${b.assurance || ''}<br/>${b.date ? new Date(b.date).toLocaleDateString('fr-FR') : new Date(dateReg).toLocaleDateString('fr-FR')}</td>
-        <td style="padding:10px 8px;vertical-align:top;word-break:break-word;">${fmtDateTime(dateReg)}<br/>Édité par: ${editePar}</td>
-        <td style="padding:10px 8px;vertical-align:top;text-align:right;white-space:nowrap;">${fmtF(b.montantPrisEnCharge || acompte)} F CFA</td>
+        <td style="${tdY}">${b.assurance || 'Bon Assurance'}</td>
+        <td style="${tdY}">N° ${b.numeroBon || '—'}<br/>${b.date ? new Date(b.date).toLocaleDateString('fr-FR') : new Date(dateReg).toLocaleDateString('fr-FR')}</td>
+        <td style="${tdY}">${fmtDateTime(dateReg)}<br/>Édité par: ${editePar}</td>
+        <td style="${tdY}text-align:right;white-space:nowrap;">${fmtF(b.montantPrisEnCharge || acompte)} F CFA</td>
       </tr>`).join('')
     : `
       <tr style="background:#ffff00;">
-        <td style="padding:10px 8px;vertical-align:top;word-break:break-word;">Versement N° ${reglement.recu || '—'}<br/>${reglement.modePaiement || ''} ${reglement.compteBanque ? '— ' + reglement.compteBanque : ''}</td>
-        <td style="padding:10px 8px;vertical-align:top;word-break:break-word;">${fmtDateTime(dateReg)}<br/>Édité par: ${editePar}</td>
-        <td style="padding:10px 8px;vertical-align:top;text-align:right;white-space:nowrap;">${fmtF(acompte)} F CFA</td>
+        <td style="${tdY}">${reglement.modePaiement || '—'}</td>
+        <td style="${tdY}">Versement N° ${reglement.recu || '—'}${reglement.compteBanque ? '<br/>' + reglement.compteBanque : ''}</td>
+        <td style="${tdY}">${fmtDateTime(dateReg)}<br/>Édité par: ${editePar}</td>
+        <td style="${tdY}text-align:right;white-space:nowrap;">${fmtF(acompte)} F CFA</td>
       </tr>`;
 
   const qrData = encodeURIComponent(`${TENANT.nom}|Facture:${vente.recap?.numFacture || ''}|Recu:${reglement.recu || ''}|Client:${vente.numeroClient || ''}|Montant:${acompte}`);
   const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=130x130&margin=0&data=${qrData}`;
-
-  // Même règle que sur le PDF direct : "BON ASSURANCE" seulement s'il y a
-  // réellement un bon d'assurance, sinon "RÈGLEMENT" pour un versement classique.
-  const titreInfos = bons.length > 0 ? 'INFORMATIONS BON ASSURANCE' : 'INFORMATIONS RÈGLEMENT';
 
   const totLine = (label: string, val: string, shaded: boolean) => `
     <tr${shaded ? ' style="background:#e5e5e5;"' : ''}>
@@ -985,76 +1091,90 @@ function imprimerReglement(reglement: any, vente: any, magasinId?: string) {
   <meta charset="UTF-8"/>
   <title>Reçu N° ${reglement.recu || ''}</title>
   <style>
-    * { margin:0; padding:0; box-sizing:border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-    html, body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-    body { font-family: Arial, Helvetica, sans-serif; font-size:13px; color:#111; padding:28px; }
-    @media print { body { padding:12px; } .no-print { display:none; } }
+    * { margin:0; padding:0; box-sizing:border-box; -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
+    html, body { -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
+    /* Supprime les entêtes/pieds ajoutés par le navigateur (date, titre, n° page) */
+    @page { margin:0; size:A4; }
+    body {
+      font-family:Arial,Helvetica,sans-serif; font-size:13px; color:#111;
+      padding:18mm 16mm 14mm 16mm;
+    }
+    /* Cache le contenu à l'écran — seule la boîte de dialogue d'impression s'ouvre */
+    @media screen { body { visibility:hidden; } }
+    @media print  { body { visibility:visible; } }
     table { border-collapse:collapse; }
   </style>
+  <script>
+    window.addEventListener('load', function() {
+      window.print();
+      window.onafterprint = function() { window.close(); };
+    });
+  </script>
 </head>
 <body>
-  <button class="no-print" onclick="window.print()" style="position:fixed;top:16px;right:16px;background:#111;color:#fff;border:none;padding:10px 18px;border-radius:6px;cursor:pointer;font-weight:700;">🖨️ Imprimer</button>
-
   ${printHeaderHTML(magasinId || '', { date: dateReg })}
 
-  <!-- Bloc client -->
-  <div style="background:#e9e9e9;padding:16px 18px;display:flex;justify-content:space-between;align-items:flex-start;">
-    <div style="line-height:1.6;">
-      <div style="font-weight:700;font-size:15px;">(N° ${vente.numeroClient || '—'}) ${vente.client || ''}</div>
-      <div style="margin-top:6px;">Téléphone: ${vente.telephone || ''}</div>
-      <div>Email: ${(vente.clientInfo && vente.clientInfo.email) || ''}</div>
+    <!-- Bloc client -->
+    <div style="background:#e9e9e9;padding:16px 18px;display:flex;justify-content:space-between;align-items:flex-start;">
+      <div style="line-height:1.6;">
+        <div style="font-weight:700;font-size:15px;">(N° ${vente.numeroClient || '—'}) ${vente.client || ''}</div>
+        <div style="margin-top:6px;">Téléphone: ${vente.telephone || ''}</div>
+        <div>Email: ${(vente.clientInfo && vente.clientInfo.email) || ''}</div>
+      </div>
+      <div style="text-align:right;line-height:1.6;">
+        <div style="font-weight:700;">Édité par: ${editePar}</div>
+        <div>Édité le, ${fmtDateTime(dateReg)}</div>
+        <div style="font-weight:700;font-size:15px;">FACTURE N°${vente.recap?.numFacture || '—'} | N° REÇU: ${reglement.recu || '—'}</div>
+      </div>
     </div>
-    <div style="text-align:right;line-height:1.6;">
-      <div style="font-weight:700;">Édité par: ${editePar}</div>
-      <div>Édité le, ${fmtDateTime(dateReg)}</div>
-      <div style="font-weight:700;font-size:15px;">FACTURE N°${vente.recap?.numFacture || '—'} | N° REÇU: ${reglement.recu || '—'}</div>
+
+    <!-- Tableau infos / montant (4 colonnes) -->
+    <table style="width:100%;margin-top:2px;table-layout:fixed;">
+      <colgroup>
+        <col style="width:18%"/>
+        <col style="width:30%"/>
+        <col style="width:36%"/>
+        <col style="width:16%"/>
+      </colgroup>
+      <thead>
+        <tr style="font-weight:700;border-bottom:2px solid #111;">
+          <td style="padding:8px;overflow:hidden;">MODE DE PAIEMENT</td>
+          <td style="padding:8px;overflow:hidden;">DÉTAILS</td>
+          <td style="padding:8px;overflow:hidden;">ÉDITÉ LE</td>
+          <td style="padding:8px;text-align:right;overflow:hidden;">MONTANT</td>
+        </tr>
+      </thead>
+      <tbody>${lignesInfos}</tbody>
+    </table>
+
+    <!-- Bloc sombre versement + QR -->
+    <div style="background:#2b3441;color:#fff;padding:22px 18px;display:flex;justify-content:space-between;align-items:center;gap:20px;">
+      <div style="font-size:15px;max-width:560px;">ARRÊTÉ LE PRÉSENT VERSEMENT À LA SOMME DE:<b> ${montantEnLettres(acompte)}</b></div>
+      <div style="display:flex;align-items:center;gap:12px;">
+        <img src="${qrUrl}" alt="QR" style="width:100px;height:100px;background:#fff;padding:6px;border-radius:6px;" />
+        <div style="font-size:13px;line-height:1.4;">Scanner et Accéder<br/>à votre espace<br/>Client.</div>
+      </div>
     </div>
-  </div>
 
-  <!-- Tableau infos / montant -->
-  <table style="width:100%;margin-top:2px;table-layout:fixed;">
-    <colgroup>
-      <col style="width:52%"/>
-      <col style="width:28%"/>
-      <col style="width:20%"/>
-    </colgroup>
-    <thead>
-      <tr style="font-weight:700;border-bottom:2px solid #111;">
-        <td style="padding:8px;overflow:hidden;">${titreInfos}</td>
-        <td style="padding:8px;overflow:hidden;">ÉDITÉ LE</td>
-        <td style="padding:8px;text-align:right;overflow:hidden;">MONTANT</td>
-      </tr>
-    </thead>
-    <tbody>${lignesInfos}</tbody>
-  </table>
+    <!-- Totaux (bloc aligné à droite) -->
+    <table style="margin-top:26px;margin-left:auto;width:360px;">
+      <tbody>
+        ${totLine('TOTAL', fmtF(totalBrut) + ' F CFA', true)}
+        ${totLine(`REMISE(${remisePct}%)`, fmtF(remiseMontant) + ' F CFA', false)}
+        ${totLine('TOTAL NET', fmtF(totalNet) + ' F CFA', true)}
+        ${totalAssurance > 0 ? totLine('PRISE EN CHARGE', fmtF(totalAssurance) + ' F CFA', false) : ''}
+        ${totLine('ACOMPTE', fmtF(totalPaye) + ' F CFA', false)}
+        ${totLine('TOTAL RESTE', `<span style="color:${reste > 0 ? '#c62828' : '#2e7d32'};">${fmtF(reste)} F CFA</span>`, true)}
+      </tbody>
+    </table>
+    ${reste <= 0 ? `<div style="margin-top:8px;width:360px;margin-left:auto;text-align:right;"><span style="display:inline-block;padding:4px 14px;border-radius:14px;background:#43a047;color:#fff;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">✓ Soldée</span></div>` : ''}
 
-  <!-- Bloc sombre versement + QR -->
-  <div style="background:#2b3441;color:#fff;padding:22px 18px;display:flex;justify-content:space-between;align-items:center;gap:20px;">
-    <div style="font-size:15px;max-width:560px;">ARRÊTÉ LE PRÉSENT VERSEMENT À LA SOMME DE:<b> ${montantEnLettres(acompte)}</b></div>
-    <div style="display:flex;align-items:center;gap:12px;">
-      <img src="${qrUrl}" alt="QR" style="width:100px;height:100px;background:#fff;padding:6px;border-radius:6px;" />
-      <div style="font-size:13px;line-height:1.4;">Scanner et Accéder<br/>à votre espace<br/>Client.</div>
+  <!-- Signature + footer juste après le contenu -->
+  <div style="margin-top:32px;">
+    <div style="text-align:center;margin-bottom:32px;color:#111;">Signature &amp; Cachet</div>
+    <div style="border-top:1px solid #111;padding-top:10px;text-align:center;font-size:11px;color:#111;">
+      ${e.adresse} Téléphone: ${e.telephone} Email: ${e.email}
     </div>
-  </div>
-
-  <!-- Totaux (bloc aligné à droite) -->
-  <table style="margin-top:26px;margin-left:auto;width:360px;">
-    <tbody>
-      ${totLine('TOTAL', fmtF(totalBrut) + ' F CFA', true)}
-      ${totLine(`REMISE(${remisePct}%)`, fmtF(remiseMontant) + ' F CFA', false)}
-      ${totLine('TOTAL NET', fmtF(totalNet) + ' F CFA', true)}
-      ${totalAssurance > 0 ? totLine('PRISE EN CHARGE', fmtF(totalAssurance) + ' F CFA', false) : ''}
-      ${totLine('ACOMPTE', fmtF(totalPaye) + ' F CFA', false)}
-      ${totLine('TOTAL RESTE', `<span style="color:${reste > 0 ? '#c62828' : '#2e7d32'};">${fmtF(reste)} F CFA</span>`, true)}
-    </tbody>
-  </table>
-  ${reste <= 0 ? `<div style="margin-top:8px;width:360px;margin-left:auto;text-align:right;"><span style="display:inline-block;padding:4px 14px;border-radius:14px;background:#43a047;color:#fff;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">✓ Soldée</span></div>` : ''}
-
-  <div style="text-align:center;margin-top:40px;color:#111;">Signature &amp; Cachet</div>
-
-  <!-- Pied de page -->
-  <div style="margin-top:24px;border-top:1px solid #111;padding-top:14px;text-align:center;font-size:12px;color:#111;">
-    ${e.adresse} Téléphone: ${e.telephone} Email: ${e.email}
   </div>
 </body>
 </html>`;
@@ -1063,7 +1183,6 @@ function imprimerReglement(reglement: any, vente: any, magasinId?: string) {
   if (!win) return;
   win.document.write(html);
   win.document.close();
-  win.onload = () => win.print();
 }
 
 // ── Auto-ID generators ───────────────────────────────────────────────────────
@@ -1247,17 +1366,10 @@ function StepI({ data, onChange, magasinId }: { data: ClientInfo; onChange: (d: 
       </div>
       <div>
         <Lbl>Civilité</Lbl>
-        <input
-          list="civilite-options"
-          className={iCls}
-          placeholder="Civilité..."
-          value={data.civilite}
-          onChange={set('civilite')}
-          autoComplete="off"
-        />
-        <datalist id="civilite-options">
-          <option value="M." /><option value="Mme" /><option value="Mlle" /><option value="Dr" />
-        </datalist>
+        <select className={selCls} value={data.civilite} onChange={set('civilite')}>
+          <option value="">C...</option>
+          <option>M.</option><option>Mme</option><option>Mlle</option><option>Dr</option>
+        </select>
       </div>
       <div className="relative" ref={clientBoxRef}>
         <ReqLbl>Nom & Prénoms Client</ReqLbl>
@@ -1816,7 +1928,6 @@ function StepII({ data, onChange, client, magasinId }: {
 
       {/* Modale : anciennes ordonnances du client */}
       {showOrdo && (
-        <ModalPortal>
         <div
           className="fixed inset-0 z-[1000] flex items-center justify-center p-4"
           style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
@@ -1873,7 +1984,6 @@ function StepII({ data, onChange, client, magasinId }: {
             </div>
           </div>
         </div>
-        </ModalPortal>
       )}
     </div>
   );
@@ -2071,6 +2181,11 @@ function StepIII({
           </tbody>
         </table>
       </div>
+
+      {/* Stock réel de CHAQUE magasin pour les articles saisis : si le magasin
+          vendeur est en rupture, le vendeur voit où l'article est disponible et
+          peut demander un transfert plutôt que de perdre la vente. */}
+      <StockParMagasin lignes={articles} products={products} magasinId={magasinId} />
 
       <datalist id="produits-datalist">
         {allOptions.map((opt, i) => <option key={i} value={opt} />)}
@@ -2300,15 +2415,14 @@ function imprimerFacture(f: FactureData, magasinId?: string) {
   <meta charset="UTF-8"/>
   <title>Facture ${f.numFacture || 'N/A'} — ${TENANT.nomComplet}</title>
   <style>
-    * { margin:0; padding:0; box-sizing:border-box; }
-    body { font-family: Arial, sans-serif; font-size: 13px; color: #222; padding: 30px; }
-    @media print { body { padding: 15px; } .no-print { display: none; } }
-    .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 30px; border-bottom: 3px solid #1a7a96; padding-bottom: 20px; }
-    .logo-box { background: #1a7a96; color: white; font-weight: 900; font-size: 22px; padding: 12px 18px; border-radius: 8px; letter-spacing: 1px; }
-    .logo-sub { font-size: 10px; font-weight: 400; letter-spacing: 3px; opacity: 0.85; }
-    .company-info { text-align: right; font-size: 11px; color: #555; line-height: 1.7; }
-    .facture-title { font-size: 20px; font-weight: 700; color: #1a7a96; margin-bottom: 4px; }
-    .badge { display: inline-block; background: #e3f2fd; color: #1a7a96; border-radius: 4px; padding: 2px 10px; font-size: 12px; font-weight: 600; }
+    * { margin:0; padding:0; box-sizing:border-box; -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
+    @page { margin:0; size:A4; }
+    body {
+      font-family: Arial, sans-serif; font-size: 13px; color: #222;
+      padding: 18mm 16mm 14mm 16mm;
+    }
+    @media screen { body { visibility: hidden; } }
+    @media print  { body { visibility: visible; } }
     .section { margin-bottom: 20px; }
     .section-title { font-size: 11px; font-weight: 700; color: #1a7a96; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; border-left: 3px solid #1a7a96; padding-left: 8px; }
     .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 20px; font-size: 12px; }
@@ -2321,101 +2435,82 @@ function imprimerFacture(f: FactureData, magasinId?: string) {
     thead th.right { text-align: right; }
     thead th.center { text-align: center; }
     .totaux { margin-top: 16px; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; font-size: 13px; }
-    .totaux-row { display: flex; justify-content: space-between; width: 280px; }
+    .totaux-row { display: flex; justify-content: space-between; width: 300px; }
     .totaux-row.net { font-size: 15px; font-weight: 700; border-top: 2px solid #1a7a96; padding-top: 6px; margin-top: 4px; }
     .totaux-row.reste { font-size: 14px; font-weight: 700; color: ${reste > 0 ? '#c62828' : '#2e7d32'}; }
-    .footer { margin-top: 40px; padding-top: 16px; border-top: 1px solid #e0e0e0; font-size: 11px; color: #888; display: flex; justify-content: space-between; }
     .signature-box { border: 1px dashed #ccc; width: 180px; height: 60px; display: flex; align-items: center; justify-content: center; color: #bbb; font-size: 11px; border-radius: 4px; }
-    .print-btn { position: fixed; top: 20px; right: 20px; background: #1a7a96; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 600; }
   </style>
+  <script>
+    window.addEventListener('load', function() {
+      window.print();
+      window.onafterprint = function() { window.close(); };
+    });
+  </script>
 </head>
 <body>
-  <button class="no-print print-btn" onclick="window.print()">🖨️ Imprimer</button>
-
-  <!-- EN-TÊTE PARTAGÉ (style reçu image) -->
   ${printHeaderHTML(magasinId || '', { date: f.date })}
-  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;">
-    <div class="facture-title">FACTURE</div>
-    <div class="company-info">
-      <div class="badge">N° ${f.numFacture || 'N/A'}</div>
-      <div style="margin-top:8px;">Date : <strong>${fmt(f.date)}</strong></div>
-      <div>N° Client : <strong>${f.numeroClient}</strong></div>
-      <div style="margin-top:6px;">Édité par : <strong>${editePar}</strong></div>
-      <div>Le : <strong>${fmtDateHeure(f.dateEdition || f.date)}</strong></div>
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;">
+      <div style="font-size:20px;font-weight:700;color:#1a7a96;">FACTURE</div>
+      <div style="text-align:right;font-size:12px;line-height:1.7;">
+        <div style="display:inline-block;background:#e3f2fd;color:#1a7a96;border-radius:4px;padding:2px 10px;font-size:12px;font-weight:600;">N° ${f.numFacture || 'N/A'}</div>
+        <div style="margin-top:6px;">Date : <strong>${fmt(f.date)}</strong></div>
+        <div>N° Client : <strong>${f.numeroClient}</strong></div>
+        <div style="margin-top:4px;">Édité par : <strong>${editePar}</strong></div>
+        <div>Le : <strong>${fmtDateHeure(f.dateEdition || f.date)}</strong></div>
+      </div>
     </div>
-  </div>
 
-  <!-- INFOS CLIENT -->
-  <div class="section">
-    <div class="section-title">Informations Client</div>
-    <div class="info-grid">
-      <div class="info-row"><span class="info-label">Nom :</span><span class="info-val">${f.client || '—'}</span></div>
-      <div class="info-row"><span class="info-label">Téléphone :</span><span class="info-val">${f.telephone || '—'}</span></div>
-      <div class="info-row"><span class="info-label">Date facture :</span><span class="info-val">${fmt(f.date)}</span></div>
-      <div class="info-row"><span class="info-label">RDV Retrait :</span><span class="info-val">${f.rdvRetrait ? fmt(f.rdvRetrait) : '—'}</span></div>
-      <div class="info-row"><span class="info-label">Mode paiement :</span><span class="info-val">${f.modePaiement || '—'}</span></div>
+    <!-- INFOS CLIENT -->
+    <div class="section">
+      <div class="section-title">Informations Client</div>
+      <div class="info-grid">
+        <div class="info-row"><span class="info-label">Nom :</span><span class="info-val">${f.client || '—'}</span></div>
+        <div class="info-row"><span class="info-label">Téléphone :</span><span class="info-val">${f.telephone || '—'}</span></div>
+        <div class="info-row"><span class="info-label">Date facture :</span><span class="info-val">${fmt(f.date)}</span></div>
+        <div class="info-row"><span class="info-label">RDV Retrait :</span><span class="info-val">${f.rdvRetrait ? fmt(f.rdvRetrait) : '—'}</span></div>
+        <div class="info-row"><span class="info-label">Mode paiement :</span><span class="info-val">${f.modePaiement || '—'}</span></div>
+      </div>
     </div>
-  </div>
 
-  <!-- VERRES (si le client prend des verres) -->
-  ${hasVerres ? `
-  <div class="section">
-    <div class="section-title">Verres</div>
-    ${verresHTML}
-  </div>` : ''}
+    ${hasVerres ? `<div class="section"><div class="section-title">Verres</div>${verresHTML}</div>` : ''}
 
-  <!-- MONTURES / ARTICLES (si le client prend une monture ou un article) -->
-  ${hasMontures ? `
-  <div class="section">
-    <div class="section-title">Montures &amp; Articles</div>
-    <table>
-      <thead>
-        <tr>
-          <th>Désignation</th>
-          <th class="center">Code Barre</th>
-          <th class="center">Qté</th>
-          <th class="right">Prix Unit.</th>
-          <th class="center">Remise</th>
-          <th class="right">Total</th>
-        </tr>
-      </thead>
-      <tbody>${lignesArticles}</tbody>
-    </table>
-  </div>` : ''}
+    ${hasMontures ? `
+    <div class="section">
+      <div class="section-title">Montures &amp; Articles</div>
+      <table>
+        <thead><tr>
+          <th>Désignation</th><th class="center">Code Barre</th><th class="center">Qté</th>
+          <th class="right">Prix Unit.</th><th class="center">Remise</th><th class="right">Total</th>
+        </tr></thead>
+        <tbody>${lignesArticles}</tbody>
+      </table>
+    </div>` : ''}
 
-  ${!hasVerres && !hasMontures ? '<div class="section"><p style="color:#999;">Aucun article</p></div>' : ''}
+    ${!hasVerres && !hasMontures ? '<div class="section"><p style="color:#999;">Aucun article</p></div>' : ''}
 
-  <!-- BONS ASSURANCE -->
-  <div class="section">
-    <div class="section-title">Bons d'Assurance</div>
-    ${lignesBons}
-  </div>
+    <div class="section"><div class="section-title">Bons d\'Assurance</div>${lignesBons}</div>
 
-  <!-- TOTAUX -->
-  <div class="totaux">
-    <div class="totaux-row"><span>TOTAL :</span><span>${totalBrut.toLocaleString('fr-FR')} F CFA</span></div>
-    ${remiseMontant > 0 ? `<div class="totaux-row"><span>REMISE (${remisePct}%) :</span><span>- ${remiseMontant.toLocaleString('fr-FR')} F CFA</span></div>` : ''}
-    <div class="totaux-row net"><span>TOTAL NET :</span><span>${f.totalNet.toLocaleString('fr-FR')} F CFA</span></div>
-    ${totalAssurance > 0 ? `<div class="totaux-row" style="color:#2e7d32"><span>Prise en charge assurance :</span><span>- ${totalAssurance.toLocaleString('fr-FR')} F CFA</span></div>` : ''}
-    ${acompte > 0 ? `<div class="totaux-row"><span>ACOMPTE :</span><span>- ${acompte.toLocaleString('fr-FR')} F CFA</span></div>` : ''}
-    <div class="totaux-row reste"><span>TOTAL RESTE :</span><span>${reste.toLocaleString('fr-FR')} F CFA</span></div>
-    ${reste <= 0 ? `<div style="margin-top:8px;text-align:right;"><span style="display:inline-block;padding:4px 14px;border-radius:14px;background:#43a047;color:#fff;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">✓ Soldée</span></div>` : ''}
-  </div>
+    <!-- TOTAUX -->
+    <div class="totaux">
+      <div class="totaux-row"><span>TOTAL :</span><span>${totalBrut.toLocaleString('fr-FR')} F CFA</span></div>
+      ${remiseMontant > 0 ? `<div class="totaux-row"><span>REMISE (${remisePct}%) :</span><span>- ${remiseMontant.toLocaleString('fr-FR')} F CFA</span></div>` : ''}
+      <div class="totaux-row net"><span>TOTAL NET :</span><span>${f.totalNet.toLocaleString('fr-FR')} F CFA</span></div>
+      ${totalAssurance > 0 ? `<div class="totaux-row" style="color:#2e7d32"><span>Prise en charge :</span><span>- ${totalAssurance.toLocaleString('fr-FR')} F CFA</span></div>` : ''}
+      ${acompte > 0 ? `<div class="totaux-row"><span>ACOMPTE :</span><span>- ${acompte.toLocaleString('fr-FR')} F CFA</span></div>` : ''}
+      <div class="totaux-row reste"><span>TOTAL RESTE :</span><span>${reste.toLocaleString('fr-FR')} F CFA</span></div>
+      ${reste <= 0 ? `<div style="margin-top:8px;text-align:right;"><span style="display:inline-block;padding:4px 14px;border-radius:14px;background:#43a047;color:#fff;font-size:12px;font-weight:700;letter-spacing:0.5px;">✓ Soldée</span></div>` : ''}
+    </div>
 
-  <!-- MONTANT EN TOUTES LETTRES -->
-  <div style="margin-top:16px;font-size:12px;font-weight:600;text-transform:uppercase;">
-    Arrêté la présente facture à la somme de : ${montantEnLettres(f.totalNet)}
-  </div>
+    <div style="margin-top:16px;font-size:12px;font-weight:600;text-transform:uppercase;">
+      Arrêté la présente facture à la somme de : ${montantEnLettres(f.totalNet)}
+    </div>
 
-  <!-- PIED DE PAGE -->
-  <div class="footer">
-    <div>
+  <!-- Signature + footer juste après le contenu -->
+  <div style="margin-top:32px;">
+    <div style="text-align:center;margin-bottom:28px;color:#111;">Signature &amp; Cachet</div>
+    <div style="border-top:1px solid #ccc;padding-top:10px;font-size:11px;color:#888;display:flex;justify-content:space-between;">
       <div>Merci de votre confiance.</div>
-      <div style="margin-top:4px;">${TENANT.nomComplet} — Abidjan, Côte d'Ivoire</div>
-    </div>
-    <div style="text-align:center;">
-      <div class="signature-box">Signature & Cachet</div>
-      <div style="margin-top:4px;">Gérant / Responsable</div>
+      <div>${TENANT.nomComplet} — Abidjan, Côte d'Ivoire</div>
     </div>
   </div>
 </body>
@@ -2425,7 +2520,6 @@ function imprimerFacture(f: FactureData, magasinId?: string) {
   if (!win) return;
   win.document.write(html);
   win.document.close();
-  win.onload = () => win.print();
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -2466,7 +2560,6 @@ function ModalBonAssurance({
   };
 
   return (
-    <ModalPortal>
     <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}>
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden">
         {/* Header */}
@@ -2516,7 +2609,6 @@ function ModalBonAssurance({
         </div>
       </div>
     </div>
-    </ModalPortal>
   );
 }
 
@@ -2528,7 +2620,6 @@ function ModalSucces({ numFacture, numClient, total, onClose, onNouvelle, onImpr
   numFacture: string; numClient: string; total: string; onClose: () => void; onNouvelle: () => void; onImprimer: () => void;
 }) {
   return (
-    <ModalPortal>
     <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}>
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden text-center">
         <div className="px-8 py-10 flex flex-col items-center gap-4">
@@ -2562,7 +2653,6 @@ function ModalSucces({ numFacture, numClient, total, onClose, onNouvelle, onImpr
         </div>
       </div>
     </div>
-    </ModalPortal>
   );
 }
 
@@ -2928,7 +3018,6 @@ function CommandeVerreModal({
   ];
 
   return (
-    <ModalPortal>
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl max-h-[92vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-6 py-3 rounded-t-xl" style={{ backgroundColor: '#1a7a96' }}>
@@ -3095,7 +3184,6 @@ function CommandeVerreModal({
         </div>
       </div>
     </div>
-    </ModalPortal>
   );
 }
 
@@ -3121,9 +3209,9 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
   // La commande de verre est réservée aux opticiens, directeurs, comptables et
   // administrateurs — masquée pour les conseillères (et autres rôles).
   const peutCommanderVerre = ['super_admin', 'admin', 'administrateur', 'directeur', 'comptable', 'opticien'].includes(user?.role || '');
-  // Le règlement (encaissement) dans le détail de vente est accessible aux
-  // conseillères, opticiens, directeurs, comptables et administrateurs.
-  const peutReglement = ['super_admin', 'admin', 'administrateur', 'directeur', 'comptable', 'opticien', 'conseillere'].includes(user?.role || '');
+  // Le règlement (encaissement) dans le détail de vente est réservé aux opticiens,
+  // directeurs, comptables et administrateurs — la conseillère n'y a PAS accès.
+  const peutReglement = ['super_admin', 'admin', 'administrateur', 'directeur', 'comptable', 'opticien'].includes(user?.role || '');
   const { magasinId = '' } = useParams<{ magasinId: string }>();
   const [searchFacture, setSearchFacture] = useState('');
   const [searchClient, setSearchClient] = useState('');
@@ -3188,10 +3276,32 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
     details: ''
   });
 
+  // RDV / livraison — état local synchronisé à l'ouverture du détail
+  const [rdvLocal, setRdvLocal] = useState('');
+  const [dateRecupLocal, setDateRecupLocal] = useState('');
+  const [bonLivraisonFile, setBonLivraisonFile] = useState<File | null>(null);
+  const [rdvSaving, setRdvSaving] = useState(false);
+
+  // Observation — édition inline
+  const [editingObs, setEditingObs] = useState(false);
+  const [obsLocal, setObsLocal] = useState('');
+
+  // Service Après-Vente modal
+  const [showSAV, setShowSAV] = useState(false);
+  const [savEdition, setSavEdition] = useState(() => new Date().toISOString().split('T')[0]);
+  const [savRecuperation, setSavRecuperation] = useState('');
+  const [savEquipements, setSavEquipements] = useState<{ id: string; equipement: string; pannes: string[]; commentaire: string; showPanneInput: boolean; panneInput: string }[]>([]);
+  const [savRecords, setSavRecords] = useState<{ reference: string; details: string; date: string }[]>([]);
+
   // Réinitialiser viewMode quand on change de détail
   useEffect(() => {
     if (detail) {
       setViewMode('details');
+      setRdvLocal(detail.recap?.rdvRetrait || '');
+      setDateRecupLocal((detail.recap as any)?.dateRecuperation || '');
+      setEditingObs(false);
+      setObsLocal(detail.observation || '');
+      setSavRecords((detail.recap as any)?.savRecords || []);
     }
   }, [detail?.id]);
 
@@ -3366,7 +3476,6 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
     <>
       {/* Modal Ajouter Règlement */}
       {showAjouterReglement && detail && (
-        <ModalPortal>
         <div className="fixed inset-0 z-[60] flex items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
           <div className="bg-white rounded-lg shadow-2xl w-full max-w-4xl mx-4 overflow-hidden">
             <div className="flex items-center justify-between px-6 py-3 bg-gray-100 border-b border-gray-300">
@@ -3475,12 +3584,10 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
             </div>
           </div>
         </div>
-        </ModalPortal>
       )}
 
       {/* Modal Bon Assurance (sur page règlements) */}
       {showBonAssuranceReglement && detail && (
-        <ModalPortal>
         <div className="fixed inset-0 z-[60] flex items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
           <div className="bg-white rounded-lg shadow-2xl w-full max-w-4xl mx-4 overflow-hidden">
             <div className="flex items-center justify-between px-6 py-3 bg-gray-100 border-b border-gray-300">
@@ -3571,14 +3678,12 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
             />
           )}
         </div>
-        </ModalPortal>
       )}
 
       {/* Détail modal */}
       {detail && (
-        <ModalPortal>
-        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}>
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-7xl mx-4 overflow-hidden max-h-[90vh] flex flex-col">
+        <div className="fixed inset-0 z-50 flex items-start md:items-center justify-center overflow-y-auto" style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}>
+          <div className="bg-white md:rounded-xl shadow-2xl w-full md:max-w-7xl md:mx-4 overflow-hidden min-h-screen md:min-h-0 md:max-h-[90vh] flex flex-col">
             {/* Header */}
             <div className="flex items-center justify-between px-6 py-3 bg-gray-100 border-b border-gray-300">
               <div className="flex items-center gap-3">
@@ -3603,17 +3708,12 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
               </button>
             </div>
 
-            {/* min-h-0 est indispensable : sans lui, un enfant flex garde sa
-                hauteur "auto" (basée sur son contenu) et ne se réduit jamais,
-                donc overflow-y-auto ne s'active pas et le conteneur parent
-                (overflow-hidden) tronque le contenu au lieu de le rendre
-                défilable — c'est ce qui coupait l'affichage du Détail. */}
-            <div className="overflow-y-auto flex-1 min-h-0" key={`modal-${viewMode}`}>
+            <div className="overflow-y-auto flex-1" key={`modal-${viewMode}`}>
               {viewMode === 'details' ? (
               <>
-                <div className="grid grid-cols-12 gap-4 p-4">
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-4 p-4">
                 {/* Left Column - Client Info */}
-                <div className="col-span-3 flex flex-col gap-3">
+                <div className="col-span-12 md:col-span-3 flex flex-col gap-3">
                   {/* Informations Client */}
                   <div className="rounded-lg p-4 text-white text-sm" style={{ backgroundColor: '#1a7a96' }}>
                     <div className="text-xs font-semibold uppercase mb-2 opacity-90">📋 Informations Client | {fmt(detail.date)}</div>
@@ -3651,23 +3751,164 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
                     })()}
                   </div>
 
-                  {/* Observation */}
+                  {/* Observation — éditable */}
                   <div className="rounded-lg p-4 text-white text-sm" style={{ backgroundColor: '#1a7a96' }}>
-                    <div className="text-xs font-semibold uppercase mb-2 opacity-90">📝 Observation</div>
-                    {detail.bonsAssurance.length > 0 ? (
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="text-xs font-semibold uppercase opacity-90">📝 Observation</div>
+                      <button
+                        onClick={() => { setEditingObs(!editingObs); setObsLocal(detail.observation || ''); }}
+                        className="text-xs px-2 py-0.5 rounded bg-white/20 hover:bg-white/30"
+                      >
+                        {editingObs ? 'Annuler' : 'Modifier'}
+                      </button>
+                    </div>
+                    {detail.bonsAssurance.length > 0 && (
                       detail.bonsAssurance.map(b => (
-                        <div key={b.id} className="font-semibold text-base mb-2">
+                        <div key={b.id} className="font-semibold text-base mb-1">
                           ASSURANCE {b.assurance.toUpperCase()}
                         </div>
                       ))
+                    )}
+                    {editingObs ? (
+                      <div>
+                        <textarea
+                          className="w-full rounded px-2 py-1.5 text-xs text-gray-900 bg-white/90 outline-none resize-none"
+                          rows={4}
+                          value={obsLocal}
+                          onChange={e => setObsLocal(e.target.value)}
+                          placeholder="Saisir une observation..."
+                        />
+                        <button
+                          onClick={async () => {
+                            try {
+                              await mettreAJourVente(detail.id, { observation: obsLocal } as any);
+                              setDetail(prev => prev ? { ...prev, observation: obsLocal } : prev);
+                              setEditingObs(false);
+                            } catch { alert('Enregistrement échoué.'); }
+                          }}
+                          className="mt-1 w-full py-1.5 rounded text-xs font-bold text-white"
+                          style={{ backgroundColor: '#1a5c75' }}
+                        >
+                          Enregistrer
+                        </button>
+                      </div>
                     ) : (
-                      <div className="text-sm opacity-70">Aucune observation</div>
+                      <div className="text-sm whitespace-pre-wrap">
+                        {detail.observation ? detail.observation : <span className="opacity-70">Aucune observation</span>}
+                      </div>
                     )}
                   </div>
+
+                  {/* Informations Rendez-vous — AFTER Observation */}
+                  {(() => {
+                    const rdvSaved = !!(detail?.recap?.rdvRetrait || (detail?.recap as any)?.dateRecuperation);
+                    const editePar = (detail as any).updatedBy || (detail as any).createdBy || detail.recap?.editePar || 'Inconnu';
+                    const editeLe = (detail as any).updatedAt || (detail as any).createdAt || detail.date;
+                    return (
+                      <div className="rounded-lg p-4 text-white text-sm" style={{ backgroundColor: '#1a7a96' }}>
+                        <div className="text-xs font-semibold uppercase mb-2 opacity-90">📅 Informations Rendez-vous</div>
+
+                        <div className="flex items-center gap-1.5 text-green-300 mb-3">
+                          <span>✅</span>
+                          <span className="text-xs">Édité le {new Date(editeLe || Date.now()).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })} {new Date(editeLe || Date.now()).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</span>
+                        </div>
+
+                        {rdvSaved ? (
+                          <>
+                            <div className="flex items-center gap-1.5 text-green-300 mb-1">
+                              <span>✅</span>
+                              <span className="text-xs">RDV retrait {rdvLocal}</span>
+                            </div>
+                            <div className="flex items-center gap-1.5 text-green-300 mb-3">
+                              <span>✅</span>
+                              <span className="text-xs">Date Récupération {dateRecupLocal}</span>
+                            </div>
+
+                            <button
+                              onClick={() => telechargerBonExecutionPDF(detail, magasinId)}
+                              className="w-full mb-2 px-3 py-2 rounded text-white text-xs font-bold flex items-center justify-center gap-2"
+                              style={{ backgroundColor: '#1a5c75' }}
+                            >
+                              🖨️ BON DE LIVRAISON PDF
+                            </button>
+
+                            <label className="w-full mb-3 px-3 py-1.5 rounded text-xs font-semibold flex items-center gap-2 cursor-pointer" style={{ backgroundColor: '#b3d9e6', color: '#1a3a4a' }}>
+                              📎 Charger BL
+                              <span className="flex-1 truncate text-gray-700">{bonLivraisonFile ? bonLivraisonFile.name : 'Choisir un fichier'}</span>
+                              <span className="px-2 py-1 rounded text-white text-xs" style={{ backgroundColor: '#e09a2b' }}>↓</span>
+                              <input type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png" onChange={e => setBonLivraisonFile(e.target.files?.[0] || null)} />
+                            </label>
+
+                            <div className="text-xs mb-1 opacity-80">Édité par: {editePar}</div>
+                            <div className="flex items-center gap-1 text-xs mb-3">
+                              <span>Livré Par: {editePar}</span>
+                              <span className="text-green-300">✅</span>
+                            </div>
+
+                            <button
+                              onClick={() => {
+                                setSavEdition(new Date().toISOString().split('T')[0]);
+                                setSavRecuperation('');
+                                setSavEquipements([]);
+                                setShowSAV(true);
+                              }}
+                              className="w-full mb-1 px-3 py-2 rounded text-white text-xs font-bold"
+                              style={{ backgroundColor: '#1a5c75' }}
+                            >
+                              Service Après-Vente
+                            </button>
+
+                            <button
+                              onClick={() => { setRdvLocal(''); setDateRecupLocal(''); }}
+                              className="w-full px-3 py-1.5 rounded text-xs font-semibold flex items-center justify-center"
+                              style={{ backgroundColor: '#e53935' }}
+                            >
+                              ❌
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <div className="mb-2">
+                              <div className="text-xs mb-1">RDV retrait</div>
+                              <div className="flex items-center border border-white/40 rounded overflow-hidden bg-white/10">
+                                <input type="date" className="flex-1 px-2 py-1.5 text-xs bg-transparent outline-none text-white" value={rdvLocal} onChange={e => setRdvLocal(e.target.value)} />
+                                <span className="px-1.5 text-white/70"><Calendar size={12} /></span>
+                              </div>
+                            </div>
+                            <div className="mb-3">
+                              <div className="text-xs mb-1">Date Récupération</div>
+                              <div className="flex items-center border border-white/40 rounded overflow-hidden bg-white/10">
+                                <input type="date" className="flex-1 px-2 py-1.5 text-xs bg-transparent outline-none text-white" value={dateRecupLocal} onChange={e => setDateRecupLocal(e.target.value)} />
+                                <span className="px-1.5 text-white/70"><Calendar size={12} /></span>
+                              </div>
+                            </div>
+                            <button
+                              disabled={rdvSaving || (!rdvLocal && !dateRecupLocal)}
+                              onClick={async () => {
+                                setRdvSaving(true);
+                                try {
+                                  const newRecap = { ...detail.recap, rdvRetrait: rdvLocal, dateRecuperation: dateRecupLocal };
+                                  await mettreAJourVente(detail.id, { recap: newRecap });
+                                  setDetail(prev => prev ? { ...prev, recap: newRecap } : prev);
+                                  setVentes(prev => prev.map(v => v.id === detail.id ? { ...v, recap: newRecap } : v));
+                                } catch { alert('Enregistrement échoué, réessayez.'); }
+                                finally { setRdvSaving(false); }
+                              }}
+                              className="w-full py-2 rounded text-white text-xs font-bold mb-2 disabled:opacity-50"
+                              style={{ backgroundColor: '#1a5c75' }}
+                            >
+                              {rdvSaving ? 'Enregistrement...' : 'Enregistrer'}
+                            </button>
+                            <div className="text-xs opacity-70">Édité par: {editePar}</div>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 {/* Center Column - Verres & Articles */}
-                <div className="col-span-6 flex flex-col gap-3">
+                <div className="col-span-12 md:col-span-6 flex flex-col gap-3">
                   {/* Informations Verre */}
                   {detail.verres && detail.verres.length > 0 && detail.verres.map((verre: any, idx: number) => (
                     <div key={idx}>
@@ -3851,7 +4092,7 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
                 </div>
 
                 {/* Right Column - Actions */}
-                <div className="col-span-3 flex flex-col gap-2">
+                <div className="col-span-12 md:col-span-3 flex flex-col gap-2">
                   <div className="text-xs font-semibold uppercase mb-1">💼 Actions</div>
 
                   {peutReglement && (
@@ -4016,9 +4257,9 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
                 /* Vue Règlements */
                 <>
                 <div className="p-4">
-                  <div className="grid grid-cols-12 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
                     {/* Left Column - Client Info (same as details) */}
-                    <div className="col-span-3 flex flex-col gap-3">
+                    <div className="col-span-12 md:col-span-3 flex flex-col gap-3">
                       {/* Informations Client */}
                       <div className="rounded-lg p-4 text-white text-sm" style={{ backgroundColor: '#1a7a96' }}>
                         <div className="text-xs font-semibold uppercase mb-2 opacity-90">📋 Informations Client | {fmt(detail.date)}</div>
@@ -4056,21 +4297,95 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
                         })()}
                       </div>
 
-                      {/* Informations Rendez-vous */}
-                      <div className="rounded-lg p-4 text-white text-sm" style={{ backgroundColor: '#1a7a96' }}>
-                        <div className="text-xs font-semibold uppercase mb-2 opacity-90">📅 Informations Rendez-vous</div>
-                        <div className="flex items-center gap-2 text-green-400 mb-2">
-                          <span className="text-lg">✅</span>
-                          <span className="font-semibold">Édité le {new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })} {new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</span>
-                        </div>
-                        <div className="text-sm">
-                          Édité par: {(detail as any).createdBy || 'LOUISE MARLÈNE'}
-                        </div>
-                      </div>
+                      {/* Informations Rendez-vous (règlements view) */}
+                      {(() => {
+                        const rdvSaved = !!(detail?.recap?.rdvRetrait || (detail?.recap as any)?.dateRecuperation);
+                        const editePar = (detail as any).updatedBy || (detail as any).createdBy || detail.recap?.editePar || 'Inconnu';
+                        const editeLe = (detail as any).updatedAt || (detail as any).createdAt || detail.date;
+                        return (
+                          <div className="rounded-lg p-4 text-white text-sm" style={{ backgroundColor: '#1a7a96' }}>
+                            <div className="text-xs font-semibold uppercase mb-2 opacity-90">📅 Informations Rendez-vous</div>
+                            <div className="flex items-center gap-1.5 text-green-300 mb-3">
+                              <span>✅</span>
+                              <span className="text-xs">Édité le {new Date(editeLe || Date.now()).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })} {new Date(editeLe || Date.now()).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</span>
+                            </div>
+                            {rdvSaved ? (
+                              <>
+                                <div className="flex items-center gap-1.5 text-green-300 mb-1">
+                                  <span>✅</span><span className="text-xs">RDV retrait {rdvLocal}</span>
+                                </div>
+                                <div className="flex items-center gap-1.5 text-green-300 mb-3">
+                                  <span>✅</span><span className="text-xs">Date Récupération {dateRecupLocal}</span>
+                                </div>
+                                <button
+                                  onClick={() => telechargerBonExecutionPDF(detail, magasinId)}
+                                  className="w-full mb-2 px-3 py-2 rounded text-white text-xs font-bold flex items-center justify-center gap-2"
+                                  style={{ backgroundColor: '#1a5c75' }}
+                                >
+                                  🖨️ BON DE LIVRAISON PDF
+                                </button>
+                                <label className="w-full mb-3 px-3 py-1.5 rounded text-xs font-semibold flex items-center gap-2 cursor-pointer" style={{ backgroundColor: '#b3d9e6', color: '#1a3a4a' }}>
+                                  📎 Charger BL
+                                  <span className="flex-1 truncate text-gray-700">{bonLivraisonFile ? bonLivraisonFile.name : 'Choisir un fichier'}</span>
+                                  <span className="px-2 py-1 rounded text-white text-xs" style={{ backgroundColor: '#e09a2b' }}>↓</span>
+                                  <input type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png" onChange={e => setBonLivraisonFile(e.target.files?.[0] || null)} />
+                                </label>
+                                <div className="text-xs mb-1 opacity-80">Édité par: {editePar}</div>
+                                <div className="flex items-center gap-1 text-xs mb-3">
+                                  <span>Livré Par: {editePar}</span><span className="text-green-300">✅</span>
+                                </div>
+                                <button
+                                  onClick={() => { setSavEdition(new Date().toISOString().split('T')[0]); setSavRecuperation(''); setSavEquipements([]); setShowSAV(true); }}
+                                  className="w-full mb-1 px-3 py-2 rounded text-white text-xs font-bold"
+                                  style={{ backgroundColor: '#1a5c75' }}
+                                >
+                                  Service Après-Vente
+                                </button>
+                                <button onClick={() => { setRdvLocal(''); setDateRecupLocal(''); }} className="w-full px-3 py-1.5 rounded text-xs font-semibold flex items-center justify-center" style={{ backgroundColor: '#e53935' }}>❌</button>
+                              </>
+                            ) : (
+                              <>
+                                <div className="mb-2">
+                                  <div className="text-xs mb-1">RDV retrait</div>
+                                  <div className="flex items-center border border-white/40 rounded overflow-hidden bg-white/10">
+                                    <input type="date" className="flex-1 px-2 py-1.5 text-xs bg-transparent outline-none text-white" value={rdvLocal} onChange={e => setRdvLocal(e.target.value)} />
+                                    <span className="px-1.5 text-white/70"><Calendar size={12} /></span>
+                                  </div>
+                                </div>
+                                <div className="mb-3">
+                                  <div className="text-xs mb-1">Date Récupération</div>
+                                  <div className="flex items-center border border-white/40 rounded overflow-hidden bg-white/10">
+                                    <input type="date" className="flex-1 px-2 py-1.5 text-xs bg-transparent outline-none text-white" value={dateRecupLocal} onChange={e => setDateRecupLocal(e.target.value)} />
+                                    <span className="px-1.5 text-white/70"><Calendar size={12} /></span>
+                                  </div>
+                                </div>
+                                <button
+                                  disabled={rdvSaving || (!rdvLocal && !dateRecupLocal)}
+                                  onClick={async () => {
+                                    setRdvSaving(true);
+                                    try {
+                                      const newRecap = { ...detail.recap, rdvRetrait: rdvLocal, dateRecuperation: dateRecupLocal };
+                                      await mettreAJourVente(detail.id, { recap: newRecap });
+                                      setDetail(prev => prev ? { ...prev, recap: newRecap } : prev);
+                                      setVentes(prev => prev.map(v => v.id === detail.id ? { ...v, recap: newRecap } : v));
+                                    } catch { alert('Enregistrement échoué, réessayez.'); }
+                                    finally { setRdvSaving(false); }
+                                  }}
+                                  className="w-full py-2 rounded text-white text-xs font-bold mb-2 disabled:opacity-50"
+                                  style={{ backgroundColor: '#1a5c75' }}
+                                >
+                                  {rdvSaving ? 'Enregistrement...' : 'Enregistrer'}
+                                </button>
+                                <div className="text-xs opacity-70">Édité par: {editePar}</div>
+                              </>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
 
                     {/* Center Column - Totaux & Règlements */}
-                    <div className="col-span-6 flex flex-col gap-4">
+                    <div className="col-span-12 md:col-span-6 flex flex-col gap-4">
                       {/* Barre de totaux */}
                       <div className="rounded-lg overflow-hidden" style={{ backgroundColor: '#1a7a96' }}>
                         <div className="grid grid-cols-6 gap-px text-white text-xs font-semibold text-center">
@@ -4321,7 +4636,7 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
                     </div>
 
                     {/* Right Column - Actions */}
-                    <div className="col-span-3 flex flex-col gap-2">
+                    <div className="col-span-12 md:col-span-3 flex flex-col gap-2">
                       <div className="text-xs font-semibold uppercase mb-1">💼 Actions</div>
 
                       {peutReglement && (
@@ -4379,7 +4694,6 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
             </div>
           </div>
         </div>
-        </ModalPortal>
       )}
 
       {showCommandeVerre && detail && (
@@ -4391,39 +4705,237 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
         />
       )}
 
-      <div className="flex flex-col gap-5 p-6">
-        {/* Header - STATISTICS SECTION (kept intact as requested) */}
-        <div className="flex items-start justify-between flex-wrap gap-4">
-          <div>
-            <h1 className="text-xl font-bold text-gray-800">Ventes | Factures ({ventes.length})</h1>
-            <p className="text-sm text-gray-500 mt-0.5">Liste de toutes les ventes enregistrées</p>
+      {/* ── Modal Service Après-Vente ──────────────────────────────────────── */}
+      {showSAV && detail && (
+        <div className="fixed inset-0 z-[60] flex items-start md:items-center justify-center overflow-y-auto" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="bg-white md:rounded-xl shadow-2xl w-full md:max-w-3xl md:mx-4 flex flex-col min-h-screen md:min-h-0 md:max-h-[90vh]">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+              <h2 className="text-lg font-bold text-gray-800">Service Après-Vente</h2>
+              <button onClick={() => setShowSAV(false)} className="text-gray-500 hover:text-gray-800"><X size={20} /></button>
+            </div>
+
+            <div className="overflow-y-auto flex-1 p-6">
+              {/* Dates */}
+              <div className="flex gap-6 mb-6">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Édition <span className="text-red-500">*</span></label>
+                  <div className="flex items-center border border-gray-300 rounded overflow-hidden">
+                    <input
+                      type="date"
+                      className="px-3 py-2 text-sm outline-none"
+                      value={savEdition}
+                      onChange={e => setSavEdition(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Récupération</label>
+                  <div className="flex items-center border border-gray-300 rounded overflow-hidden">
+                    <input
+                      type="date"
+                      className="px-3 py-2 text-sm outline-none"
+                      value={savRecuperation}
+                      onChange={e => setSavRecuperation(e.target.value)}
+                    />
+                    {savRecuperation && (
+                      <button onClick={() => setSavRecuperation('')} className="px-2 text-gray-400 hover:text-gray-700"><X size={14} /></button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* EQUIPEMENT */}
+              <div className="border-t border-b border-gray-200 py-3 mb-4">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-gray-800 text-sm uppercase tracking-wide">EQUIPEMENT</span>
+                  <button
+                    onClick={() => setSavEquipements(prev => [...prev, { id: Date.now().toString(), equipement: '', pannes: [], commentaire: '', showPanneInput: false, panneInput: '' }])}
+                    className="w-8 h-8 rounded border border-gray-300 flex items-center justify-center text-gray-700 hover:bg-gray-100 font-bold text-lg"
+                  >+</button>
+                </div>
+              </div>
+
+              {/* Equipment rows */}
+              {savEquipements.map((eq, idx) => {
+                // Build equipment list from vente articles
+                const equipOptions = [
+                  ...(detail.articles || []).map((a: any) => a.designation || '').filter(Boolean),
+                  ...(detail.verres || []).map((_: any, i: number) => `Verres (ligne ${i + 1})`),
+                ];
+                return (
+                  <div key={eq.id} className="mb-4 rounded-lg overflow-hidden border border-gray-200">
+                    {/* Dropdown + remove */}
+                    <div className="flex items-center gap-2 p-3" style={{ backgroundColor: '#f0f7fa' }}>
+                      <div className="flex-1 relative">
+                        <select
+                          value={eq.equipement}
+                          onChange={e => setSavEquipements(prev => prev.map((x, i) => i === idx ? { ...x, equipement: e.target.value } : x))}
+                          className="w-full border border-gray-300 rounded px-3 py-2 text-sm bg-white outline-none appearance-none pr-8"
+                        >
+                          <option value="">-- Choisir Equipement --...</option>
+                          {equipOptions.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
+                        </select>
+                        <span className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-gray-500">▼</span>
+                      </div>
+                      <button
+                        onClick={() => setSavEquipements(prev => prev.filter((_, i) => i !== idx))}
+                        className="w-8 h-8 rounded flex items-center justify-center text-white font-bold text-lg"
+                        style={{ backgroundColor: '#e53935' }}
+                      >−</button>
+                    </div>
+
+                    {/* PANNES + Commentaire */}
+                    <div className="p-3 flex gap-4" style={{ backgroundColor: '#daeef5' }}>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="font-bold text-sm text-gray-800 uppercase">PANNES CONSTATÉES</span>
+                          <button
+                            onClick={() => setSavEquipements(prev => prev.map((x, i) => i === idx ? { ...x, showPanneInput: !x.showPanneInput } : x))}
+                            className="w-6 h-6 rounded border border-gray-400 flex items-center justify-center text-gray-700 hover:bg-gray-200 font-bold text-sm"
+                          >+</button>
+                        </div>
+                        {eq.showPanneInput && (
+                          <div className="flex gap-2 mb-2">
+                            <input
+                              type="text"
+                              className="flex-1 border border-gray-300 rounded px-2 py-1 text-xs outline-none"
+                              placeholder="Décrire la panne..."
+                              value={eq.panneInput}
+                              onChange={e => setSavEquipements(prev => prev.map((x, i) => i === idx ? { ...x, panneInput: e.target.value } : x))}
+                              onKeyDown={e => {
+                                if (e.key === 'Enter' && eq.panneInput.trim()) {
+                                  setSavEquipements(prev => prev.map((x, i) => i === idx ? { ...x, pannes: [...x.pannes, x.panneInput.trim()], panneInput: '', showPanneInput: false } : x));
+                                }
+                              }}
+                            />
+                            <button
+                              onClick={() => { if (eq.panneInput.trim()) setSavEquipements(prev => prev.map((x, i) => i === idx ? { ...x, pannes: [...x.pannes, x.panneInput.trim()], panneInput: '', showPanneInput: false } : x)); }}
+                              className="px-2 py-1 rounded text-white text-xs font-bold"
+                              style={{ backgroundColor: '#1a7a96' }}
+                            >OK</button>
+                          </div>
+                        )}
+                        {eq.pannes.map((p, pi) => (
+                          <div key={pi} className="flex items-center gap-1 text-xs text-gray-700 mb-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-gray-500 flex-shrink-0" />
+                            <span>{p}</span>
+                            <button onClick={() => setSavEquipements(prev => prev.map((x, i) => i === idx ? { ...x, pannes: x.pannes.filter((_, j) => j !== pi) } : x))} className="text-red-400 hover:text-red-600 ml-1"><X size={10} /></button>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="flex-1">
+                        <div className="text-sm font-semibold text-gray-700 mb-1">Commentaire</div>
+                        <textarea
+                          className="w-full border border-gray-300 rounded px-2 py-1.5 text-xs outline-none resize-none bg-white"
+                          rows={4}
+                          value={eq.commentaire}
+                          onChange={e => setSavEquipements(prev => prev.map((x, i) => i === idx ? { ...x, commentaire: e.target.value } : x))}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {/* Separator + Enregistrer */}
+              <div className="border-t border-dashed border-gray-300 pt-4 flex justify-end mb-4">
+                <button
+                  onClick={async () => {
+                    if (!savEdition) { alert("La date d'édition est obligatoire."); return; }
+                    const details = savEquipements.map(eq => `${eq.equipement}${eq.pannes.length ? ' | ' + eq.pannes.join(', ') : ''}${eq.commentaire ? ' — ' + eq.commentaire : ''}`).join(' / ') || '—';
+                    const ref = `SAV-${Date.now().toString().slice(-6)}`;
+                    const newRecord = { reference: ref, details, date: savEdition };
+                    const newSavRecords = [newRecord, ...savRecords];
+                    setSavRecords(newSavRecords);
+                    setSavEquipements([]);
+                    if (detail) {
+                      const newRecap = { ...detail.recap, savRecords: newSavRecords };
+                      try {
+                        await mettreAJourVente(detail.id, { recap: newRecap });
+                        setDetail(prev => prev ? { ...prev, recap: newRecap } : prev);
+                        setVentes(prev => prev.map(v => v.id === detail.id ? { ...v, recap: newRecap } : v));
+                      } catch { /* SAV enregistré localement, synchro Firestore échouée */ }
+                    }
+                  }}
+                  className="px-6 py-2 rounded text-white text-sm font-semibold"
+                  style={{ backgroundColor: '#1a7a96' }}
+                >
+                  Enregistrer
+                </button>
+              </div>
+
+              {/* Table historique SAV */}
+              <div className="border border-gray-200 rounded overflow-hidden">
+                <table className="w-full text-sm border-collapse">
+                  <thead>
+                    <tr className="bg-gray-50">
+                      <th className="px-4 py-2 text-left font-semibold border border-gray-200">Référence</th>
+                      <th className="px-4 py-2 text-left font-semibold border border-gray-200">Détails SAV</th>
+                      <th className="px-4 py-2 text-left font-semibold border border-gray-200">Date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {savRecords.length === 0 ? (
+                      <tr><td colSpan={3} className="px-4 py-6 text-center text-gray-400">Aucun SAV enregistré</td></tr>
+                    ) : savRecords.map((r, i) => (
+                      <tr key={i} className="bg-white">
+                        <td className="px-4 py-2 border border-gray-200 font-mono text-xs">{r.reference}</td>
+                        <td className="px-4 py-2 border border-gray-200 text-xs">{r.details}</td>
+                        <td className="px-4 py-2 border border-gray-200 text-xs whitespace-nowrap">{r.date ? new Date(r.date).toLocaleDateString('fr-FR') : '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex justify-end gap-2 px-6 py-4 border-t border-gray-200">
+              <button
+                onClick={() => setShowSAV(false)}
+                className="px-6 py-2 rounded border border-gray-300 text-sm text-gray-700 hover:bg-gray-50"
+              >
+                Fermer
+              </button>
+            </div>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="rounded-lg px-4 py-2 text-center" style={{ backgroundColor: '#e3f2fd' }}>
-              <div className="text-lg font-bold text-blue-700">{ventes.length}</div>
+        </div>
+      )}
+
+      <div className="flex flex-col gap-4 p-3 md:p-6">
+        {/* Header */}
+        <div className="flex items-start justify-between flex-wrap gap-3">
+          <div>
+            <h1 className="text-lg md:text-xl font-bold text-gray-800">Ventes | Factures ({ventes.length})</h1>
+            <p className="text-xs md:text-sm text-gray-500 mt-0.5">Liste de toutes les ventes enregistrées</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="rounded-lg px-3 py-1.5 text-center" style={{ backgroundColor: '#e3f2fd' }}>
+              <div className="text-base font-bold text-blue-700">{ventes.length}</div>
               <div className="text-xs text-blue-500">Ventes</div>
             </div>
-            <div className="rounded-lg px-4 py-2 text-center" style={{ backgroundColor: '#e8f5e9' }}>
-              <div className="text-lg font-bold text-green-700">{soldees}</div>
+            <div className="rounded-lg px-3 py-1.5 text-center" style={{ backgroundColor: '#e8f5e9' }}>
+              <div className="text-base font-bold text-green-700">{soldees}</div>
               <div className="text-xs text-green-500">Soldées</div>
             </div>
-            <div className="rounded-lg px-4 py-2 text-center" style={{ backgroundColor: '#fff3e0' }}>
-              <div className="text-base font-bold text-orange-700">{totalCA.toLocaleString('fr-FR')}</div>
+            <div className="rounded-lg px-3 py-1.5 text-center" style={{ backgroundColor: '#fff3e0' }}>
+              <div className="text-sm font-bold text-orange-700">{totalCA.toLocaleString('fr-FR')}</div>
               <div className="text-xs text-orange-500">CA (FCFA)</div>
             </div>
             <AddButton
               onClick={onNouvelle}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-white font-semibold text-sm shadow"
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-white font-semibold text-sm shadow"
               style={{ backgroundColor: '#1a7a96' }}
             >
-              <Plus size={16} /> Ventes | Factures
+              <Plus size={16} /> <span className="hidden sm:inline">Ventes | Factures</span><span className="sm:hidden">Nouveau</span>
             </AddButton>
           </div>
         </div>
 
         {/* Filter Section */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-          <div className="grid grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">N°Facture / N°Facture Normalisée</label>
               <input
@@ -4463,48 +4975,109 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
           </div>
         </div>
 
-        {/* Table */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm border-collapse">
-              <thead>
-                <tr style={{ backgroundColor: '#1a7a96' }}>
-                  <th className="px-3 py-3 text-white font-semibold text-xs uppercase border border-gray-300">#</th>
-                  <th className="px-3 py-3 text-white font-semibold text-xs uppercase border border-gray-300">N° Facture</th>
-                  <th className="px-3 py-3 text-white font-semibold text-xs uppercase border border-gray-300">Client</th>
-                  <th className="px-3 py-3 text-white font-semibold text-xs uppercase border border-gray-300 text-right">Total</th>
-                  <th className="px-3 py-3 text-white font-semibold text-xs uppercase border border-gray-300 text-center">Remise</th>
-                  <th className="px-3 py-3 text-white font-semibold text-xs uppercase border border-gray-300 text-right">Total Net</th>
-                  <th className="px-3 py-3 text-white font-semibold text-xs uppercase border border-gray-300">Acompte</th>
-                  <th className="px-3 py-3 text-white font-semibold text-xs uppercase border border-gray-300 text-right">Total Reste</th>
-                  <th className="px-3 py-3 text-white font-semibold text-xs uppercase border border-gray-300">Edition</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.length === 0 ? (
-                  <tr>
-                    <td colSpan={9} className="text-center py-16 text-gray-400">
-                      {ventes.length === 0
-                        ? 'Aucune vente enregistrée. Cliquez sur "Ventes | Factures" pour en créer une.'
-                        : 'Aucun résultat pour cette recherche.'}
-                    </td>
-                  </tr>
-                ) : (
-                  [...filtered].sort(ordreArrivee).map((v, i) => {
-                    const acompte = parseFloat(v.recap.acompte) || 0;
-                    const totalAssurance = v.bonsAssurance.reduce((s, b) => s + (parseFloat(b.montantPrisEnCharge) || 0), 0);
-                    const totalReglements = (reglementsParVente[v.id] || []).reduce((s, r) => s + r.montant, 0);
-                    const reste = v.totalNet - acompte - totalAssurance - totalReglements;
-                    const remisePct = parseFloat(v.recap.remisePct) || 0;
+        {filtered.length === 0 ? (
+          <div className="bg-white rounded-xl border border-gray-200 py-16 text-center text-gray-400 text-sm">
+            {ventes.length === 0 ? 'Aucune vente enregistrée. Cliquez sur "Nouveau" pour en créer une.' : 'Aucun résultat pour cette recherche.'}
+          </div>
+        ) : (() => {
+          const rows = [...filtered].sort(ordreArrivee).map((v, i) => {
+            const acompte = parseFloat(v.recap.acompte) || 0;
+            const totalAssurance = v.bonsAssurance.reduce((s, b) => s + (parseFloat(b.montantPrisEnCharge) || 0), 0);
+            const totalReglements = (reglementsParVente[v.id] || []).reduce((s, r) => s + r.montant, 0);
+            const reste = v.totalNet - acompte - totalAssurance - totalReglements;
+            const remisePct = parseFloat(v.recap.remisePct) || 0;
+            const totalBrut = v.articles.reduce((s, a) => s + (parseFloat(a.total) || 0), 0) +
+              (v.verres?.reduce((s: number, vr: any) => s + (parseFloat(vr.totalVerres) || 0), 0) || 0);
+            const rowBgColor = reste > 0 ? '#fee2e2' : '#dcfce7';
+            const actions = (
+              <div className="flex items-center gap-1">
+                <button onClick={() => setDetail(v)} title="Voir / Détails" className="flex items-center justify-center rounded border border-gray-300 bg-white text-gray-600 hover:bg-gray-100" style={{ width: 32, height: 32 }}><MoreHorizontal size={15} /></button>
+                {peutModifier && onModifier && <button onClick={() => onModifier(v)} title="Modifier" className="flex items-center justify-center rounded text-white" style={{ width: 32, height: 32, backgroundColor: '#f59e0b' }}><Pencil size={14} /></button>}
+                {peutSupprimer && onSupprimer && <button onClick={() => onSupprimer(v)} title="Supprimer" className="flex items-center justify-center rounded text-white" style={{ width: 32, height: 32, backgroundColor: '#dc2626' }}><Trash2 size={14} /></button>}
+              </div>
+            );
+            return { v, i, acompte, totalAssurance, totalReglements, reste, remisePct, totalBrut, rowBgColor, actions };
+          });
 
-                    // Calculate total before discount
-                    const totalBrut = v.articles.reduce((s, a) => s + (parseFloat(a.total) || 0), 0) +
-                      (v.verres?.reduce((s: number, vr: any) => s + (parseFloat(vr.totalVerres) || 0), 0) || 0);
+          return <>
+            {/* ── Cartes mobiles (< md) ── */}
+            <div className="flex flex-col gap-3 md:hidden">
+              {rows.map(({ v, i, acompte, reste, remisePct, totalBrut, rowBgColor, actions }) => (
+                <div key={`card-${v.id}-${i}`} className="rounded-xl border-2 overflow-hidden shadow-sm" style={{ borderColor: reste > 0 ? '#fca5a5' : '#86efac', backgroundColor: rowBgColor }}>
+                  {/* En-tête carte */}
+                  <div className="flex items-center justify-between px-3 py-2" style={{ backgroundColor: reste > 0 ? '#fca5a5' : '#86efac' }}>
+                    <span className="font-mono font-bold text-sm text-blue-900">{v.recap.numFacture || '—'}</span>
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${reste > 0 ? 'bg-red-600 text-white' : 'bg-green-700 text-white'}`}>
+                      {reste > 0 ? `Reste: ${reste.toLocaleString('fr-FR')} F` : 'Soldée'}
+                    </span>
+                  </div>
+                  <div className="px-3 py-2 flex flex-col gap-2">
+                    {/* Client */}
+                    <div>
+                      <div className="font-semibold text-gray-800 text-sm">{v.client || '—'}</div>
+                      {v.telephone && <div className="text-xs text-gray-500">{v.telephone}</div>}
+                    </div>
+                    {/* Montants */}
+                    <div className="grid grid-cols-3 gap-1 text-center">
+                      <div className="bg-white/70 rounded p-1">
+                        <div className="text-xs text-gray-500">Total</div>
+                        <div className="text-xs font-bold text-gray-800">{totalBrut.toLocaleString('fr-FR')}</div>
+                      </div>
+                      <div className="bg-white/70 rounded p-1">
+                        <div className="text-xs text-gray-500">Remise</div>
+                        <div className="text-xs font-bold text-gray-800">{remisePct}%</div>
+                      </div>
+                      <div className="bg-white/70 rounded p-1">
+                        <div className="text-xs text-gray-500">Net</div>
+                        <div className="text-xs font-bold text-gray-800">{v.totalNet.toLocaleString('fr-FR')}</div>
+                      </div>
+                    </div>
+                    {/* Paiements */}
+                    <div className="flex flex-wrap gap-1">
+                      {acompte > 0 && <span className="text-xs px-2 py-0.5 rounded-full bg-white border border-gray-300 text-gray-700">Acompte: {acompte.toLocaleString('fr-FR')} F</span>}
+                      {v.bonsAssurance.map((b, bi) => (
+                        <span key={bi} className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ backgroundColor: '#fef3c7', color: '#78350f' }}>
+                          {b.assurance}: {parseFloat(b.montantPrisEnCharge).toLocaleString('fr-FR')} F
+                        </span>
+                      ))}
+                      {(reglementsParVente[v.id] || []).map((r, ri) => (
+                        <span key={ri} className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ backgroundColor: '#d1fae5', color: '#065f46' }}>
+                          {r.mode_paiement}: {r.montant.toLocaleString('fr-FR')} F
+                        </span>
+                      ))}
+                    </div>
+                    {/* RDV + Actions */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-xs text-gray-500">{formatDate((v as any).createdAt || (v as any).date)} · {resolveUserName((v as any).editePar || (v as any).createdBy || (v as any).edite_par)}</span>
+                        <span className="text-xs font-semibold" style={{ color: '#713f12' }}>RDV: {v.recap.rdvRetrait ? fmt(v.recap.rdvRetrait) : '—'}</span>
+                      </div>
+                      {actions}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
 
-                    // Row color based on payment status
-                    const rowBgColor = reste > 0 ? '#fee2e2' : '#dcfce7'; // red if unpaid, green if paid
-
-                    return (
+            {/* ── Tableau desktop (≥ md) ── */}
+            <div className="hidden md:block bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="text-sm border-collapse" style={{ minWidth: 780 }}>
+                  <thead>
+                    <tr style={{ backgroundColor: '#1a7a96' }}>
+                      <th className="px-3 py-3 text-white font-semibold text-xs uppercase border border-gray-300 whitespace-nowrap">#</th>
+                      <th className="px-3 py-3 text-white font-semibold text-xs uppercase border border-gray-300 whitespace-nowrap">N° Facture</th>
+                      <th className="px-3 py-3 text-white font-semibold text-xs uppercase border border-gray-300 whitespace-nowrap">Client</th>
+                      <th className="px-3 py-3 text-white font-semibold text-xs uppercase border border-gray-300 text-right whitespace-nowrap">Total</th>
+                      <th className="px-3 py-3 text-white font-semibold text-xs uppercase border border-gray-300 text-center whitespace-nowrap">Remise</th>
+                      <th className="px-3 py-3 text-white font-semibold text-xs uppercase border border-gray-300 text-right whitespace-nowrap">Total Net</th>
+                      <th className="px-3 py-3 text-white font-semibold text-xs uppercase border border-gray-300 whitespace-nowrap">Acompte</th>
+                      <th className="px-3 py-3 text-white font-semibold text-xs uppercase border border-gray-300 text-right whitespace-nowrap">Total Reste</th>
+                      <th className="px-3 py-3 text-white font-semibold text-xs uppercase border border-gray-300 whitespace-nowrap">Edition</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map(({ v, i, acompte, reste, remisePct, totalBrut, rowBgColor, actions }) => (
                       <tr key={`${v.id}-${i}`} className="border-b border-gray-200" style={{ backgroundColor: rowBgColor }}>
                         <td className="px-3 py-2 text-center text-sm border border-gray-300">{i + 1}</td>
                         <td className="px-3 py-2 font-mono font-semibold text-blue-700 text-sm border border-gray-300">{v.recap.numFacture || '—'}</td>
@@ -4516,12 +5089,7 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
                         <td className="px-3 py-2 text-center text-sm border border-gray-300">{remisePct}%</td>
                         <td className="px-3 py-2 text-right text-sm border border-gray-300 font-semibold">{v.totalNet.toLocaleString('fr-FR')}</td>
                         <td className="px-3 py-2 text-sm border border-gray-300">
-                          {acompte > 0 && (
-                            <div className="text-xs mb-1">
-                              <span className="font-medium">Acompte: </span>
-                              <span className="font-semibold">{acompte.toLocaleString('fr-FR')} F</span>
-                            </div>
-                          )}
+                          {acompte > 0 && <div className="text-xs mb-1"><span className="font-medium">Acompte: </span><span className="font-semibold">{acompte.toLocaleString('fr-FR')} F</span></div>}
                           {v.bonsAssurance.map((b, bi) => (
                             <div key={`${b.id}-${bi}`} className="mb-1 px-2 py-1 rounded text-xs font-medium" style={{ backgroundColor: '#fef3c7', color: '#78350f' }}>
                               <div>{b.assurance}</div>
@@ -4538,71 +5106,32 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
                           ))}
                         </td>
                         <td className="px-3 py-2 text-right text-sm border border-gray-300">
-                          <span className={`font-bold ${reste > 0 ? 'text-red-700' : 'text-green-700'}`}>
-                            {reste.toLocaleString('fr-FR')}
-                          </span>
+                          <span className={`font-bold ${reste > 0 ? 'text-red-700' : 'text-green-700'}`}>{reste.toLocaleString('fr-FR')}</span>
                         </td>
                         <td className="px-3 py-2 text-sm border border-gray-300 align-top">
-                          {/* Disposition « Édition » calquée sur la maquette :
-                              infos d'édition à gauche + boutons d'action empilés à droite. */}
                           <div className="flex items-start gap-2">
                             <div className="flex-1 min-w-0 flex flex-col gap-1">
                               <div className="px-2 py-1 rounded text-xs" style={{ backgroundColor: '#eef2ff', color: '#3730a3' }}>
                                 <div className="opacity-80">{formatDate((v as any).createdAt || (v as any).date)}</div>
-                                <div className="font-semibold truncate">
-                                  {resolveUserName((v as any).editePar || (v as any).createdBy || (v as any).edite_par)}
-                                </div>
+                                <div className="font-semibold truncate">{resolveUserName((v as any).editePar || (v as any).createdBy || (v as any).edite_par)}</div>
                               </div>
                               <div className="border-t border-dashed border-gray-300" />
-                              {/* Jour de RDV du client (retrait) — encadré jaune, comme la maquette. */}
-                              <div
-                                className="flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold"
-                                style={{ backgroundColor: '#fef08a', color: '#713f12' }}
-                              >
+                              <div className="flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold" style={{ backgroundColor: '#fef08a', color: '#713f12' }}>
                                 <Calendar size={12} />
                                 <span>RDV: {v.recap.rdvRetrait ? fmt(v.recap.rdvRetrait) : '—'}</span>
                               </div>
                             </div>
-                            <div className="flex flex-col items-center gap-1 flex-shrink-0">
-                              <button
-                                onClick={() => setDetail(v)}
-                                title="Voir / Détails"
-                                className="flex items-center justify-center rounded border border-gray-300 bg-white text-gray-600 hover:bg-gray-100"
-                                style={{ width: 28, height: 28 }}
-                              >
-                                <MoreHorizontal size={14} />
-                              </button>
-                              {peutModifier && onModifier && (
-                                <button
-                                  onClick={() => onModifier(v)}
-                                  title="Modifier"
-                                  className="flex items-center justify-center rounded text-white"
-                                  style={{ width: 28, height: 28, backgroundColor: '#f59e0b' }}
-                                >
-                                  <Pencil size={14} />
-                                </button>
-                              )}
-                              {peutSupprimer && onSupprimer && (
-                                <button
-                                  onClick={() => onSupprimer(v)}
-                                  title="Supprimer"
-                                  className="flex items-center justify-center rounded text-white"
-                                  style={{ width: 28, height: 28, backgroundColor: '#dc2626' }}
-                                >
-                                  <Trash2 size={14} />
-                                </button>
-                              )}
-                            </div>
+                            <div className="flex flex-col items-center gap-1 flex-shrink-0">{actions}</div>
                           </div>
                         </td>
                       </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </>;
+        })()}
       </div>
     </>
   );
@@ -4857,25 +5386,40 @@ function FormulaireVente({ magasinId, onRetour, onVenteEnregistree, venteInitial
         />
       )}
       {/* Top bar */}
-      <div className="flex items-center justify-between px-6 py-3" style={{ backgroundColor: '#b8cdd6' }}>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={onRetour}
-            className="flex items-center gap-1 text-sm text-gray-700 hover:text-gray-900 font-medium"
-          >
-            <ArrowLeft size={16} /> Retour à la liste
+      <div className="flex items-center justify-between px-3 md:px-6 py-2 md:py-3" style={{ backgroundColor: '#b8cdd6' }}>
+        <div className="flex items-center gap-2 min-w-0">
+          <button onClick={onRetour} className="flex items-center gap-1 text-sm text-gray-700 hover:text-gray-900 font-medium whitespace-nowrap">
+            <ArrowLeft size={16} /> <span className="hidden sm:inline">Retour à la liste</span>
           </button>
-          <span className="text-gray-400">|</span>
-          <span className="text-lg font-semibold text-gray-800">Nouvelle Vente | Facture</span>
+          <span className="text-gray-400 hidden sm:inline">|</span>
+          <span className="text-sm md:text-lg font-semibold text-gray-800 truncate">Nouvelle Vente | Facture</span>
         </div>
-        <span className="text-sm font-semibold px-3 py-1 rounded text-white" style={{ backgroundColor: '#1a7a96' }}>
-          N° Client : {client.numeroClient}
+        <span className="text-xs md:text-sm font-semibold px-2 py-1 rounded text-white whitespace-nowrap" style={{ backgroundColor: '#1a7a96' }}>
+          N° {client.numeroClient}
         </span>
       </div>
 
-      <div className="flex flex-1">
-        {/* Sidebar */}
-        <div className="w-44 shrink-0 bg-white border-r border-gray-200 flex flex-col">
+      {/* Mobile step tabs — visible uniquement sur mobile */}
+      <div className="flex md:hidden overflow-x-auto bg-white border-b border-gray-200 shrink-0" style={{ WebkitOverflowScrolling: 'touch' }}>
+        {STEPS.map((step, i) => (
+          <button
+            key={step.num}
+            onClick={() => setActive(i)}
+            className="flex-shrink-0 px-3 py-2.5 text-xs font-bold whitespace-nowrap border-b-2 transition-colors"
+            style={{
+              borderColor: active === i ? '#1a7a96' : 'transparent',
+              color: active === i ? '#1a7a96' : '#6b7280',
+              backgroundColor: active === i ? '#eff8fb' : 'transparent',
+            }}
+          >
+            {step.num} {step.title}
+          </button>
+        ))}
+      </div>
+
+      <div className="flex flex-1 overflow-hidden">
+        {/* Sidebar — masquée sur mobile */}
+        <div className="hidden md:flex w-44 shrink-0 bg-white border-r border-gray-200 flex-col">
           {STEPS.map((step, i) => (
             <button
               key={step.num}
@@ -4895,23 +5439,23 @@ function FormulaireVente({ magasinId, onRetour, onVenteEnregistree, venteInitial
         </div>
 
         {/* Form */}
-        <div className="flex-1 p-4">
+        <div className="flex-1 p-2 md:p-4 overflow-y-auto">
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
             {stepContent[active]}
           </div>
-          <div className="flex justify-between mt-4">
+          <div className="flex justify-between mt-3">
             <button
               onClick={() => setActive(p => Math.max(0, p - 1))}
               disabled={active === 0}
-              className="px-5 py-2 rounded text-sm font-medium border border-gray-300 bg-white text-gray-700 disabled:opacity-40 hover:bg-gray-50"
+              className="px-4 py-2 rounded text-sm font-medium border border-gray-300 bg-white text-gray-700 disabled:opacity-40 hover:bg-gray-50"
             >
               ← Précédent
             </button>
-            <span className="text-sm text-gray-500 self-center">Étape {active + 1} / {STEPS.length}</span>
+            <span className="text-xs text-gray-500 self-center">Étape {active + 1} / {STEPS.length}</span>
             <button
               onClick={() => setActive(p => Math.min(STEPS.length - 1, p + 1))}
               disabled={active === STEPS.length - 1}
-              className="px-5 py-2 rounded text-sm font-medium text-white disabled:opacity-40"
+              className="px-4 py-2 rounded text-sm font-medium text-white disabled:opacity-40"
               style={{ backgroundColor: '#1a7a96' }}
             >
               Suivant →
@@ -4954,7 +5498,7 @@ function venteSupabaseToSauvegardee(v: VenteSupabase): VenteSauvegardee {
     totalBrut: v.total_brut,
     totalNet: v.total_net,
     recap: v.recap || {},
-    observation: '',
+    observation: (v as any).observation || '',
     createdBy: v.edite_par || '',
     createdAt: v.created_at || v.date,
     clientInfo: {

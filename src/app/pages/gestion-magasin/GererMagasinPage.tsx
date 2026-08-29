@@ -286,7 +286,7 @@ export function GererMagasinPage() {
         </div>
       </form>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '24px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
         {/* Colonne gauche - Tables */}
         <div>
           {/* Table 1 */}
@@ -335,7 +335,7 @@ export function GererMagasinPage() {
               </div>
             </div>
 
-            <div style={{ backgroundColor: '#fff', borderRadius: '4px', overflowX: 'auto', overflowY: 'hidden', border: '1px solid #e5e7eb' }}>
+            <div style={{ backgroundColor: '#fff', borderRadius: '4px', overflow: 'hidden', border: '1px solid #e5e7eb' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
@@ -484,7 +484,7 @@ export function GererMagasinPage() {
               </div>
             </div>
 
-            <div style={{ backgroundColor: '#fff', borderRadius: '4px', overflowX: 'auto', overflowY: 'hidden', border: '1px solid #e5e7eb' }}>
+            <div style={{ backgroundColor: '#fff', borderRadius: '4px', overflow: 'hidden', border: '1px solid #e5e7eb' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>

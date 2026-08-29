@@ -198,8 +198,8 @@ export function RdvEnLigneMagasinPage() {
 
       <div className="bg-white rounded-lg shadow-sm p-5 flex flex-col gap-4">
         {/* Title + Add */}
-        <div className="flex items-center justify-between">
-          <h1 className="text-base font-bold text-gray-800">RDV En Ligne ({rdvs.length})</h1>
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <h1 style={{ fontSize: 'clamp(14px,3.5vw,18px)' }} className="font-bold text-gray-800">RDV En Ligne ({rdvs.length})</h1>
           <AddButton onClick={() => setModal({})}
             className="flex items-center gap-1.5 px-4 py-1.5 rounded text-white text-sm font-semibold"
             style={{ backgroundColor: '#1a7a96' }}>
@@ -216,8 +216,8 @@ export function RdvEnLigneMagasinPage() {
           page={page} totalPages={totalPages} goPage={goPage}
         />
 
-        {/* Table */}
-        <div className="border border-gray-200 rounded overflow-hidden">
+        {/* Table — desktop */}
+        <div className="hidden md:block border border-gray-200 rounded overflow-hidden">
           <table className="w-full text-sm border-collapse">
             <thead>
               <tr className="bg-white border-b border-gray-200">
@@ -277,6 +277,49 @@ export function RdvEnLigneMagasinPage() {
               ))}
             </tbody>
           </table>
+        </div>
+
+        {/* Cartes — mobile */}
+        <div className="md:hidden flex flex-col gap-3">
+          {pageData.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '48px 16px', color: '#9ca3af', fontSize: 14 }}>Aucun RDV en ligne enregistré</div>
+          ) : pageData.map((r) => (
+            <div key={r.id} style={{ border: '1px solid #e5e7eb', borderRadius: 8, overflow: 'hidden', backgroundColor: '#fff' }}>
+              {/* Card header: date RDV + client + téléphone */}
+              <div style={{ padding: '10px 14px', backgroundColor: '#f0f9ff', borderBottom: '1px solid #e5e7eb', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: '#111827' }}>{r.client}</div>
+                  {r.telephone ? (
+                    <a href={`tel:${r.telephone}`} style={{ fontSize: 13, fontWeight: 700, color: '#1a7a96', textDecoration: 'none' }}>{r.telephone}</a>
+                  ) : (
+                    <span style={{ fontSize: 13, color: '#6b7280' }}>—</span>
+                  )}
+                </div>
+                <span style={{ padding: '2px 10px', borderRadius: 12, fontSize: 11, fontWeight: 700, color: '#fff', backgroundColor: statusColor(r.statut) }}>
+                  {r.statut}
+                </span>
+              </div>
+              {/* Card body */}
+              <div style={{ padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <div style={{ fontSize: 12, color: '#6b7280', fontFamily: 'monospace' }}>Réf : {r.numRef}</div>
+                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                  <div style={{ fontSize: 12, color: '#374151' }}>Date : {r.date ? fmt(r.date) : '—'}</div>
+                  <div style={{ fontSize: 12, color: '#374151' }}>RDV : {r.rendezVous ? fmt(r.rendezVous) : '—'}</div>
+                </div>
+                {r.motif && <div style={{ fontSize: 12, color: '#374151' }}>Motif : {r.motif}</div>}
+                {r.commentaire && <div style={{ fontSize: 12, color: '#6b7280' }}>{r.commentaire}</div>}
+              </div>
+              {/* Card actions */}
+              <div style={{ padding: '8px 14px', borderTop: '1px solid #f3f4f6', display: 'flex', gap: 8 }}>
+                <button onClick={() => setModal({ item: r })} className="p-1.5 rounded border border-amber-300 text-amber-600 flex items-center gap-1" style={{ fontSize: 12 }}>
+                  <Edit size={12} /> Modifier
+                </button>
+                <button onClick={() => handleDelete(r.id)} className="p-1.5 rounded border border-red-300 text-red-500 flex items-center gap-1" style={{ fontSize: 12 }}>
+                  <Trash2 size={12} /> Supprimer
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
 
         {/* Bottom filter bar */}

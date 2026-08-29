@@ -146,7 +146,8 @@ export function ReglementVerrierPage() {
       <div className="bg-white rounded-lg shadow-sm p-4 flex flex-col gap-4">
         <div className="text-sm font-bold text-gray-800">Bons de Commande Verre ({filtered.length})</div>
         <FilterBar {...fbProps} />
-        <div className="border border-gray-200 rounded overflow-x-auto">
+        {/* Desktop table */}
+        <div className="hidden md:block border border-gray-200 rounded overflow-x-auto">
           <table className="w-full text-sm border-collapse" style={{ minWidth: 900 }}>
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200 text-gray-700 font-semibold text-xs">
@@ -187,6 +188,51 @@ export function ReglementVerrierPage() {
                 ))}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile cards */}
+        <div className="md:hidden" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          {filtered.length === 0 ? (
+            <div style={{ padding: '40px', textAlign: 'center', color: '#9ca3af', fontSize: '14px' }}>Aucun bon de commande verres</div>
+          ) : filtered.map(b => (
+            <div key={b.id} style={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '8px', padding: '14px', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexWrap: 'wrap', gap: '6px' }}>
+                <span style={{ fontWeight: 700, fontSize: '13px', color: '#111827' }}>{b.fournisseur}</span>
+                <span style={{ backgroundColor: statusColor(b.statut), color: '#fff', borderRadius: '10px', padding: '2px 10px', fontSize: '11px', fontWeight: 600 }}>{b.statut}</span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '13px' }}>
+                <div>
+                  <span style={{ color: '#6b7280', fontSize: '11px' }}>N° BC</span>
+                  <div style={{ fontFamily: 'monospace', color: '#1d4ed8', fontWeight: 600 }}>{b.numBC || '—'}</div>
+                </div>
+                <div>
+                  <span style={{ color: '#6b7280', fontSize: '11px' }}>Date</span>
+                  <div style={{ color: '#374151' }}>{b.date ? new Date(b.date).toLocaleDateString('fr-FR') : '—'}</div>
+                </div>
+                <div>
+                  <span style={{ color: '#6b7280', fontSize: '11px' }}>Montant</span>
+                  <div style={{ fontWeight: 600, color: '#111827' }}>{b.totalNet.toLocaleString('fr-FR')} F CFA</div>
+                </div>
+                <div>
+                  <span style={{ color: '#6b7280', fontSize: '11px' }}>Reste</span>
+                  <div style={{ fontWeight: 600, color: b.totalReste > 0 ? '#16a34a' : '#374151' }}>{b.totalReste.toLocaleString('fr-FR')} F CFA</div>
+                </div>
+                {b.numFacture && (
+                  <div>
+                    <span style={{ color: '#6b7280', fontSize: '11px' }}>N° Facture</span>
+                    <div style={{ fontFamily: 'monospace', color: '#1d4ed8', fontSize: '12px' }}>{b.numFacture}</div>
+                  </div>
+                )}
+                <div>
+                  <span style={{ color: '#6b7280', fontSize: '11px' }}>Acompte</span>
+                  <div style={{ color: '#374151' }}>{b.acompte.toLocaleString('fr-FR')} F CFA</div>
+                </div>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '10px', paddingTop: '10px', borderTop: '1px solid #f3f4f6' }}>
+                <button style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 12px', border: '1px solid #bfdbfe', borderRadius: '6px', backgroundColor: '#eff6ff', color: '#2563eb', fontSize: '12px', cursor: 'pointer' }}><Edit size={13} /> Modifier</button>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </div>

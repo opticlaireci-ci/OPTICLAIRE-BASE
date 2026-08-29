@@ -284,7 +284,7 @@ export function AtelierPage() {
   return (
     <div style={{ padding: '20px', backgroundColor: '#f0f4f6', minHeight: '100vh' }}>
       {/* Header Section */}
-      <div style={{ display: 'flex', gap: '20px', marginBottom: '20px' }}>
+      <div style={{ display: 'flex', gap: '20px', marginBottom: '20px', flexWrap: 'wrap' }}>
         {/* Left Sidebar - Tabs */}
         <div style={{ width: '300px' }}>
           <div style={{ backgroundColor: '#fff', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
@@ -555,7 +555,7 @@ export function AtelierPage() {
         </h2>
 
         {/* Filters */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr) auto', gap: '12px', marginBottom: '16px', alignItems: 'end' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: '12px', marginBottom: '16px', alignItems: 'end' }}>
           <div>
             <label style={{ display: 'block', fontSize: '13px', color: '#6b7280', marginBottom: '4px' }}>Officine...</label>
             <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #d1d5db', borderRadius: '4px', backgroundColor: '#fff' }}>
@@ -660,7 +660,7 @@ export function AtelierPage() {
         </div>
 
         {/* Table — disposition conforme à la maquette */}
-        <div style={{ overflowX: 'auto', border: '1px solid #b7c6d3', borderRadius: '4px' }}>
+        <div className="hidden md:block" style={{ overflowX: 'auto', border: '1px solid #b7c6d3', borderRadius: '4px' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', minWidth: '1300px' }}>
             <thead>
               <tr style={{ backgroundColor: '#8ba9bd' }}>
@@ -798,6 +798,63 @@ export function AtelierPage() {
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile cards */}
+        <div className="md:hidden" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {paginatedBons.length === 0 ? (
+            <div style={{ padding: '40px', textAlign: 'center', color: '#9ca3af' }}>Aucun bon de commande verre</div>
+          ) : paginatedBons.map((bon, idx) => {
+            const b = bon as any;
+            const d = draftOf(bon);
+            const rowNum = (currentPage - 1) * ITEMS_PER_PAGE + idx + 1;
+            return (
+              <div key={bon.id} style={{ backgroundColor: '#dbe6ee', borderRadius: '8px', padding: '14px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', border: '1px solid #c3d3de' }}>
+                {/* Card header: number + status badge */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <input type="checkbox" checked={selected.has(bon.id)} onChange={() => toggleSelect(bon.id)} />
+                    <span style={{ backgroundColor: '#c3d3de', padding: '2px 8px', borderRadius: '4px', fontWeight: 600, fontSize: '12px' }}>#{rowNum}</span>
+                    <span style={{ fontWeight: 700, fontSize: 'clamp(13px, 3.5vw, 15px)' }}>{bon.numBC || bon.numRef || '-'}</span>
+                  </div>
+                  <span style={{ fontWeight: 700, fontSize: '11px', padding: '3px 8px', borderRadius: '12px', backgroundColor: (bon.statut === 'Réglé' || bon.statut === 'Achevé') ? '#dcfce7' : '#fee2e2', color: (bon.statut === 'Réglé' || bon.statut === 'Achevé') ? '#16a34a' : '#dc2626' }}>
+                    {(bon.statut || '-').toUpperCase()}
+                  </span>
+                </div>
+                {/* Fournisseur / Client */}
+                <div style={{ fontSize: '13px', color: '#2c3e50', marginBottom: '4px' }}><strong>Fournisseur:</strong> {bon.fournisseur || '-'}</div>
+                {bon.client && (
+                  <div style={{ fontSize: '12px', backgroundColor: '#1a5a72', color: '#fff', padding: '3px 8px', borderRadius: '3px', display: 'inline-block', marginBottom: '6px' }}>Client: {bon.client}</div>
+                )}
+                {/* Meta row */}
+                <div style={{ display: 'flex', gap: '12px', fontSize: '12px', color: '#5a6b7b', marginBottom: '10px', flexWrap: 'wrap' }}>
+                  <span>N° BC: <strong>{bon.numBC || '-'}</strong></span>
+                  <span>Total Net: <strong>{(bon.totalNet || 0).toFixed(2)}</strong></span>
+                  <span>Date: {formatDate(bon.dateEdition || bon.date)}</span>
+                </div>
+                {/* Inline editable fields */}
+                <div style={{ marginBottom: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <input type="date" value={d.dateRecuperation} onChange={e => setDraft(bon.id, { dateRecuperation: e.target.value })} style={{ width: '100%', padding: '6px', border: '1px solid #b7c6d3', borderRadius: '4px', fontSize: '12px', backgroundColor: '#fff', boxSizing: 'border-box' }} />
+                  <input type="text" placeholder="N° Bon de Livraison" value={d.numBL} onChange={e => setDraft(bon.id, { numBL: e.target.value })} style={{ width: '100%', padding: '6px', border: '1px solid #b7c6d3', borderRadius: '4px', fontSize: '12px', backgroundColor: '#fff', boxSizing: 'border-box' }} />
+                </div>
+                {/* Actions */}
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  <button onClick={() => genererPDF(bon)} style={{ backgroundColor: '#2c6e8f', color: '#fff', border: 'none', borderRadius: '4px', padding: '7px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12px', fontWeight: 600 }}>
+                    <Printer size={13} /> PDF
+                  </button>
+                  <button onClick={() => saveDraft(bon)} style={{ backgroundColor: '#5b9bd5', color: '#fff', border: 'none', borderRadius: '4px', padding: '7px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12px' }}>
+                    <Save size={13} /> Enreg.
+                  </button>
+                  <button onClick={() => { const s = window.prompt('Statut du bon :', bon.statut || ''); if (s !== null) updateBon(bon.id, { statut: s }); }} style={{ backgroundColor: '#f1c40f', border: 'none', borderRadius: '4px', padding: '7px 12px', cursor: 'pointer' }} title="Modifier le statut">
+                    <Pencil size={13} />
+                  </button>
+                  <button onClick={() => deleteBon(bon.id)} style={{ backgroundColor: '#e74c3c', color: '#fff', border: 'none', borderRadius: '4px', padding: '7px 12px', cursor: 'pointer' }} title="Supprimer">
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
         </div>
 
         {/* Pagination */}

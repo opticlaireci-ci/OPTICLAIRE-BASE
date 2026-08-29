@@ -155,7 +155,8 @@ export function FicheMontagePage() {
             </div>
           )}
 
-          <div style={{ overflowX: 'auto', border: '1px solid #b7c6d3', borderRadius: '4px' }}>
+          {/* Desktop table */}
+          <div className="hidden md:block" style={{ overflowX: 'auto', border: '1px solid #b7c6d3', borderRadius: '4px' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', minWidth: '720px' }}>
               <thead>
                 <tr style={{ backgroundColor: '#8ba9bd' }}>
@@ -197,6 +198,54 @@ export function FicheMontagePage() {
                 )}
               </tbody>
             </table>
+          </div>
+
+          {/* Mobile cards */}
+          <div className="md:hidden" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {fiches.length === 0 ? (
+              <div style={{ padding: '40px', textAlign: 'center', color: '#9ca3af', fontSize: '14px' }}>Aucune fiche de montage envoyée pour le moment.</div>
+            ) : (
+              fiches.map((f: any, idx: number) => {
+                const estValide = !!f.valide;
+                const statutLabel = estValide ? 'Validé ✓' : (f.dateEntreeAtelier ? 'Pris en charge' : (f.statutMontage || 'En attente'));
+                const statutColor = estValide ? '#16a34a' : (f.dateEntreeAtelier ? '#2563eb' : '#f39c12');
+                return (
+                  <div key={f.id} style={{ backgroundColor: estValide ? '#dcfce7' : '#fff', border: `1px solid ${estValide ? '#86efac' : '#e5e7eb'}`, borderRadius: '8px', padding: '14px', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexWrap: 'wrap', gap: '6px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ backgroundColor: estValide ? '#bbf7d0' : '#c3d3de', padding: '2px 8px', borderRadius: '4px', fontWeight: 700, fontSize: '12px' }}>#{idx + 1}</span>
+                        <span style={{ fontWeight: 700, fontSize: '13px', color: '#1e3a5f' }}>{f.numBC || f.numRef || '-'}</span>
+                      </div>
+                      <span style={{ backgroundColor: statutColor, color: '#fff', borderRadius: '10px', padding: '2px 10px', fontSize: '11px', fontWeight: 600 }}>{statutLabel}</span>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', fontSize: '13px' }}>
+                      <div>
+                        <span style={{ color: '#6b7280', fontSize: '11px' }}>Client</span>
+                        <div style={{ fontWeight: 600, color: '#111827' }}>{f.client || '-'}</div>
+                      </div>
+                      <div>
+                        <span style={{ color: '#6b7280', fontSize: '11px' }}>Date</span>
+                        <div style={{ color: '#374151' }}>{formatDate(f.date)}</div>
+                      </div>
+                      <div>
+                        <span style={{ color: '#6b7280', fontSize: '11px' }}>Type de verre</span>
+                        <div style={{ color: '#374151' }}>{f.typeVerre || f.ficheMontage?.typeVerre || '-'}</div>
+                      </div>
+                      <div>
+                        <span style={{ color: '#6b7280', fontSize: '11px' }}>Officine</span>
+                        <div style={{ color: '#374151' }}>{f.officine || f.magasin || '-'}</div>
+                      </div>
+                      {f.ficheMontage?.couleurMonture && (
+                        <div style={{ gridColumn: '1 / -1' }}>
+                          <span style={{ color: '#6b7280', fontSize: '11px' }}>Monture</span>
+                          <div style={{ color: '#374151' }}>{f.ficheMontage.couleurMonture}</div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            )}
           </div>
         </div>
       </div>

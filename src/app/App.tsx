@@ -3,9 +3,6 @@ import './utils/chunkReload';
 import './utils/silenceRechartsKeyWarning';
 import { useEffect } from 'react';
 import { RouterProvider } from 'react-router';
-import { ThemeProvider } from '@mui/material/styles';
-import CssBaseline from '@mui/material/CssBaseline';
-import theme from './config/theme';
 import { router } from './routes';
 import { AuthProvider } from './contexts/AuthContext';
 import { SyncProvider } from './contexts/SyncContext';
@@ -49,17 +46,14 @@ export default function App() {
   }, []);
 
   return (
-    <ThemeProvider theme={theme}>
-      <CssBaseline />
-      <AuthProvider>
-        <SyncProvider>
-          <SeasonProvider>
-            <FirebaseErrorBanner />
-            <RouterProvider router={router} />
-          </SeasonProvider>
-        </SyncProvider>
-        <IdleTimeout />
-      </AuthProvider>
-    </ThemeProvider>
+    <AuthProvider>
+      <SyncProvider>
+        <SeasonProvider>
+          <FirebaseErrorBanner />
+          <RouterProvider router={router} />
+        </SeasonProvider>
+      </SyncProvider>
+      <IdleTimeout />
+    </AuthProvider>
   );
 }

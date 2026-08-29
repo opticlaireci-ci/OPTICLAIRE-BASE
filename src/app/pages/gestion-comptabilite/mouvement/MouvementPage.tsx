@@ -296,10 +296,10 @@ export function MouvementPage() {
       {modal && <AjouterMouvement initial={modal.item} onSave={handleSave} onClose={() => setModal(null)} />}
 
       {/* Header bar */}
-      <div className="flex items-center justify-between bg-white rounded-lg shadow-sm px-5 py-3">
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }} className="bg-white rounded-lg shadow-sm px-5 py-3">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded bg-gray-200 flex items-center justify-center"><Calendar size={15} className="text-gray-600" /></div>
-          <span className="text-sm font-semibold text-gray-600">Mouvements Entrées/Sorties - Tous les Magasins</span>
+          <span className="text-sm font-semibold text-gray-600" style={{ fontSize: 'clamp(0.75rem, 2vw, 0.875rem)' }}>Mouvements Entrées/Sorties - Tous les Magasins</span>
         </div>
         {!estConseillere && (
           <AddButton onClick={() => setModal({ mode: 'add' })} className="px-4 py-2 rounded text-white text-sm font-semibold" style={{ backgroundColor: '#0d9488' }}>
@@ -310,7 +310,7 @@ export function MouvementPage() {
 
       {/* Récap — visible uniquement pour comptables, directeurs et administrateurs */}
       {peutVoirRecap && (
-        <div className="grid grid-cols-4 gap-4">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '1rem' }}>
           <div className="bg-white rounded-lg shadow-sm p-4 border-l-4 border-green-500">
             <div className="text-xs text-gray-500 mb-1">Total Entrées</div>
             <div className="text-2xl font-bold text-green-600">{totalEntrees.toLocaleString('fr-FR')} F</div>
@@ -341,18 +341,18 @@ export function MouvementPage() {
         <div className="text-sm font-bold text-gray-800">Mouvements Entrées / Sorties ({filtered.length})</div>
 
         {/* Filter bar (Image 7 layout) */}
-        <div className="flex items-start gap-3 flex-wrap">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem', alignItems: 'end' }}>
           <div className="flex flex-col gap-1">
             <div className="flex items-center gap-1">
               <div className="w-7 h-7 rounded bg-gray-200 flex items-center justify-center flex-shrink-0"><Calendar size={14} className="text-gray-600" /></div>
-              <select className="border border-gray-300 rounded px-2 py-1.5 text-sm outline-none bg-white" style={{ width: 90 }} value={annee} onChange={e => setAnnee(e.target.value)}>
+              <select className="border border-gray-300 rounded px-2 py-1.5 text-sm outline-none bg-white flex-1" value={annee} onChange={e => setAnnee(e.target.value)}>
                 {ANNEES.map(a => <option key={a}>{a}</option>)}
               </select>
             </div>
             <div className="flex flex-col gap-0.5">
               <label className="text-xs text-gray-500">Date Fin</label>
               <div className="flex items-center border border-gray-300 rounded bg-white overflow-hidden">
-                <input type="date" className="px-2 py-1.5 text-sm outline-none" style={{ width: 140 }} value={dateFin} onChange={e => setDateFin(e.target.value)} placeholder="jj/mm/aaaa" />
+                <input type="date" className="px-2 py-1.5 text-sm outline-none flex-1" value={dateFin} onChange={e => setDateFin(e.target.value)} placeholder="jj/mm/aaaa" />
                 {dateFin && <button onClick={() => setDateFin('')} className="px-1 text-gray-400"><X size={12} /></button>}
               </div>
             </div>
@@ -360,29 +360,29 @@ export function MouvementPage() {
           <div className="flex flex-col gap-0.5">
             <label className="text-xs text-gray-500">Infos Mouvements</label>
             <div className="flex items-center border border-gray-300 rounded bg-white overflow-hidden">
-              <input className="px-2 py-1.5 text-sm outline-none" style={{ width: 180 }} placeholder="Recherche..." value={search} onChange={e => setSearch(e.target.value)} />
+              <input className="px-2 py-1.5 text-sm outline-none flex-1" placeholder="Recherche..." value={search} onChange={e => setSearch(e.target.value)} />
               {search && <button onClick={() => setSearch('')} className="px-1.5 text-gray-400"><X size={12} /></button>}
             </div>
           </div>
           <div className="flex flex-col gap-0.5">
             <label className="text-xs text-gray-500">Date Début</label>
             <div className="flex items-center border border-gray-300 rounded bg-white overflow-hidden">
-              <input type="date" className="px-2 py-1.5 text-sm outline-none" style={{ width: 140 }} value={dateDebut} onChange={e => setDateDebut(e.target.value)} placeholder="jj/mm/aaaa" />
+              <input type="date" className="px-2 py-1.5 text-sm outline-none flex-1" value={dateDebut} onChange={e => setDateDebut(e.target.value)} placeholder="jj/mm/aaaa" />
               {dateDebut && <button onClick={() => setDateDebut('')} className="px-1 text-gray-400"><X size={12} /></button>}
             </div>
           </div>
-          <div className="self-end">
-            <button onClick={runFilter} className="px-3 py-1.5 rounded text-white text-sm" style={{ backgroundColor: '#2563eb' }}><Search size={14} /></button>
+          <div>
+            <button onClick={runFilter} className="px-3 py-1.5 rounded text-white text-sm w-full" style={{ backgroundColor: '#2563eb' }}><Search size={14} /></button>
           </div>
-          <div className="flex-1" />
-          <div className="flex items-center gap-0.5 text-xs text-gray-500 self-end">
+          <div className="flex items-center gap-0.5 text-xs text-gray-500">
             {['<<', '<', '1', '2', '3', '>', '>>'].map((s, i) => (
               <button key={i} className={`px-1.5 py-0.5 border rounded hover:bg-gray-100 ${s === '1' ? 'border-blue-500 text-blue-600 font-bold' : 'border-gray-300'}`}>{s}</button>
             ))}
           </div>
         </div>
 
-        <div className="border border-gray-200 rounded overflow-x-auto">
+        {/* Desktop table */}
+        <div className="hidden md:block border border-gray-200 rounded overflow-x-auto">
           <table className="w-full text-sm border-collapse" style={{ minWidth: 1000 }}>
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200 text-gray-700 font-semibold text-xs">
@@ -452,6 +452,59 @@ export function MouvementPage() {
                 ))}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile cards */}
+        <div className="md:hidden flex flex-col gap-3">
+          {filtered.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '2.5rem 0', color: '#9ca3af' }}>Aucun mouvement</div>
+          ) : filtered.map(m => (
+            <div key={m.id} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, padding: '0.875rem', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+              {/* Top row: date + type badge */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
+                <span style={{ fontSize: '0.8125rem', color: '#6b7280' }}>{m.dateMouvement || '—'}{m.heure ? ` · ${m.heure}` : ''}</span>
+                <span style={{
+                  background: m.type === 'Entrée' ? '#dcfce7' : '#fee2e2',
+                  color: typeColor(m.type),
+                  borderRadius: 9999, padding: '0.15rem 0.65rem', fontSize: '0.75rem', fontWeight: 700,
+                }}>
+                  {m.type || '—'}
+                </span>
+              </div>
+              {/* Beneficiaire + montant */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.3rem' }}>
+                <span style={{ fontWeight: 700, fontSize: '0.9375rem', color: '#1e3a5f' }}>{m.beneficiaire || '—'}</span>
+                <span style={{ fontWeight: 700, fontSize: '0.9375rem', color: m.type === 'Entrée' ? '#16a34a' : '#dc2626' }}>
+                  {m.montant.toLocaleString('fr-FR')} F
+                </span>
+              </div>
+              {/* Nature + libellé */}
+              <div style={{ fontSize: '0.8125rem', color: '#6b7280', marginBottom: '0.25rem' }}>
+                {m.nature}{m.details ? ` · ${m.details}` : ''}
+              </div>
+              {/* Compte banque */}
+              {m.compteBanque && (
+                <div style={{ fontSize: '0.78rem', color: '#9ca3af' }}>{m.compteBanque}</div>
+              )}
+              {/* Magasin */}
+              {m.magasin && (
+                <div style={{ fontSize: '0.78rem', color: '#9ca3af' }}>{m.magasin}</div>
+              )}
+              {/* Actions */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.625rem', borderTop: '1px solid #f3f4f6', paddingTop: '0.5rem' }}>
+                {m.id.startsWith('vente-') ? (
+                  <span style={{ fontSize: '0.75rem', color: '#9ca3af', fontStyle: 'italic' }}>Vente</span>
+                ) : m.id.startsWith('depense-') ? (
+                  <span style={{ fontSize: '0.75rem', color: '#9ca3af', fontStyle: 'italic' }}>Dépense</span>
+                ) : (
+                  <>
+                    <button onClick={() => setModal({ mode: 'edit', item: m })} style={{ color: '#3b82f6', padding: '0.25rem' }}><Edit size={15} /></button>
+                    <button onClick={() => handleDelete(m.id)} style={{ color: '#ef4444', padding: '0.25rem' }}><Trash2 size={15} /></button>
+                  </>
+                )}
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </div>

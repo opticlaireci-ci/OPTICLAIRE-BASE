@@ -489,12 +489,12 @@ export function VerrePage() {
       )}
       {modal && <ModalVerre initial={modal.item} onSave={handleSave} onClose={() => setModal(null)} />}
 
-      <div className="flex items-center justify-between bg-white rounded-lg shadow-sm px-5 py-2.5">
+      <div className="flex items-center justify-between bg-white rounded-lg shadow-sm px-5 py-2.5" style={{ flexWrap: 'wrap', gap: 8 }}>
         <div className="flex items-center gap-2 text-sm text-gray-600">
           <span className="text-gray-400">👓</span>
-          <span className="font-semibold">Gestion des Composants: {TENANT.nom}</span>
+          <span className="font-semibold" style={{ fontSize: 'clamp(0.82rem, 3vw, 0.9rem)' }}>Gestion des Composants: {TENANT.nom}</span>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2" style={{ flexWrap: 'wrap' }}>
           <button onClick={() => printCatalogueVerres(verres)} className="flex items-center gap-1.5 px-4 py-2 rounded text-sm border border-gray-300 text-gray-700 hover:bg-gray-50 bg-white">
             <Printer size={15} /> Catalogue Verres
           </button>
@@ -513,7 +513,7 @@ export function VerrePage() {
         <div className="text-xs text-gray-400">(Type Verre, Verre, Traitement, Matière, Diamètre, Prix)</div>
         <FilterBar />
 
-        <div className="border border-gray-200 rounded overflow-x-auto">
+        <div className="border border-gray-200 rounded overflow-x-auto hidden md:block">
           <table className="w-full text-sm border-collapse" style={{ minWidth: 1000 }}>
             <thead>
               <tr className="bg-gray-50 border-b-2 border-gray-200 text-gray-700 font-bold text-xs">
@@ -583,6 +583,73 @@ export function VerrePage() {
                   })}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile Cards */}
+        <div className="md:hidden">
+          {[...filtered].sort((a, b) => (a.verre || '').localeCompare(b.verre || '', 'fr')).map(v => (
+            <div key={v.id} style={{
+              background: 'white',
+              borderRadius: 8,
+              border: '1px solid #e0e0e0',
+              padding: '12px 14px',
+              marginBottom: 10,
+              boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+            }}>
+              {/* Card header: verre name + garantie badge */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 'clamp(0.88rem, 3.5vw, 1rem)', color: '#1a237e' }}>{v.verre}</div>
+                  <div style={{ fontSize: '0.78rem', color: '#555', marginTop: 2 }}>{v.typeVerre}</div>
+                </div>
+                {v.garantie && (
+                  <span style={{
+                    padding: '3px 10px', borderRadius: 12, fontSize: '0.7rem', fontWeight: 600,
+                    background: '#fff3e0', color: '#e65100', flexShrink: 0,
+                  }}>
+                    {v.garantie}
+                  </span>
+                )}
+              </div>
+              {/* Info grid: traitement + matière/indice + diamètre + prix */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 8, marginBottom: 10 }}>
+                <div>
+                  <div style={{ fontSize: '0.67rem', color: '#888', marginBottom: 2 }}>Traitement</div>
+                  <div style={{ fontSize: '0.82rem', fontWeight: 500 }}>{v.traitement || '—'}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.67rem', color: '#888', marginBottom: 2 }}>Matière / Indice</div>
+                  <div style={{ fontSize: '0.82rem', fontWeight: 500 }}>{v.matiere || '—'}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.67rem', color: '#888', marginBottom: 2 }}>Diamètre</div>
+                  <div style={{ fontSize: '0.82rem', fontWeight: 500 }}>{v.diametre || '—'}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.67rem', color: '#888', marginBottom: 2 }}>Prix / Verre</div>
+                  <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#1565c0' }}>{v.prixVerre.toLocaleString('fr-FR')} F</div>
+                </div>
+              </div>
+              {/* Actions */}
+              <div style={{ display: 'flex', gap: 8, borderTop: '1px solid #f0f0f0', paddingTop: 10 }}>
+                <button onClick={() => setModal({ mode: 'edit', item: v })} style={{
+                  flex: 1, padding: '7px 0', border: '1px solid #ffe082', borderRadius: 4,
+                  background: '#fffde7', color: '#f57f17', fontSize: '0.8rem', cursor: 'pointer', fontWeight: 600,
+                }}>
+                  Modifier
+                </button>
+                <button onClick={() => handleDelete(v.id)} style={{
+                  flex: 1, padding: '7px 0', border: 'none', borderRadius: 4,
+                  background: '#f44336', color: 'white', fontSize: '0.8rem', cursor: 'pointer', fontWeight: 600,
+                }}>
+                  Supprimer
+                </button>
+              </div>
+            </div>
+          ))}
+          {filtered.length === 0 && (
+            <div style={{ textAlign: 'center', padding: '32px 0', color: '#aaa', fontSize: '0.9rem' }}>Aucun verre</div>
+          )}
         </div>
       </div>
     </div>

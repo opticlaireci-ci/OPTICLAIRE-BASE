@@ -121,7 +121,7 @@ export function SgopticDashboard({ title, ventes, reglements, objectif = 0, taux
       const d = dateOf(r.date); if (!d || d.getFullYear() !== selYear) continue;
       payM[d.getMonth()] += Number(r.montant) || 0;
     }
-    const restantM = caM.map((ca, i) => Math.max(ca - payM[i], 0));
+    const restantM = caM.map((ca, i) => Math.max(ca - payM[i] - bonsM[i], 0));
 
     // ── Données journalières du mois sélectionné ──────────────────────────────
     const daysInMonth = new Date(selYear, selMonth + 1, 0).getDate();
@@ -136,17 +136,24 @@ export function SgopticDashboard({ title, ventes, reglements, objectif = 0, taux
       const idx = d.getDate() - 1;
       if (dayData[idx]) dayData[idx].paiements += Number(r.montant) || 0;
     }
-    dayData.forEach(dd => { (dd as any).restant = Math.max(dd.ca - dd.paiements, 0); });
+    dayData.forEach(dd => { (dd as any).restant = Math.max(dd.ca - dd.paiements - dd.bons, 0); });
 
     // ── Cumuls annuels + variations ───────────────────────────────────────────
     const caYear = caM.reduce((a, b) => a + b, 0);
     const payYear = payM.reduce((a, b) => a + b, 0);
-    const restantYear = Math.max(caYear - payYear, 0);
+    const bonsYear = bonsM.reduce((a, b) => a + b, 0);
+    const restantYear = Math.max(caYear - payYear - bonsYear, 0);
+    const avoirPlusYear = Math.max(0, payYear + bonsYear - caYear);
+    const avoirMoinsYear = restantYear;
     const prevCA = selMonth > 0 ? caM[selMonth - 1] : 0;
     const caMonth = caM[selMonth];
+    const payMonth = payM[selMonth];
+    const bonsMonth = bonsM[selMonth];
     const caChange = prevCA > 0 ? ((caMonth - prevCA) / prevCA) * 100 : (caMonth > 0 ? 100 : 0);
     const payPct = caYear > 0 ? (payYear / caYear) * 100 : 0;
     const restantPct = caYear > 0 ? (restantYear / caYear) * 100 : 0;
+    const avoirPlusMonth = Math.max(0, payMonth + bonsMonth - caMonth);
+    const avoirMoinsMonth = Math.max(0, caMonth - payMonth - bonsMonth);
     const monthPctRealise = objectif > 0 ? (caMonth / objectif) * 100 : 0;
     const sparkUpTo = (arr: number[]) => arr.slice(Math.max(0, selMonth - 5), selMonth + 1);
 
@@ -177,7 +184,9 @@ export function SgopticDashboard({ title, ventes, reglements, objectif = 0, taux
     return {
       dayData, annualData, annualTable, devisPie, workloadData,
       caToday, payToday, bonsToday, factToday, devisToday, pctRealiseToday,
-      caYear, payYear, restantYear, caChange, payPct, restantPct, monthPctRealise,
+      caYear, payYear, bonsYear, restantYear, avoirPlusYear, avoirMoinsYear,
+      caMonth, payMonth, bonsMonth, avoirPlusMonth, avoirMoinsMonth,
+      caChange, payPct, restantPct, monthPctRealise,
       sparkCA: sparkUpTo(caM), sparkPay: sparkUpTo(payM), sparkRestant: sparkUpTo(restantM),
       totalDevisInfo, factCount, devisCount, abandons, totalDevisYear, totalFactYear,
     };
@@ -240,6 +249,8 @@ export function SgopticDashboard({ title, ventes, reglements, objectif = 0, taux
             <SideStat title="Chiffre d'Affaires" pct={`${data.caChange >= 0 ? '+' : ''}${data.caChange.toFixed(2)}%`} value={fmtInt(data.caYear)} spark={data.sparkCA} />
             <SideStat title="Total Paiements" pct={fmtPct(data.payPct)} value={fmtInt(data.payYear)} spark={data.sparkPay} />
             <SideStat title="Montant Restant" pct={fmtPct(data.restantPct)} value={fmtInt(data.restantYear)} spark={data.sparkRestant} />
+            <SideStat title="AVOIR CLIENT +" pct="" value={fmtInt(data.avoirPlusYear)} spark={[]} />
+            <SideStat title="AVOIR CLIENT −" pct="" value={fmtInt(data.avoirMoinsYear)} spark={[]} />
           </div>
         </div>
       </div>
@@ -308,7 +319,7 @@ export function SgopticDashboard({ title, ventes, reglements, objectif = 0, taux
               </select>
             </div>
           </div>
-          <div className="grid grid-cols-4 gap-2 mb-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
             {[
               { n: data.totalDevisInfo, l: 'Total' },
               { n: data.factCount, l: 'Factures' },

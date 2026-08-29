@@ -28,6 +28,15 @@ interface BonDistribution extends AuditInfo {
 
 const MAGASINS = getMagasins().map(magasin => magasin.label);
 
+const getStatutColor = (statut: string) => {
+  switch (statut) {
+    case 'Validé': return '#10b981';
+    case 'Livré': return '#3b82f6';
+    case 'En attente': return '#f59e0b';
+    default: return '#9ca3af';
+  }
+};
+
 export function BonDistributionGlobalPage() {
   const [bons, setBons] = useLiveData<BonDistribution>('leclaire_db_bon-distribution');
   const [showModal, setShowModal] = useState(false);
@@ -133,6 +142,8 @@ export function BonDistributionGlobalPage() {
     return matchSearch && matchStatut;
   });
 
+  const sortedBons = [...filteredBons].sort((a, b) => (a.reference || '').localeCompare(b.reference || '', 'fr'));
+
   if (showModal) {
     return (
       <>
@@ -143,10 +154,10 @@ export function BonDistributionGlobalPage() {
             selectedItems={items}
           />
         )}
-        <div style={{ padding: '24px', backgroundColor: '#f9fafb', minHeight: '100vh' }}>
+        <div style={{ padding: 'clamp(12px, 3vw, 24px)', backgroundColor: '#f9fafb', minHeight: '100vh' }}>
         {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-          <h1 style={{ fontSize: '20px', fontWeight: 'bold', margin: 0 }}>Nouveau Bon de Distribution</h1>
+        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+          <h1 style={{ fontSize: 'clamp(16px, 4vw, 20px)', fontWeight: 'bold', margin: 0 }}>Nouveau Bon de Distribution</h1>
           <button
             onClick={() => setShowModal(false)}
             style={{
@@ -165,9 +176,9 @@ export function BonDistributionGlobalPage() {
         </div>
 
         {/* Form */}
-        <div style={{ backgroundColor: '#fff', padding: '24px', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
-          <div style={{ display: 'flex', gap: '20px', marginBottom: '16px', alignItems: 'end' }}>
-            <div style={{ flex: 1 }}>
+        <div style={{ backgroundColor: '#fff', padding: 'clamp(12px, 3vw, 24px)', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', marginBottom: '16px', alignItems: 'flex-end' }}>
+            <div style={{ flex: '1 1 200px' }}>
               <label style={{ display: 'block', fontSize: '14px', fontWeight: '500', marginBottom: '6px' }}>
                 Magasin Récepteur <span style={{ color: '#dc2626' }}>*</span>
               </label>
@@ -186,7 +197,7 @@ export function BonDistributionGlobalPage() {
                 {MAGASINS.map(m => <option key={m} value={m}>{m}</option>)}
               </select>
             </div>
-            <div style={{ flex: 1 }}>
+            <div style={{ flex: '1 1 200px' }}>
               <label style={{ display: 'block', fontSize: '14px', fontWeight: '500', marginBottom: '6px' }}>
                 Référence Bon de Distribution <span style={{ color: '#dc2626' }}>*</span>
               </label>
@@ -200,6 +211,7 @@ export function BonDistributionGlobalPage() {
                   border: '1px solid #d1d5db',
                   borderRadius: '6px',
                   fontSize: '14px',
+                  boxSizing: 'border-box',
                 }}
               />
             </div>
@@ -214,9 +226,10 @@ export function BonDistributionGlobalPage() {
                 cursor: 'pointer',
                 fontSize: '14px',
                 fontWeight: '600',
+                flexShrink: 0,
               }}
             >
-              Ajouter Monture & Accessoire
+              Ajouter Monture &amp; Accessoire
             </AddButton>
             <button
               style={{
@@ -228,6 +241,7 @@ export function BonDistributionGlobalPage() {
                 cursor: 'pointer',
                 fontSize: '14px',
                 fontWeight: '600',
+                flexShrink: 0,
               }}
             >
               Fiche Distribution
@@ -239,13 +253,13 @@ export function BonDistributionGlobalPage() {
             <label style={{ display: 'block', fontSize: '14px', fontWeight: '500', marginBottom: '6px' }}>
               Recherche
             </label>
-            <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'center' }}>
               <input
                 type="text"
                 value={searchProduit}
                 onChange={(e) => setSearchProduit(e.target.value)}
                 style={{
-                  flex: 1,
+                  flex: '1 1 180px',
                   padding: '10px 12px',
                   border: '1px solid #d1d5db',
                   borderRadius: '6px',
@@ -263,9 +277,10 @@ export function BonDistributionGlobalPage() {
                   fontSize: '14px',
                   fontWeight: '600',
                   whiteSpace: 'nowrap',
+                  flexShrink: 0,
                 }}
               >
-                Synchroniser Stock & Quantité
+                Synchroniser Stock &amp; Quantité
               </button>
             </div>
           </div>
@@ -369,7 +384,7 @@ export function BonDistributionGlobalPage() {
           </table>
 
           {/* Buttons */}
-          <div style={{ display: 'flex', gap: '12px' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
             <button
               onClick={handleClose}
               style={{
@@ -408,9 +423,9 @@ export function BonDistributionGlobalPage() {
   }
 
   return (
-    <div style={{ padding: '24px', backgroundColor: '#f9fafb', minHeight: '100vh' }}>
+    <div style={{ padding: 'clamp(12px, 3vw, 24px)', backgroundColor: '#f9fafb', minHeight: '100vh' }}>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
         <div>
           <p style={{ fontSize: '14px', color: '#6b7280', margin: 0 }}>Gestion Stocks: {TENANT.nom}</p>
         </div>
@@ -431,7 +446,7 @@ export function BonDistributionGlobalPage() {
         </AddButton>
       </div>
 
-      <h1 style={{ fontSize: '20px', fontWeight: 'bold', marginBottom: '24px' }}>
+      <h1 style={{ fontSize: 'clamp(18px, 4vw, 24px)', fontWeight: 'bold', marginBottom: '24px' }}>
         Bons de Distribution ({bons.length})
       </h1>
 
@@ -440,13 +455,14 @@ export function BonDistributionGlobalPage() {
         <p style={{ fontSize: '14px', color: '#374151', marginBottom: '8px' }}>
           (N° Bon de Distribution)
         </p>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 200px 200px auto', gap: '12px', alignItems: 'end' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'flex-end' }}>
           <input
             type="text"
             placeholder="Recherche..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             style={{
+              flex: '1 1 180px',
               padding: '10px 16px',
               border: '1px solid #d1d5db',
               borderRadius: '6px',
@@ -459,6 +475,7 @@ export function BonDistributionGlobalPage() {
             value={searchDate}
             onChange={(e) => setSearchDate(e.target.value)}
             style={{
+              flex: '0 1 150px',
               padding: '10px 16px',
               border: '1px solid #d1d5db',
               borderRadius: '6px',
@@ -469,6 +486,7 @@ export function BonDistributionGlobalPage() {
             value={filterStatut}
             onChange={(e) => setFilterStatut(e.target.value)}
             style={{
+              flex: '0 1 160px',
               padding: '10px 16px',
               border: '1px solid #d1d5db',
               borderRadius: '6px',
@@ -488,6 +506,7 @@ export function BonDistributionGlobalPage() {
               border: 'none',
               borderRadius: '6px',
               cursor: 'pointer',
+              flexShrink: 0,
             }}
           >
             <Search size={20} />
@@ -495,8 +514,8 @@ export function BonDistributionGlobalPage() {
         </div>
       </div>
 
-      {/* Table */}
-      <div style={{ backgroundColor: '#fff', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+      {/* Desktop Table */}
+      <div className="hidden md:block" style={{ backgroundColor: '#fff', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
@@ -533,7 +552,7 @@ export function BonDistributionGlobalPage() {
                 </td>
               </tr>
             ) : (
-              [...filteredBons].sort((a, b) => (a.reference || '').localeCompare(b.reference || '', 'fr')).map((bon, idx) => (
+              sortedBons.map((bon, idx) => (
                 <tr key={bon.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
                   <td style={{ padding: '12px' }}>
                     <input type="checkbox" />
@@ -585,6 +604,113 @@ export function BonDistributionGlobalPage() {
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* Mobile Cards */}
+      <div className="md:hidden" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        {filteredBons.length === 0 ? (
+          <div style={{ padding: '40px', textAlign: 'center', color: '#9ca3af', backgroundColor: '#fff', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+            Aucun bon de distribution trouvé
+          </div>
+        ) : (
+          sortedBons.map((bon) => (
+            <div key={bon.id} style={{ backgroundColor: '#fff', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', overflow: 'hidden' }}>
+              {/* Card header */}
+              <div style={{ backgroundColor: '#0e7490', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+                <div>
+                  <div style={{ color: '#fff', fontWeight: '700', fontSize: '15px' }}>N° {bon.reference}</div>
+                  {bon.magasinRecepteur && (
+                    <div style={{ color: '#a5f3fc', fontSize: '13px', marginTop: '2px' }}>
+                      {bon.magasinRecepteur}
+                    </div>
+                  )}
+                </div>
+                <span style={{
+                  backgroundColor: getStatutColor(bon.statut),
+                  color: '#fff',
+                  padding: '3px 10px',
+                  borderRadius: '12px',
+                  fontSize: '11px',
+                  fontWeight: '700',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0,
+                }}>
+                  {bon.statut || 'En attente'}
+                </span>
+              </div>
+              {/* Card body */}
+              <div style={{ padding: '12px 16px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '8px', marginBottom: '8px' }}>
+                  <div>
+                    <div style={{ fontSize: '11px', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Articles</div>
+                    <div style={{ fontSize: '14px', fontWeight: '600', color: '#111827' }}>
+                      {bon.items?.length || 0} article{(bon.items?.length || 0) !== 1 ? 's' : ''}
+                    </div>
+                  </div>
+                  {bon.magasinRecepteur && (
+                    <div>
+                      <div style={{ fontSize: '11px', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Destination</div>
+                      <div style={{ fontSize: '13px', fontWeight: '500', color: '#374151' }}>{bon.magasinRecepteur}</div>
+                    </div>
+                  )}
+                </div>
+                {/* Preview first 3 items */}
+                {bon.items && bon.items.length > 0 && (
+                  <div style={{ marginTop: '8px' }}>
+                    {bon.items.slice(0, 3).map((item, i) => (
+                      <div key={i} style={{ fontSize: '12px', color: '#6b7280', padding: '2px 0', borderBottom: i < Math.min(bon.items.length, 3) - 1 ? '1px solid #f3f4f6' : 'none' }}>
+                        {item.designation} · qté {item.quantite}
+                      </div>
+                    ))}
+                    {bon.items.length > 3 && (
+                      <div style={{ fontSize: '12px', color: '#9ca3af', marginTop: '4px' }}>
+                        + {bon.items.length - 3} autre{bon.items.length - 3 > 1 ? 's' : ''}
+                      </div>
+                    )}
+                  </div>
+                )}
+                {bon.createdBy && (
+                  <div style={{ marginTop: '8px', fontSize: '12px', color: '#9ca3af' }}>
+                    Par {bon.createdBy} · {formatDate(bon.createdAt)}
+                  </div>
+                )}
+              </div>
+              {/* Card footer */}
+              <div style={{ padding: '10px 16px', borderTop: '1px solid #f3f4f6', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <button
+                  onClick={() => handleDelete(bon.id)}
+                  style={{
+                    padding: '6px 14px',
+                    backgroundColor: '#dc2626',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontSize: '13px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                  }}
+                >
+                  <Trash2 size={13} /> Supprimer
+                </button>
+                <button
+                  style={{
+                    padding: '6px 14px',
+                    backgroundColor: '#3b82f6',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontSize: '13px',
+                  }}
+                >
+                  Éditer
+                </button>
+              </div>
+            </div>
+          ))
+        )}
       </div>
 
       {/* Pagination */}

@@ -23,55 +23,6 @@ function HydrateFallback() {
   );
 }
 
-// Écran affiché pour TOUTE erreur non gérée sur une route (chunk manquant,
-// erreur de rendu...) au lieu de l'écran brut « Unexpected Application
-// Error! » de React Router. Propose un rechargement en un clic : dans
-// l'immense majorité des cas (chunk périmé après un redéploiement, hoquet
-// réseau) un simple rechargement récupère la dernière version et résout le
-// problème.
-function RouteErrorScreen() {
-  return (
-    <div
-      style={{
-        minHeight: "100vh",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        backgroundColor: "#d6e4ea",
-        color: "#0f2f3a",
-        fontSize: 14,
-        textAlign: "center",
-        padding: 24,
-        gap: 16,
-      }}
-    >
-      <div style={{ fontSize: 18, fontWeight: 700 }}>
-        Une erreur est survenue lors du chargement de cette page
-      </div>
-      <div style={{ maxWidth: 420, color: "#3a5a66" }}>
-        Cela arrive généralement juste après une mise à jour de l'application.
-        Rechargez la page pour récupérer la dernière version.
-      </div>
-      <button
-        onClick={() => window.location.reload()}
-        style={{
-          padding: "10px 24px",
-          borderRadius: 8,
-          border: "none",
-          backgroundColor: "#1a7a96",
-          color: "white",
-          fontSize: 14,
-          fontWeight: 600,
-          cursor: "pointer",
-        }}
-      >
-        Recharger la page
-      </button>
-    </div>
-  );
-}
-
 // Chaque page est chargée à la demande (code-splitting) pour accélérer
 // le chargement initial et les transitions entre pages.
 
@@ -81,37 +32,18 @@ function RouteErrorScreen() {
 // plante via son ErrorBoundary. On réessaie donc une fois, puis on force UN
 // rechargement complet (une seule fois, via sessionStorage) pour récupérer les
 // chunks à jour au lieu d'afficher un écran d'erreur.
-//
-// `expectedExport` : nom de l'export attendu dans le module. Un module chargé
-// avec succès mais dont l'export attendu est absent (`mod[name] === undefined`)
-// est TOUJOURS le symptôme d'un chunk périmé/mal formé (jamais un cas normal),
-// donc traité exactement comme un échec de fetch : même retry, même
-// rechargement automatique unique. Sans cette vérification explicite, on
-// obtient un crash cryptique (« Cannot read properties of undefined ») au
-// lieu du rechargement auto-réparateur.
 async function importWithRetry(
   loader: () => Promise<Record<string, any>>,
-  expectedExport: string,
 ): Promise<Record<string, any>> {
-  const attempt = async (): Promise<Record<string, any>> => {
-    const mod = await loader();
-    if (!mod || typeof mod[expectedExport] === "undefined") {
-      throw new Error(
-        `Module chargé mais export "${expectedExport}" introuvable (chunk périmé ou build incomplet).`,
-      );
-    }
-    return mod;
-  };
-
   try {
-    const mod = await attempt();
+    const mod = await loader();
     // Un import a réussi → on réarme le mécanisme pour un futur redéploiement.
     try { sessionStorage.removeItem("chunk_reload_once"); } catch {}
     return mod;
   } catch (err) {
     try {
       // Deuxième tentative immédiate (couvre un simple hoquet réseau).
-      return await attempt();
+      return await loader();
     } catch (err2) {
       const FLAG = "chunk_reload_once";
       const alreadyReloaded = sessionStorage.getItem(FLAG);
@@ -131,7 +63,7 @@ const lazyRoute = (
   loader: () => Promise<Record<string, any>>,
   name: string
 ) => async () => {
-  const mod = await importWithRetry(loader, name);
+  const mod = await importWithRetry(loader);
   return { Component: mod[name] };
 };
 
@@ -139,20 +71,17 @@ export const router = createBrowserRouter([
   {
     path: "/login",
     HydrateFallback,
-    errorElement: <RouteErrorScreen />,
     lazy: lazyRoute(() => import("./pages/LoginPage"), "LoginPage"),
   },
   {
     path: "/magasins-select",
     HydrateFallback,
-    errorElement: <RouteErrorScreen />,
     lazy: lazyRoute(() => import("./pages/gestion-magasin/SelectMagasinPage"), "SelectMagasinPage"),
   },
   {
     path: "/magasin/:magasinId",
     Component: MagasinLayout,
     HydrateFallback,
-    errorElement: <RouteErrorScreen />,
     children: [
       { index: true, lazy: lazyRoute(() => import("./pages/AccueilPage"), "AccueilPage") },
       { path: "accueil", lazy: lazyRoute(() => import("./pages/AccueilPage"), "AccueilPage") },
@@ -186,7 +115,6 @@ export const router = createBrowserRouter([
     path: "/",
     Component: MainLayout,
     HydrateFallback,
-    errorElement: <RouteErrorScreen />,
     children: [
       { index: true, lazy: lazyRoute(() => import("./pages/DashboardPage"), "DashboardPage") },
       { path: "accueil", lazy: lazyRoute(() => import("./pages/AccueilPage"), "AccueilPage") },

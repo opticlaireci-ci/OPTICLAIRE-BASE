@@ -274,7 +274,7 @@ export function ReglementAssurancePage() {
       {modal && <NouveauReglement initial={modal.item} onSave={handleSave} onClose={() => setModal(null)} />}
 
       {/* Top filter + recap layout */}
-      <div className="flex gap-4">
+      <div className="flex flex-col md:flex-row gap-4">
         {/* Left panel */}
         <div className="bg-white rounded-lg shadow-sm p-4 flex flex-col gap-3" style={{ minWidth: 220 }}>
           <div className="flex items-center gap-2 text-gray-700">
@@ -303,9 +303,9 @@ export function ReglementAssurancePage() {
 
         {/* Right: recap + title + add button */}
         <div className="flex-1 flex flex-col gap-3">
-          <div className="flex items-center justify-between">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
             <div>
-              <div className="text-xs text-gray-500 font-semibold uppercase tracking-wide">
+              <div className="text-xs text-gray-500 font-semibold uppercase tracking-wide" style={{ fontSize: 'clamp(0.65rem, 1.5vw, 0.75rem)' }}>
                 RÉCAPITULATIF RÈGLEMENTS ASSURANCES ({recap.total}) | ANNÉE: {annee}
               </div>
             </div>
@@ -318,8 +318,8 @@ export function ReglementAssurancePage() {
             </AddButton>
           </div>
 
-          {/* 3 recap boxes */}
-          <div className="grid grid-cols-3 gap-3">
+          {/* 3 recap boxes — auto-fit responsive */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '0.75rem' }}>
             <div className="bg-white rounded-lg p-4 border-l-4" style={{ borderColor: '#2563eb' }}>
               <div className="text-xs text-gray-500 mb-1">Total Règlements</div>
               <div className="text-2xl font-bold text-gray-800">{recap.total}</div>
@@ -347,7 +347,8 @@ export function ReglementAssurancePage() {
 
         <FilterBar {...filterBarProps} />
 
-        <div className="border border-gray-200 rounded overflow-hidden overflow-x-auto">
+        {/* Desktop table */}
+        <div className="hidden md:block border border-gray-200 rounded overflow-hidden overflow-x-auto">
           <table className="w-full text-sm border-collapse" style={{ minWidth: 1000 }}>
             <thead>
               <tr className="bg-gray-100 border-b border-gray-200 text-gray-700 font-semibold text-xs">
@@ -407,6 +408,39 @@ export function ReglementAssurancePage() {
               ))}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile cards */}
+        <div className="md:hidden flex flex-col gap-3">
+          {filtered.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '2.5rem 0', color: '#9ca3af' }}>Aucun règlement assurance</div>
+          ) : filtered.map(r => (
+            <div key={r.id} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, padding: '0.875rem', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+              {/* Top row: assurance name + montant badge */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                <span style={{ fontWeight: 700, fontSize: '1rem', color: '#1e3a5f' }}>{r.assurance || '—'}</span>
+                <span style={{ background: '#dbeafe', color: '#1d4ed8', borderRadius: 9999, padding: '0.2rem 0.65rem', fontSize: '0.78rem', fontWeight: 700 }}>
+                  {r.montant.toLocaleString('fr-FR')} F
+                </span>
+              </div>
+              {/* N° facture / relevé */}
+              <div style={{ fontSize: '0.8125rem', color: '#6b7280', marginBottom: '0.25rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <span style={{ fontFamily: 'monospace', color: '#1d4ed8', fontWeight: 600 }}>{r.numReglement}</span>
+                {r.numReleve && <span style={{ color: '#6b7280' }}>· Relevé {r.numReleve}</span>}
+              </div>
+              {/* Date + mode paiement */}
+              <div style={{ fontSize: '0.8125rem', color: '#6b7280', marginBottom: '0.25rem' }}>
+                {r.date || '—'} · {r.modePaiement}
+              </div>
+              {/* Compte banque */}
+              <div style={{ fontSize: '0.8125rem', color: '#9ca3af' }}>{r.compteBanque}</div>
+              {/* Actions */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.625rem', borderTop: '1px solid #f3f4f6', paddingTop: '0.5rem' }}>
+                <button onClick={() => setModal({ mode: 'edit', item: r })} style={{ color: '#3b82f6', padding: '0.25rem' }}><Edit size={15} /></button>
+                <button onClick={() => handleDelete(r.id)} style={{ color: '#ef4444', padding: '0.25rem' }}><Trash2 size={15} /></button>
+              </div>
+            </div>
+          ))}
         </div>
 
         <FilterBar {...filterBarProps} />

@@ -57,24 +57,6 @@ function purgerCacheLocal(prefixes: string[]) {
 }
 
 /**
- * Retire UNIQUEMENT les ventes du magasin réinitialisé du cache agrégé
- * 'leclaire_ventes_ALL', au lieu de vider tout le cache agrégé (ce qui ferait
- * disparaître à tort, le temps d'un rechargement Firestore, les ventes des
- * AUTRES magasins pour tout écran qui lit ce cache).
- */
-function retirerMagasinDuCacheAgrege(mag: string) {
-  try {
-    const cle = 'leclaire_ventes_ALL';
-    const raw = localStorage.getItem(cle);
-    if (!raw) return;
-    const liste = JSON.parse(raw);
-    if (!Array.isArray(liste)) return;
-    const filtre = liste.filter((v: any) => (v?.magasin_id || '').toUpperCase() !== mag);
-    localStorage.setItem(cle, JSON.stringify(filtre));
-  } catch { /* cache best-effort */ }
-}
-
-/**
  * Réinitialise les cibles demandées. Renvoie le détail par cible.
  * Les mises à jour (events) permettent aux écrans ouverts de se vider aussitôt.
  *
@@ -86,17 +68,8 @@ export async function reinitialiserDonnees(cibles: ResetCible[], magasinId?: str
 
   if (cibles.includes('ventes')) {
     const r = await purgerCollection('ventes', mag);
-    // Cache du magasin ciblé : on le vide entièrement (il n'a plus lieu d'être).
-    // Cache agrégé 'ALL' : on RETIRE seulement les ventes de ce magasin — on ne
-    // le vide pas complètement, sinon le Tableau de Bord Général (et tout autre
-    // écran agrégé) afficherait à tort 0 pour TOUS les magasins pendant les
-    // quelques instants précédant le prochain rechargement Firestore.
-    if (mag) {
-      purgerCacheLocal([`leclaire_ventes_${mag}`]);
-      retirerMagasinDuCacheAgrege(mag);
-    } else {
-      purgerCacheLocal(['leclaire_ventes_']);
-    }
+    // Cache par magasin (ou tout) + cache agrégé 'ALL' (toujours à recharger).
+    purgerCacheLocal(mag ? [`leclaire_ventes_${mag}`, 'leclaire_ventes_ALL'] : ['leclaire_ventes_']);
     window.dispatchEvent(new CustomEvent('ventes-updated', { detail: { magasinId: mag || 'ALL' } }));
     resultats.push({ cible: 'ventes', ...r });
   }

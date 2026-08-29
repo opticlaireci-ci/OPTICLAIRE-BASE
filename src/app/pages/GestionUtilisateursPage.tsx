@@ -568,6 +568,23 @@ function ModalUser({
   );
 }
 
+function userRoleBadgeStyle(role: string): { bg: string; text: string; border: string } {
+  const map: Record<string, { bg: string; text: string; border: string }> = {
+    super_admin:   { bg: '#f5f3ff', text: '#6d28d9', border: '#c4b5fd' },
+    admin:         { bg: '#eff6ff', text: '#1d4ed8', border: '#bfdbfe' },
+    administrateur:{ bg: '#eff6ff', text: '#1d4ed8', border: '#bfdbfe' },
+    directeur:     { bg: '#ecfdf5', text: '#065f46', border: '#a7f3d0' },
+    manager:       { bg: '#f0f9ff', text: '#0369a1', border: '#bae6fd' },
+    comptable:     { bg: '#fefce8', text: '#854d0e', border: '#fde68a' },
+    conseillere:   { bg: '#fdf4ff', text: '#7e22ce', border: '#e9d5ff' },
+    caissier:      { bg: '#fff7ed', text: '#c2410c', border: '#fed7aa' },
+    opticien:      { bg: '#f0fdf4', text: '#166534', border: '#bbf7d0' },
+    monteur:       { bg: '#faf5ff', text: '#7c3aed', border: '#ddd6fe' },
+    responsable_call_center: { bg: '#fef9c3', text: '#713f12', border: '#fde047' },
+  };
+  return map[role] ?? { bg: '#f9fafb', text: '#374151', border: '#d1d5db' };
+}
+
 export function GestionUtilisateursPage() {
   const USERS_CACHE = 'leclaire_users_cache';
   const [users, setUsers] = useState<RemoteUser[]>(() => {
@@ -650,52 +667,109 @@ export function GestionUtilisateursPage() {
           </div>
         )}
 
-        <div className="border border-gray-200 rounded overflow-x-auto">
-          <table className="w-full text-sm border-collapse">
-            <thead>
-              <tr className="bg-white border-b-2 border-gray-200 text-gray-700 font-semibold text-xs">
-                <th className="text-left px-3 py-3">Email</th>
-                <th className="text-left px-3 py-3">Nom</th>
-                <th className="text-left px-3 py-3">Prénom</th>
-                <th className="text-left px-3 py-3">Téléphone</th>
-                <th className="text-left px-3 py-3">Magasins + Rôles</th>
-                <th className="text-center px-3 py-3">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr><td colSpan={6} className="text-center py-10 text-gray-400">
-                  <Loader2 size={20} className="animate-spin inline mr-2" /> Chargement…
-                </td></tr>
-              ) : filtered.length === 0 ? (
-                <tr><td colSpan={6} className="text-center py-10 text-gray-400">Aucun utilisateur</td></tr>
-              ) : filtered.map(u => (
-                <tr key={u.id} className="border-b border-gray-100 hover:bg-gray-50">
-                  <td className="px-3 py-2 font-semibold">{u.email}</td>
-                  <td className="px-3 py-2">{u.nom || '-'}</td>
-                  <td className="px-3 py-2">{u.prenom || '-'}</td>
-                  <td className="px-3 py-2">{u.telephone || '-'}</td>
-                  <td className="px-3 py-2">
-                    <div className="flex flex-wrap gap-1">
-                      {u.assignments.length === 0 ? (
-                        <span className="text-xs text-red-500">Aucun magasin</span>
-                      ) : u.assignments.map((a, i) => (
-                        <span key={`${a.magasin_id}-${i}`} className="px-2 py-0.5 rounded text-xs bg-blue-50 text-blue-700 border border-blue-200">
-                          {a.magasin_id} · {a.role}
-                        </span>
-                      ))}
-                    </div>
-                  </td>
-                  <td className="px-3 py-2 text-center">
-                    <div className="flex items-center justify-center gap-1">
-                      <button onClick={() => setModal({ item: u })} className="text-blue-500 hover:text-blue-700 p-1"><Edit size={13} /></button>
-                      <button onClick={() => handleDelete(u)} className="text-red-400 hover:text-red-600 p-1"><Trash2 size={13} /></button>
-                    </div>
-                  </td>
+        {/* Desktop table */}
+        <div className="hidden md:block">
+          <div className="border border-gray-200 rounded overflow-x-auto">
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr className="bg-white border-b-2 border-gray-200 text-gray-700 font-semibold text-xs">
+                  <th className="text-left px-3 py-3">Email</th>
+                  <th className="text-left px-3 py-3">Nom</th>
+                  <th className="text-left px-3 py-3">Prénom</th>
+                  <th className="text-left px-3 py-3">Téléphone</th>
+                  <th className="text-left px-3 py-3">Magasins + Rôles</th>
+                  <th className="text-center px-3 py-3">Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr><td colSpan={6} className="text-center py-10 text-gray-400">
+                    <Loader2 size={20} className="animate-spin inline mr-2" /> Chargement…
+                  </td></tr>
+                ) : filtered.length === 0 ? (
+                  <tr><td colSpan={6} className="text-center py-10 text-gray-400">Aucun utilisateur</td></tr>
+                ) : filtered.map(u => (
+                  <tr key={u.id} className="border-b border-gray-100 hover:bg-gray-50">
+                    <td className="px-3 py-2 font-semibold">{u.email}</td>
+                    <td className="px-3 py-2">{u.nom || '-'}</td>
+                    <td className="px-3 py-2">{u.prenom || '-'}</td>
+                    <td className="px-3 py-2">{u.telephone || '-'}</td>
+                    <td className="px-3 py-2">
+                      <div className="flex flex-wrap gap-1">
+                        {u.assignments.length === 0 ? (
+                          <span className="text-xs text-red-500">Aucun magasin</span>
+                        ) : u.assignments.map((a, i) => (
+                          <span key={`${a.magasin_id}-${i}`} className="px-2 py-0.5 rounded text-xs bg-blue-50 text-blue-700 border border-blue-200">
+                            {a.magasin_id} · {a.role}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+                    <td className="px-3 py-2 text-center">
+                      <div className="flex items-center justify-center gap-1">
+                        <button onClick={() => setModal({ item: u })} className="text-blue-500 hover:text-blue-700 p-1"><Edit size={13} /></button>
+                        <button onClick={() => handleDelete(u)} className="text-red-400 hover:text-red-600 p-1"><Trash2 size={13} /></button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Mobile cards */}
+        <div className="md:hidden" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: '40px 0', color: '#9ca3af' }}>
+              <Loader2 size={20} className="animate-spin" style={{ display: 'inline', marginRight: 8 }} /> Chargement…
+            </div>
+          ) : filtered.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '40px 0', color: '#9ca3af' }}>Aucun utilisateur</div>
+          ) : filtered.map(u => (
+            <div key={u.id} style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: 8, padding: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: 'clamp(0.82rem, 3vw, 0.95rem)', color: '#111827' }}>
+                    {u.nom ? `${u.nom}${u.prenom ? ' ' + u.prenom : ''}` : u.email}
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: '#6b7280', marginTop: 2 }}>{u.email}</div>
+                </div>
+                <div style={{ display: 'flex', gap: 4 }}>
+                  <button
+                    onClick={() => setModal({ item: u })}
+                    style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 4, padding: '4px 8px', color: '#2563eb', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                  >
+                    <Edit size={13} />
+                  </button>
+                  <button
+                    onClick={() => handleDelete(u)}
+                    style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 4, padding: '4px 8px', color: '#dc2626', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+              </div>
+              {u.telephone && (
+                <div style={{ fontSize: '0.78rem', color: '#374151', marginBottom: 6 }}>📞 {u.telephone}</div>
+              )}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                {u.assignments.length === 0 ? (
+                  <span style={{ fontSize: '0.72rem', color: '#ef4444' }}>Aucun magasin assigné</span>
+                ) : u.assignments.map((a, i) => {
+                  const s = userRoleBadgeStyle(a.role);
+                  return (
+                    <span
+                      key={`${a.magasin_id}-${i}`}
+                      style={{ padding: '2px 8px', borderRadius: 12, fontSize: '0.72rem', background: s.bg, color: s.text, border: `1px solid ${s.border}` }}
+                    >
+                      {a.magasin_id} · {a.role}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </div>

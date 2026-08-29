@@ -1,136 +1,138 @@
 /* ── Responsive mobile global ─────────────────────────────────────────────── */
 
 /* Empêche le débordement horizontal sur tout le document */
-html, body, #root {
+html {
   overflow-x: hidden;
   max-width: 100vw;
 }
-
-/* ── Correctif fenêtres modales (tout écran, pas seulement mobile) ──────────
-   Cause du bug « menu caché derrière la fenêtre » observé sur grand écran :
-   un enfant flex ou grid a par défaut min-width: auto, c'est-à-dire qu'il ne
-   peut jamais devenir plus étroit que le contenu le plus large qu'il
-   contient (ex : un tableau de règlements avec beaucoup de colonnes). Ce
-   contenu « pousse » alors la fenêtre modale — et parfois la page entière —
-   au-delà de la largeur de l'écran, ce qui décale tout l'affichage et
-   tronque le menu et le titre de la fenêtre, quel que soit l'appareil ou le
-   navigateur utilisé. On neutralise ce piège partout dans l'application. */
-.flex > *,
-.grid > * {
-  min-width: 0;
+body, #root {
+  max-width: 100vw;
 }
 
-/* Sécurité supplémentaire : quel que soit son contenu, une fenêtre modale
-   (overlay plein écran + boîte blanche) ne doit jamais dépasser la largeur
-   ni la hauteur visibles de l'écran. Le débordement éventuel défile à
-   l'intérieur de la fenêtre au lieu de décaler toute la page. */
-.fixed.inset-0 {
-  overflow: auto;
-  /* ── Correctif « menu au-dessus de la fenêtre » ─────────────────────────
-     Le menu latéral (Drawer) et la barre du haut (AppBar) viennent de la
-     bibliothèque MUI, dont l'échelle de superposition va jusqu'à 1200-1201.
-     Les fenêtres modales de l'app (Tailwind, classes z-50 / z-[60] /
-     z-[1000]) restaient elles bien en-dessous : le menu et la barre du
-     haut s'affichaient donc PAR-DESSUS la fenêtre au lieu d'être masqués
-     par elle, ce qui donnait l'impression que la fenêtre était tronquée
-     derrière le menu (visible sur grand écran comme sur mobile). On force
-     ici toutes les fenêtres modales de l'app à passer au-dessus de tout le
-     reste de l'interface, quel que soit l'appareil ou le navigateur. */
-  z-index: 1310 !important;
-}
-.fixed.inset-0 > div {
-  max-width: calc(100vw - 1rem);
-  max-height: 100vh;
-  box-sizing: border-box;
-}
+/* Hauteur dynamique (gère la barre d'adresse mobile iOS / Android) */
+html { height: 100%; }
+body { min-height: 100%; min-height: 100dvh; }
 
-/* Double sécurité : on plafonne aussi directement le menu latéral (Drawer)
-   et la barre du haut (AppBar) de MUI, pour garantir qu'ils restent SOUS
-   les fenêtres modales même si une autre règle venait changer leur
-   superposition par ailleurs. */
-.MuiDrawer-root,
-.MuiAppBar-root {
-  z-index: 1200 !important;
-}
+/* ── box-sizing universel ──────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
 
-/* Tables : défilement horizontal sur mobile */
-@media (max-width: 768px) {
-  table {
+/* ── Images fluides ────────────────────────────────────────────────────────── */
+img, svg { max-width: 100%; height: auto; }
+
+/* ── Scrollbar fine ─────────────────────────────────────────────────────────  */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 3px; }
+::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 3px; }
+
+/* ── Tables : toujours défilables horizontalement ────────────────────────── */
+/* La div.overflow-x-auto encapsule déjà la table — on laisse la table en     */
+/* display:table normal et on ajoute juste white-space:nowrap sur les cellules */
+/* pour que les colonnes gardent leur taille et déclenchent le scroll.          */
+.overflow-x-auto {
+  overflow-x: auto !important;
+  -webkit-overflow-scrolling: touch;
+}
+.overflow-x-auto table {
+  display: table;
+  white-space: nowrap;  /* empêche le crush des colonnes */
+  width: max-content;   /* laisse la table prendre sa largeur naturelle */
+  min-width: 100%;
+}
+/* Scrollbar pour les wrappers overflow-x-auto */
+.overflow-x-auto::-webkit-scrollbar { height: 4px; }
+.overflow-x-auto::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 2px; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MOBILE  ≤ 767 px
+   ═══════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 767px) {
+
+  /* ── 1. Tables sans wrapper → défilement horizontal ──────────────────── */
+  /* Seulement les tables qui ne sont PAS déjà dans un overflow-x-auto       */
+  table:not(.no-mobile-scroll) {
     display: block;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
+    white-space: nowrap;
     max-width: 100%;
   }
 
-  /* Formulaires multi-colonnes : passage en colonne sur petit écran */
-  .mobile-stack {
-    flex-direction: column !important;
-  }
+  /* ── 2. Grilles Tailwind → colonne unique sur mobile ─────────────────── */
+  /* Parent : force une colonne */
+  .grid { grid-template-columns: 1fr !important; }
 
-  /* Réduit le padding des cartes sur mobile */
-  .mobile-compact {
-    padding: 8px !important;
-  }
+  /* ── 3. Modals fixed plein-écran ──────────────────────────────────────── */
+  .fixed.inset-0 { align-items: flex-start !important; }
 
-  /* Inputs et selects : taille de touche confortable (44px min) */
-  input, select, textarea, button {
-    min-height: 36px;
+  /* ── 4. Flex rows → wrapping automatique ─────────────────────────────── */
+  .flex { flex-wrap: wrap; }
+  /* On annule le wrap uniquement là où c'est intentionnel (icônes etc.) */
+  .flex.flex-nowrap { flex-wrap: nowrap !important; }
+  .flex.items-center.gap-1 { flex-wrap: nowrap !important; } /* petits groupes icône+label */
+
+  /* ── 5. Inputs / boutons : taille de touche confortable ──────────────── */
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea {
+    min-height: 40px;
     font-size: 16px !important; /* Empêche le zoom auto sur iOS */
-  }
-
-  /* Supprime les marges horizontales excessives */
-  .MuiBox-root {
     max-width: 100%;
   }
-}
 
-/* Scrollbar fine pour les tables en overflow */
-table::-webkit-scrollbar {
-  height: 4px;
-}
-table::-webkit-scrollbar-track {
-  background: #f1f1f1;
-}
-table::-webkit-scrollbar-thumb {
-  background: #ccc;
-  border-radius: 2px;
-}
-
-/* ── Viewport meta enforcement (touch devices) ───────────────────────────── */
-* {
-  box-sizing: border-box;
-}
-
-/* Médias fluides : jamais plus large que leur conteneur, quel que soit l'écran. */
-img, video, canvas, svg {
-  max-width: 100%;
-  height: auto;
-}
-
-/* Toute grille/flex "faite main" (Tailwind ou style inline) qui n'a pas prévu
-   de variante responsive repasse en une seule colonne sur mobile plutôt que
-   d'écraser son contenu ou déborder de l'écran. */
-@media (max-width: 640px) {
-  .grid {
-    grid-template-columns: 1fr !important;
-  }
-  .flex:not(.flex-col):not(.mobile-keep-row) {
-    flex-wrap: wrap;
-  }
-}
-
-/* Conteneurs à largeur fixe : on borne à la largeur de l'écran plutôt que de
-   laisser déborder horizontalement toute la page. */
-@media (max-width: 768px) {
-  [style*="width: 1"],
-  [style*="min-width: 1"] {
+  /* ── 6. MUI ajustements ───────────────────────────────────────────────── */
+  .MuiBox-root { max-width: 100%; }
+  .MuiDialog-paper {
+    width: 100% !important;
     max-width: 100% !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+    max-height: 100dvh !important;
+  }
+
+  /* ── 7. Padding réduit sur mobile ─────────────────────────────────────── */
+  .p-6 { padding: 1rem !important; }
+  .p-5 { padding: 0.875rem !important; }
+  .px-6 { padding-left: 1rem !important; padding-right: 1rem !important; }
+  .px-5 { padding-left: 0.875rem !important; padding-right: 0.875rem !important; }
+
+  /* ── 8. Textes longs → word-break ────────────────────────────────────── */
+  h1, h2, h3, h4, p, td, th { word-break: break-word; overflow-wrap: break-word; }
+
+  /* ── 9. Charts fluides ────────────────────────────────────────────────── */
+  .recharts-wrapper,
+  .recharts-responsive-container { max-width: 100% !important; }
+
+  /* ── 10. Headers page → wrap ──────────────────────────────────────────── */
+  .flex.items-start.justify-between,
+  .flex.items-center.justify-between { flex-wrap: wrap !important; gap: 0.5rem !important; }
+
+  /* ── 11. Stat tiles min-width → reset ────────────────────────────────── */
+  [class*="min-w-"] { min-width: 0 !important; }
+
+  /* ── 12. Texte trop grand ─────────────────────────────────────────────── */
+  h1 { font-size: 1.25rem !important; }
+  h2 { font-size: 1.1rem !important; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   TABLETTE  768 px – 1023 px
+   Règles minimales — les grilles gardent leurs colonnes sur tablette/desktop.
+   ═══════════════════════════════════════════════════════════════════════════ */
+@media (min-width: 768px) and (max-width: 1023px) {
+  /* Tables sans wrapper → scroll horizontal */
+  table:not(.no-mobile-scroll) {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    white-space: nowrap;
   }
 }
 
-/* Cartes / panneaux : on évite les coins et paddings surdimensionnés qui
-   mangent l'espace utile sur petit écran. */
-@media (max-width: 480px) {
-  h1 { font-size: 1.3rem !important; }
-  h2 { font-size: 1.15rem !important; }
+/* ═══════════════════════════════════════════════════════════════════════════
+   PRINT
+   ═══════════════════════════════════════════════════════════════════════════ */
+@media print {
+  .no-print { display: none !important; }
+  table { display: table !important; white-space: normal !important; }
+  * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
 }

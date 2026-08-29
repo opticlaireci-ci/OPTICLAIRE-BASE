@@ -246,8 +246,8 @@ export function RdvEnLigneGlobalPage() {
 
       <div className="bg-white rounded-lg shadow-sm p-5 flex flex-col gap-4">
         {/* Title + Add */}
-        <div className="flex items-center justify-between">
-          <h1 className="text-base font-bold text-gray-800">RDV En Ligne ({rdvs.length})</h1>
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <h1 className="text-base font-bold text-gray-800" style={{ fontSize: 'clamp(13px, 3vw, 16px)' }}>RDV En Ligne ({rdvs.length})</h1>
           <AddButton onClick={() => setModal({})}
             className="flex items-center gap-1.5 px-4 py-1.5 rounded text-white text-sm font-semibold"
             style={{ backgroundColor: '#1a7a96' }}>
@@ -264,8 +264,8 @@ export function RdvEnLigneGlobalPage() {
           page={page} totalPages={totalPages} goPage={goPage}
         />
 
-        {/* Table */}
-        <div className="border border-gray-200 rounded overflow-hidden">
+        {/* Table — desktop */}
+        <div className="hidden md:block border border-gray-200 rounded overflow-hidden">
           <table className="w-full text-sm border-collapse">
             <thead>
               <tr className="bg-white border-b border-gray-200">
@@ -325,6 +325,45 @@ export function RdvEnLigneGlobalPage() {
               ))}
             </tbody>
           </table>
+        </div>
+
+        {/* Cartes RDV — mobile */}
+        <div className="md:hidden" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          {pageData.length === 0 ? (
+            <div style={{ padding: '32px', textAlign: 'center', color: '#9ca3af', fontSize: '14px' }}>Aucun RDV en ligne enregistré</div>
+          ) : pageData.map((r, i) => (
+            <div key={r.id} style={{ backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e5e7eb', padding: '14px 16px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px', gap: '8px' }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 'clamp(13px, 3.5vw, 15px)', fontWeight: 700, color: '#111827' }}>{r.client}</div>
+                  <div style={{ fontSize: '11px', color: '#2563eb', fontFamily: 'monospace', marginTop: '2px' }}>{r.numRef}</div>
+                </div>
+                <span className="px-2 py-0.5 rounded text-xs font-semibold text-white flex-shrink-0" style={{ backgroundColor: statusColor(r.statut) }}>
+                  {r.statut}
+                </span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '4px 12px', fontSize: '12px', color: '#374151', marginBottom: '10px' }}>
+                <div><span style={{ color: '#9ca3af' }}>Magasin : </span>{r.magasin}</div>
+                {r.motif && <div><span style={{ color: '#9ca3af' }}>Motif : </span>{r.motif}</div>}
+                <div><span style={{ color: '#9ca3af' }}>RDV : </span>{r.rendezVous ? fmt(r.rendezVous) : '—'}</div>
+                {r.commentaire && <div style={{ gridColumn: '1 / -1' }}><span style={{ color: '#9ca3af' }}>Commentaire : </span>{r.commentaire}</div>}
+              </div>
+              {r.createdBy && (
+                <div style={{ fontSize: '11px', color: '#6b7280', marginBottom: '8px' }}>
+                  <span style={{ fontWeight: 600, color: '#374151' }}>{r.createdBy}</span>
+                  {r.createdAt && <span style={{ marginLeft: '6px' }}>{formatDate(r.createdAt)}</span>}
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button onClick={() => setModal({ item: r })} style={{ padding: '6px 10px', borderRadius: '4px', border: '1px solid #d1d5db', background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', color: '#f59e0b' }}>
+                  <Edit size={13} />
+                </button>
+                <button onClick={() => handleDelete(r.id)} style={{ padding: '6px 10px', borderRadius: '4px', border: '1px solid #fca5a5', background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', color: '#dc2626' }}>
+                  <Trash2 size={13} />
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
 
         {/* Bottom filter bar */}

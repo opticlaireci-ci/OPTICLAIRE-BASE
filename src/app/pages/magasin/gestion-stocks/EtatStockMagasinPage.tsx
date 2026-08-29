@@ -15,7 +15,6 @@ import {
   Button,
   Chip,
   InputAdornment,
-  Grid,
   Card,
   CardContent,
 } from '@mui/material';
@@ -24,7 +23,6 @@ import PrintIcon from '@mui/icons-material/Print';
 import DownloadIcon from '@mui/icons-material/Download';
 import { recalculerStockMagasin, readStockCache, type StockMagasin } from '../../../services/inventaireService';
 import { excelHeaderRows, printHeaderHTML } from '../../../utils/documentHeader';
-const GridAny = Grid as any;
 
 interface ProduitStock {
   id: string;
@@ -147,7 +145,10 @@ export function EtatStockMagasinPage() {
       <head>
         <title>État de Stock - ${getMagasinLabel(magasinId || '')}</title>
         <style>
-          body { font-family: Arial, sans-serif; padding: 20px; display: flex; flex-direction: column; min-height: 100vh; }
+          @page { margin: 0; size: A4; }
+          @media screen { body { visibility: hidden; } }
+          @media print { body { visibility: visible; } }
+          body { font-family: Arial, sans-serif; padding: 20px; }
           h1 { text-align: center; color: #1976d2; margin-bottom: 10px; }
           .subtitle { text-align: center; color: #666; margin-bottom: 30px; }
           .stats { display: flex; gap: 15px; margin-bottom: 30px; flex-wrap: wrap; }
@@ -161,7 +162,7 @@ export function EtatStockMagasinPage() {
           .status-disponible { background-color: #4caf50; color: white; padding: 4px 8px; border-radius: 12px; font-size: 10px; }
           .status-alerte { background-color: #ff9800; color: white; padding: 4px 8px; border-radius: 12px; font-size: 10px; }
           .status-rupture { background-color: #f44336; color: white; padding: 4px 8px; border-radius: 12px; font-size: 10px; }
-          .footer { margin-top: auto; padding-top: 30px; text-align: center; font-size: 10px; color: #666; }
+          .footer { margin-top: 30px; text-align: center; font-size: 10px; color: #666; }
         </style>
       </head>
       <body>
@@ -232,17 +233,18 @@ export function EtatStockMagasinPage() {
         <div class="footer">
           Document généré le ${new Date().toLocaleString('fr-FR')} - OPTICLAIRE
         </div>
+        <script>
+          window.addEventListener('load', function() {
+            window.print();
+            window.onafterprint = function() { window.close(); };
+          });
+        </script>
       </body>
       </html>
     `;
 
     printWindow.document.write(printContent);
     printWindow.document.close();
-    printWindow.focus();
-    setTimeout(() => {
-      printWindow.print();
-      printWindow.close();
-    }, 250);
   };
 
   const handleExportExcel = async () => {
@@ -270,64 +272,64 @@ export function EtatStockMagasinPage() {
   };
 
   return (
-    <Box sx={{ p: 3 }}>
-      <Typography variant="h4" sx={{ mb: 3 }}>
+    <Box sx={{ p: { xs: 2, md: 3 } }}>
+      <Typography
+        variant="h4"
+        style={{ fontSize: 'clamp(1.25rem, 4vw, 2rem)', marginBottom: '24px' }}
+      >
         État de Stock - {getMagasinLabel(magasinId || '')}
       </Typography>
 
       {/* Statistiques */}
-      <GridAny container spacing={2} sx={{ mb: 3 }}>
-        <GridAny item xs={12} sm={6} md={2.4}>
-          <Card sx={{ bgcolor: '#1976d2', color: 'white' }}>
-            <CardContent>
-              <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
-                {totalMontures}
-              </Typography>
-              <Typography variant="body2">Total Articles</Typography>
-            </CardContent>
-          </Card>
-        </GridAny>
-        <GridAny item xs={12} sm={6} md={2.4}>
-          <Card sx={{ bgcolor: '#4caf50', color: 'white' }}>
-            <CardContent>
-              <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
-                {stockDisponible}
-              </Typography>
-              <Typography variant="body2">Disponibles</Typography>
-            </CardContent>
-          </Card>
-        </GridAny>
-        <GridAny item xs={12} sm={6} md={2.4}>
-          <Card sx={{ bgcolor: '#ff9800', color: 'white' }}>
-            <CardContent>
-              <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
-                {stockAlerte}
-              </Typography>
-              <Typography variant="body2">En Alerte</Typography>
-            </CardContent>
-          </Card>
-        </GridAny>
-        <GridAny item xs={12} sm={6} md={2.4}>
-          <Card sx={{ bgcolor: '#f44336', color: 'white' }}>
-            <CardContent>
-              <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
-                {stockRupture}
-              </Typography>
-              <Typography variant="body2">En Rupture</Typography>
-            </CardContent>
-          </Card>
-        </GridAny>
-        <GridAny item xs={12} sm={6} md={2.4}>
-          <Card sx={{ bgcolor: '#9c27b0', color: 'white' }}>
-            <CardContent>
-              <Typography variant="h5" sx={{ fontWeight: 'bold' }}>
-                {valeurStock.toLocaleString('fr-FR')}
-              </Typography>
-              <Typography variant="body2">Valeur Stock (FCFA)</Typography>
-            </CardContent>
-          </Card>
-        </GridAny>
-      </GridAny>
+      <Box
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))',
+          gap: '16px',
+          marginBottom: '24px',
+        }}
+      >
+        <Card sx={{ bgcolor: '#1976d2', color: 'white' }}>
+          <CardContent>
+            <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
+              {totalMontures}
+            </Typography>
+            <Typography variant="body2">Total Articles</Typography>
+          </CardContent>
+        </Card>
+        <Card sx={{ bgcolor: '#4caf50', color: 'white' }}>
+          <CardContent>
+            <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
+              {stockDisponible}
+            </Typography>
+            <Typography variant="body2">Disponibles</Typography>
+          </CardContent>
+        </Card>
+        <Card sx={{ bgcolor: '#ff9800', color: 'white' }}>
+          <CardContent>
+            <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
+              {stockAlerte}
+            </Typography>
+            <Typography variant="body2">En Alerte</Typography>
+          </CardContent>
+        </Card>
+        <Card sx={{ bgcolor: '#f44336', color: 'white' }}>
+          <CardContent>
+            <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
+              {stockRupture}
+            </Typography>
+            <Typography variant="body2">En Rupture</Typography>
+          </CardContent>
+        </Card>
+        <Card sx={{ bgcolor: '#9c27b0', color: 'white' }}>
+          <CardContent>
+            <Typography variant="h5" sx={{ fontWeight: 'bold' }}>
+              {valeurStock.toLocaleString('fr-FR')}
+            </Typography>
+            <Typography variant="body2">Valeur Stock (FCFA)</Typography>
+          </CardContent>
+        </Card>
+      </Box>
 
       {/* Barre d'outils */}
       <Paper sx={{ p: 2, mb: 2 }}>
@@ -337,7 +339,7 @@ export function EtatStockMagasinPage() {
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             size="small"
-            sx={{ flexGrow: 1, minWidth: 250 }}
+            sx={{ flexGrow: 1, minWidth: 200 }}
             InputProps={{
               startAdornment: (
                 <InputAdornment position="start">
@@ -365,62 +367,197 @@ export function EtatStockMagasinPage() {
         </Box>
       </Paper>
 
-      {/* Tableau */}
-      <TableContainer component={Paper}>
-        <Table size="small">
-          <TableHead>
-            <TableRow sx={{ bgcolor: '#f5f5f5' }}>
-              <TableCell sx={{ fontWeight: 'bold' }}>#</TableCell>
-              <TableCell sx={{ fontWeight: 'bold' }}>Type</TableCell>
-              <TableCell sx={{ fontWeight: 'bold' }}>Code Barre</TableCell>
-              <TableCell sx={{ fontWeight: 'bold' }}>Marque</TableCell>
-              <TableCell sx={{ fontWeight: 'bold' }}>Référence</TableCell>
-              <TableCell sx={{ fontWeight: 'bold' }}>Couleur</TableCell>
-              <TableCell sx={{ fontWeight: 'bold' }}>Taille</TableCell>
-              <TableCell sx={{ fontWeight: 'bold' }}>Stock</TableCell>
-              <TableCell sx={{ fontWeight: 'bold' }}>Seuil</TableCell>
-              <TableCell sx={{ fontWeight: 'bold' }}>Prix Unit.</TableCell>
-              <TableCell sx={{ fontWeight: 'bold' }}>Valeur</TableCell>
-              <TableCell sx={{ fontWeight: 'bold' }}>Statut</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {filteredMontures.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={12} align="center" sx={{ py: 4 }}>
-                  <Typography color="textSecondary">
-                    Aucune monture/accessoire en stock distribué ou transféré dans ce magasin
-                  </Typography>
-                </TableCell>
-              </TableRow>
-            ) : (
-              filteredMontures.map((monture, index) => {
-                const status = getStockStatus(monture.stock, monture.seuil);
-                return (
-                  <TableRow key={monture.id} hover>
-                    <TableCell>{index + 1}</TableCell>
-                    <TableCell><Chip label={monture.type === 'accessoire' ? 'Accessoire' : 'Monture'} size="small" variant="outlined" /></TableCell>
-                    <TableCell>{monture.codeBarre || '-'}</TableCell>
-                    <TableCell>{monture.marque || '-'}</TableCell>
-                    <TableCell>{monture.reference || '-'}</TableCell>
-                    <TableCell>{monture.couleur || '-'}</TableCell>
-                    <TableCell>{monture.taille || '-'}</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold' }}>{monture.stock || 0}</TableCell>
-                    <TableCell>{monture.seuil || 0}</TableCell>
-                    <TableCell>{(monture.prix || 0).toLocaleString('fr-FR')} FCFA</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold' }}>
+      {/* Mobile cards — visible uniquement sur petits écrans */}
+      <div className="md:hidden" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        {filteredMontures.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '32px', color: '#666', backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e0e0e0' }}>
+            Aucune monture/accessoire en stock distribué ou transféré dans ce magasin
+          </div>
+        ) : (
+          filteredMontures.map((monture) => {
+            const status = getStockStatus(monture.stock, monture.seuil);
+            const headerBg =
+              status.color === 'success' ? '#4caf50' :
+              status.color === 'warning' ? '#ff9800' :
+              '#f44336';
+            return (
+              <div
+                key={monture.id}
+                style={{
+                  border: '1px solid #e0e0e0',
+                  borderRadius: '8px',
+                  overflow: 'hidden',
+                  backgroundColor: '#fff',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+                }}
+              >
+                {/* En-tête coloré : badges type + statut */}
+                <div
+                  style={{
+                    backgroundColor: headerBg,
+                    color: '#fff',
+                    padding: '10px 12px',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: '0.72rem',
+                      backgroundColor: 'rgba(255,255,255,0.25)',
+                      padding: '2px 8px',
+                      borderRadius: '12px',
+                      fontWeight: 600,
+                    }}
+                  >
+                    {monture.type === 'accessoire' ? 'Accessoire' : 'Monture'}
+                  </span>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 'bold' }}>{status.label}</span>
+                </div>
+
+                {/* Corps de la carte */}
+                <div style={{ padding: '12px' }}>
+                  {/* Désignation */}
+                  <div style={{ fontWeight: 'bold', fontSize: '0.9rem', marginBottom: '2px' }}>
+                    {[monture.marque, monture.reference].filter(Boolean).join(' - ') || '-'}
+                  </div>
+                  {monture.codeBarre && (
+                    <div style={{ fontSize: '0.72rem', color: '#888', marginBottom: '10px' }}>
+                      {monture.codeBarre}
+                    </div>
+                  )}
+
+                  {/* Grille 3 colonnes : Stock / Seuil / Prix */}
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(3, 1fr)',
+                      gap: '8px',
+                      marginBottom: '10px',
+                    }}
+                  >
+                    <div
+                      style={{
+                        textAlign: 'center',
+                        backgroundColor: '#f5f5f5',
+                        borderRadius: '6px',
+                        padding: '6px 4px',
+                      }}
+                    >
+                      <div style={{ fontSize: '1.15rem', fontWeight: 'bold', color: '#1976d2' }}>
+                        {monture.stock || 0}
+                      </div>
+                      <div style={{ fontSize: '0.65rem', color: '#666' }}>Stock</div>
+                    </div>
+                    <div
+                      style={{
+                        textAlign: 'center',
+                        backgroundColor: '#f5f5f5',
+                        borderRadius: '6px',
+                        padding: '6px 4px',
+                      }}
+                    >
+                      <div style={{ fontSize: '1.15rem', fontWeight: 'bold', color: '#555' }}>
+                        {monture.seuil || 0}
+                      </div>
+                      <div style={{ fontSize: '0.65rem', color: '#666' }}>Seuil</div>
+                    </div>
+                    <div
+                      style={{
+                        textAlign: 'center',
+                        backgroundColor: '#f5f5f5',
+                        borderRadius: '6px',
+                        padding: '6px 4px',
+                      }}
+                    >
+                      <div style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#333' }}>
+                        {(monture.prix || 0).toLocaleString('fr-FR')}
+                      </div>
+                      <div style={{ fontSize: '0.65rem', color: '#666' }}>Prix FCFA</div>
+                    </div>
+                  </div>
+
+                  {/* Valeur totale */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      paddingTop: '8px',
+                      borderTop: '1px solid #f0f0f0',
+                    }}
+                  >
+                    <span style={{ fontSize: '0.75rem', color: '#666' }}>Valeur totale</span>
+                    <span style={{ fontWeight: 'bold', fontSize: '0.9rem', color: '#1976d2' }}>
                       {((monture.prix || 0) * (monture.stock || 0)).toLocaleString('fr-FR')} FCFA
-                    </TableCell>
-                    <TableCell>
-                      <Chip label={status.label} color={status.color} size="small" />
-                    </TableCell>
-                  </TableRow>
-                );
-              })
-            )}
-          </TableBody>
-        </Table>
-      </TableContainer>
+                    </span>
+                  </div>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* Tableau desktop — masqué sur petits écrans */}
+      <div className="hidden md:block">
+        <TableContainer component={Paper}>
+          <Table size="small">
+            <TableHead>
+              <TableRow sx={{ bgcolor: '#f5f5f5' }}>
+                <TableCell sx={{ fontWeight: 'bold' }}>#</TableCell>
+                <TableCell sx={{ fontWeight: 'bold' }}>Type</TableCell>
+                <TableCell sx={{ fontWeight: 'bold' }}>Code Barre</TableCell>
+                <TableCell sx={{ fontWeight: 'bold' }}>Marque</TableCell>
+                <TableCell sx={{ fontWeight: 'bold' }}>Référence</TableCell>
+                <TableCell sx={{ fontWeight: 'bold' }}>Couleur</TableCell>
+                <TableCell sx={{ fontWeight: 'bold' }}>Taille</TableCell>
+                <TableCell sx={{ fontWeight: 'bold' }}>Stock</TableCell>
+                <TableCell sx={{ fontWeight: 'bold' }}>Seuil</TableCell>
+                <TableCell sx={{ fontWeight: 'bold' }}>Prix Unit.</TableCell>
+                <TableCell sx={{ fontWeight: 'bold' }}>Valeur</TableCell>
+                <TableCell sx={{ fontWeight: 'bold' }}>Statut</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {filteredMontures.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={12} align="center" sx={{ py: 4 }}>
+                    <Typography color="textSecondary">
+                      Aucune monture/accessoire en stock distribué ou transféré dans ce magasin
+                    </Typography>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredMontures.map((monture, index) => {
+                  const status = getStockStatus(monture.stock, monture.seuil);
+                  return (
+                    <TableRow key={monture.id} hover>
+                      <TableCell>{index + 1}</TableCell>
+                      <TableCell><Chip label={monture.type === 'accessoire' ? 'Accessoire' : 'Monture'} size="small" variant="outlined" /></TableCell>
+                      <TableCell>{monture.codeBarre || '-'}</TableCell>
+                      <TableCell>{monture.marque || '-'}</TableCell>
+                      <TableCell>{monture.reference || '-'}</TableCell>
+                      <TableCell>{monture.couleur || '-'}</TableCell>
+                      <TableCell>{monture.taille || '-'}</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold' }}>{monture.stock || 0}</TableCell>
+                      <TableCell>{monture.seuil || 0}</TableCell>
+                      <TableCell>{(monture.prix || 0).toLocaleString('fr-FR')} FCFA</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold' }}>
+                        {((monture.prix || 0) * (monture.stock || 0)).toLocaleString('fr-FR')} FCFA
+                      </TableCell>
+                      <TableCell>
+                        <Chip label={status.label} color={status.color} size="small" />
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </div>
     </Box>
   );
 }

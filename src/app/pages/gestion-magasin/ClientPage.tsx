@@ -295,10 +295,10 @@ export function ClientPage() {
 
   return (
     <div className="flex flex-col min-h-screen bg-white">
-      <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200 bg-gray-50">
-        <div className="flex items-center gap-3">
-          <span className="text-sm font-semibold text-gray-700">Base de Données Clients — Tous Magasins</span>
-          <div className="flex gap-1">
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }} className="px-5 py-3 border-b border-gray-200 bg-gray-50">
+        <div className="flex items-center gap-3 flex-wrap">
+          <span className="text-sm font-semibold text-gray-700" style={{ fontSize: 'clamp(0.75rem, 2vw, 0.875rem)' }}>Base de Données Clients — Tous Magasins</span>
+          <div className="flex gap-1 flex-wrap">
             {magasins.map(m => {
               const count = allClients.filter(c=>c.magasinId===m.id).length;
               return (
@@ -327,36 +327,36 @@ export function ClientPage() {
       </div>
 
       <div className="flex flex-col gap-4 p-5">
-        <h1 className="text-xl font-bold text-gray-800">Clients ({allClients.length})</h1>
+        <h1 className="text-xl font-bold text-gray-800" style={{ fontSize: 'clamp(1rem, 3vw, 1.25rem)' }}>Clients ({allClients.length})</h1>
 
         {/* Filtres */}
-        <div className="flex items-end gap-4 flex-wrap">
-          <div className="flex flex-col gap-1" style={{width:280}}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem', alignItems: 'end' }}>
+          <div className="flex flex-col gap-1">
             <label className="text-xs text-gray-600">Infos Client...</label>
             <div className="flex items-center border border-gray-300 rounded bg-white overflow-hidden">
               <input className="px-2 py-1.5 text-sm outline-none flex-1 bg-transparent" placeholder="Infos Client..." value={search} onChange={e=>{setSearch(e.target.value);setPage(1);}}/>
               {search&&<button onClick={()=>setSearch('')} className="px-2 text-gray-400"><X size={13}/></button>}
             </div>
           </div>
-          <div className="flex flex-col gap-1" style={{width:180}}>
+          <div className="flex flex-col gap-1">
             <label className="text-xs text-gray-600">Jour de Naissance...</label>
             <div className="flex items-center border border-gray-300 rounded bg-white overflow-hidden">
               <input className="px-2 py-1.5 text-sm outline-none flex-1 bg-transparent" placeholder="20-01" value={filterJour} onChange={e=>{setFilterJour(e.target.value);setPage(1);}}/>
               {filterJour&&<button onClick={()=>setFilterJour('')} className="px-2 text-gray-400"><X size={13}/></button>}
             </div>
           </div>
-          <div className="flex flex-col gap-1" style={{width:170}}>
+          <div className="flex flex-col gap-1">
             <label className="text-xs text-gray-600">Date Édition</label>
             <div className="flex items-center border border-gray-300 rounded bg-white overflow-hidden">
               <input type="date" className="px-2 py-1.5 text-sm outline-none flex-1 bg-transparent" value={filterDate} onChange={e=>{setFilterDate(e.target.value);setPage(1);}}/>
               {filterDate&&<button onClick={()=>setFilterDate('')} className="px-1 text-gray-400"><X size={13}/></button>}
             </div>
           </div>
-          <div className="flex flex-col gap-1"><label className="text-xs text-gray-600">...</label>
-            <button className="flex items-center justify-center rounded text-white" style={{backgroundColor:'#1a7a96',width:38,height:34}}><Search size={15}/></button>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-gray-600">...</label>
+            <button className="flex items-center justify-center rounded text-white" style={{backgroundColor:'#1a7a96',height:34}}><Search size={15}/></button>
           </div>
-          <div className="flex-1"/>
-          <div className="flex items-center gap-1 self-end">
+          <div className="flex items-center gap-1">
             <button onClick={()=>goPage(1)} disabled={page===1} className="p-1 text-gray-500 disabled:opacity-30"><ChevronFirst size={14}/></button>
             <button onClick={()=>goPage(page-1)} disabled={page===1} className="p-1 text-gray-500 disabled:opacity-30"><ChevronLeft size={14}/></button>
             {Array.from({length:Math.min(totalPages,5)},(_,i)=>i+1).map(p=>(
@@ -367,8 +367,8 @@ export function ClientPage() {
           </div>
         </div>
 
-        {/* Tableau */}
-        <div className="border border-gray-200 rounded overflow-hidden">
+        {/* Desktop table */}
+        <div className="hidden md:block border border-gray-200 rounded overflow-hidden">
           <table className="w-full text-sm border-collapse">
             <thead>
               <tr className="bg-white border-b border-gray-200">
@@ -434,6 +434,65 @@ export function ClientPage() {
             </tbody>
           </table>
         </div>
+
+        {/* Mobile cards */}
+        <div className="md:hidden flex flex-col gap-3">
+          {pageData.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '3rem 0', color: '#9ca3af' }}>Aucun client enregistré</div>
+          ) : pageData.map((c, i) => (
+            <div key={c.id} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, padding: '0.875rem', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+              {/* Top: name + magasin badge */}
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '0.4rem', gap: '0.5rem' }}>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: '0.9375rem', color: '#1e3a5f' }}>{c.nom || '—'}</div>
+                  <div style={{ fontFamily: 'monospace', fontSize: '0.75rem', color: '#6b7280' }}>N° {c.numeroClient}</div>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.2rem' }}>
+                  {c.magasinId && c.magasinId !== 'global' ? (
+                    <span style={{ background: magasinColor(c.magasinId), color: '#fff', borderRadius: 9999, padding: '0.15rem 0.55rem', fontSize: '0.7rem', fontWeight: 700 }}>
+                      {c.magasinLabel ?? c.magasinId}
+                    </span>
+                  ) : (
+                    <span style={{ fontSize: '0.7rem', color: '#9ca3af' }}>{c.magasinLabel ?? '—'}</span>
+                  )}
+                  <span style={{ background: '#c8f0c8', color: '#166534', borderRadius: 9999, padding: '0.1rem 0.55rem', fontSize: '0.75rem', fontWeight: 700 }}>
+                    {Number(c.solde).toFixed(2)}
+                  </span>
+                </div>
+              </div>
+              {/* Contact info tiles */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '0.3rem', marginBottom: '0.4rem' }}>
+                {c.telephone && (
+                  <div style={{ fontSize: '0.8125rem', color: '#374151' }}>
+                    <span style={{ fontSize: '0.65rem', color: '#9ca3af', display: 'block' }}>Téléphone</span>
+                    {c.telephone}
+                  </div>
+                )}
+                {c.email && (
+                  <div style={{ fontSize: '0.8125rem', color: '#374151', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <span style={{ fontSize: '0.65rem', color: '#9ca3af', display: 'block' }}>Email</span>
+                    {c.email}
+                  </div>
+                )}
+                {c.adresse && (
+                  <div style={{ fontSize: '0.8125rem', color: '#374151' }}>
+                    <span style={{ fontSize: '0.65rem', color: '#9ca3af', display: 'block' }}>Adresse</span>
+                    {c.adresse}
+                  </div>
+                )}
+              </div>
+              {/* Ventes count placeholder + actions */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid #f3f4f6', paddingTop: '0.5rem', marginTop: '0.375rem' }}>
+                <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>{fmtDate(c.dateEdition)}</span>
+                <div style={{ display: 'flex', gap: '0.4rem' }}>
+                  <button className="p-1 rounded border border-gray-300 text-gray-500"><MessageSquare size={13}/></button>
+                  <button onClick={()=>setModal({item:c})} className="p-1 rounded border border-gray-300 text-amber-500"><Edit size={13}/></button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
         <div className="text-xs text-gray-500">{filtered.length} client(s) — page {page} / {totalPages}</div>
       </div>
 

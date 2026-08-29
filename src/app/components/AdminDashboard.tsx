@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useLiveData } from '../hooks/useLiveData';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -96,11 +96,11 @@ function productQtys(v: any) {
 // ── Bandeau de cellules colorées (répété dans plusieurs sections) ─────────────
 function Band({ cells }: { cells: { value: string; label: string; bg: string; fg?: string }[] }) {
   return (
-    <div className="flex flex-wrap rounded overflow-hidden mb-4">
+    <div className="grid mb-4 rounded overflow-hidden" style={{ gridTemplateColumns: `repeat(${cells.length}, minmax(100px, 1fr))` }}>
       {cells.map((c, i) => (
-        <div key={i} className="flex-1 min-w-[130px] px-4 py-3" style={{ backgroundColor: c.bg, color: c.fg || '#fff' }}>
-          <div className="font-bold">{c.value}</div>
-          <div className="text-sm font-semibold opacity-95">{c.label}</div>
+        <div key={i} className="px-3 py-3 text-center" style={{ backgroundColor: c.bg, color: c.fg || '#fff' }}>
+          <div className="font-bold text-sm leading-tight break-all">{c.value}</div>
+          <div className="text-xs font-semibold opacity-90 mt-0.5 whitespace-nowrap">{c.label}</div>
         </div>
       ))}
     </div>
@@ -231,6 +231,14 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
   const [annee, setAnnee] = useState<number>(now.getFullYear());
   const years = Array.from({ length: 5 }, (_, i) => now.getFullYear() - i);
 
+  useEffect(() => {
+    const el = document.getElementById('stats-jour');
+    if (!el) return;
+    // AppBar fixe = 40px, on ajoute 8px de marge pour que le titre soit visible
+    const top = el.getBoundingClientRect().top + window.scrollY - 48;
+    window.scrollTo({ top, behavior: 'instant' });
+  }, []);
+
   const magSel = (
     <select value={magasin} onChange={e => setMagasin(e.target.value)}
       className="border border-gray-300 rounded px-3 py-1.5 text-sm bg-white font-medium">
@@ -266,32 +274,44 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
     const inYear = (x: Date | null, y: number) => !!x && x.getFullYear() === y;
     const inMonth = (x: Date | null) => !!x && x.getFullYear() === annee && x.getMonth() === mois;
 
+    // Acompte initial inclus dans la vente (recap.acompte) — hors table reglements.
+    const venteAcompte = (v: any) => Number(v?.recap?.acompte ?? 0) || 0;
+
     // ── STATISTIQUES DU JOUR ──────────────────────────────────────────────────
     let caToday = 0, bonsToday = 0, payToday = 0, factToday = 0, devisToday = 0;
-    for (const v of realSales) { if (isToday(dateOf(v.date))) { caToday += venteNet(v); bonsToday += bonsAmount(v); factToday++; } }
+    for (const v of realSales) { if (isToday(dateOf(v.date))) { caToday += venteNet(v); bonsToday += bonsAmount(v); factToday++; payToday += venteAcompte(v); } }
     for (const v of devisAll) { if (isToday(dateOf(v.date))) devisToday++; }
     for (const r of reglementsA) { if (isToday(dateOf(r.date))) payToday += Number(r.montant) || 0; }
 
     // ── Séries mensuelles (année sélectionnée) ────────────────────────────────
     const z = () => Array.from({ length: 12 }, () => 0);
     const caM = z(), payM = z(), bonsM = z(), factCntM = z(), devisCntM = z();
-    for (const v of realSales) { const x = dateOf(v.date); if (inYear(x, annee)) { const m = x!.getMonth(); caM[m] += venteNet(v); bonsM[m] += bonsAmount(v); factCntM[m]++; } }
+    for (const v of realSales) {
+      const x = dateOf(v.date);
+      if (inYear(x, annee)) {
+        const m = x!.getMonth();
+        caM[m] += venteNet(v);
+        bonsM[m] += bonsAmount(v);
+        factCntM[m]++;
+        payM[m] += venteAcompte(v);
+      }
+    }
     for (const v of devisAll) { const x = dateOf(v.date); if (inYear(x, annee)) devisCntM[x!.getMonth()]++; }
     for (const r of reglementsA) { const x = dateOf(r.date); if (inYear(x, annee)) payM[x!.getMonth()] += Number(r.montant) || 0; }
-    const restantM = caM.map((c, i) => Math.max(c - payM[i], 0));
+    const restantM = caM.map((c, i) => Math.max(c - payM[i] - bonsM[i], 0));
 
     // ── Journalier (mois sélectionné) ─────────────────────────────────────────
     const nbJours = new Date(annee, mois + 1, 0).getDate();
     const dayData = Array.from({ length: nbJours }, (_, i) => ({ jour: i + 1, ca: 0, paiements: 0, bons: 0, restant: 0 }));
-    for (const v of realSales) { const x = dateOf(v.date); if (inMonth(x)) { const i = x!.getDate() - 1; if (dayData[i]) { dayData[i].ca += venteNet(v); dayData[i].bons += bonsAmount(v); } } }
+    for (const v of realSales) { const x = dateOf(v.date); if (inMonth(x)) { const i = x!.getDate() - 1; if (dayData[i]) { dayData[i].ca += venteNet(v); dayData[i].bons += bonsAmount(v); dayData[i].paiements += venteAcompte(v); } } }
     for (const r of reglementsA) { const x = dateOf(r.date); if (inMonth(x)) { const i = x!.getDate() - 1; if (dayData[i]) dayData[i].paiements += Number(r.montant) || 0; } }
-    dayData.forEach(dd => { dd.restant = Math.max(dd.ca - dd.paiements, 0); });
+    dayData.forEach(dd => { dd.restant = Math.max(dd.ca - dd.paiements - dd.bons, 0); });
 
     // ── Cumuls année ──────────────────────────────────────────────────────────
     const caYear = caM.reduce((a, b) => a + b, 0);
     const payYear = payM.reduce((a, b) => a + b, 0);
     const bonsYear = bonsM.reduce((a, b) => a + b, 0);
-    const restantYear = Math.max(caYear - payYear, 0);
+    const restantYear = Math.max(caYear - payYear - bonsYear, 0);
 
     // ── Bandeau mensuel ───────────────────────────────────────────────────────
     const caMonth = caM[mois], payMonth = payM[mois], bonsMonth = bonsM[mois], restantMonth = restantM[mois];
@@ -337,11 +357,12 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
     for (const m of magasins) byMag[m.id] = { ca: 0, paiements: 0, bons: 0, restant: 0 };
     for (const v of ventes.filter(v => (v.type || 'vente') === 'vente')) {
       const x = dateOf(v.date); if (!inYear(x, annee)) continue;
-      const b = byMag[v.magasin_id]; if (!b) continue; b.ca += venteNet(v); b.bons += bonsAmount(v);
+      const b = byMag[v.magasin_id]; if (!b) continue;
+      b.ca += venteNet(v); b.bons += bonsAmount(v); b.paiements += venteAcompte(v);
     }
     for (const r of reglements) { const x = dateOf(r.date); if (!inYear(x, annee)) continue; const b = byMag[r.magasin_id]; if (b) b.paiements += Number(r.montant) || 0; }
     const magData = magasins
-      .map(m => ({ mag: m.label.replace(new RegExp(`^${TENANT.nom}\\s*`, 'i'), `${TENANT.nom} `), ...byMag[m.id], restant: Math.max(byMag[m.id].ca - byMag[m.id].paiements, 0) }))
+      .map(m => ({ mag: m.label.replace(new RegExp(`^${TENANT.nom}\\s*`, 'i'), `${TENANT.nom} `), ...byMag[m.id], restant: Math.max(byMag[m.id].ca - byMag[m.id].paiements - byMag[m.id].bons, 0) }))
       .filter(m => m.ca > 0 || m.paiements > 0)
       .sort((a, b) => b.ca - a.ca);
     const caGlobalYear = magasins.reduce((s, m) => s + byMag[m.id].ca, 0);
@@ -408,7 +429,7 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
 
   const todayStr = `${String(now.getDate()).padStart(2, '0')}-${String(now.getMonth() + 1).padStart(2, '0')}-${now.getFullYear()}`;
   const pctRealiseToday = pct(d.caToday, d.objectif).toFixed(0);
-  const restantGlobal = Math.max(d.caYear - d.payYear, 0);
+  const restantGlobal = Math.max(d.caYear - d.payYear - d.bonsYear, 0);
   const gaugeData = [
     { name: 'Objectif', value: d.objectif, fill: C_OBJECTIF },
     { name: "Chiffre d'Affaires", value: d.caYear, fill: C_CA },
@@ -424,6 +445,7 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
       <ModeFestifPanel />
 
       {/* 1 ── STATISTIQUES ─────────────────────────────────────────────────── */}
+      <div id="stats-jour">
       <Panel title={`STATISTIQUES : ${todayStr} (chiffres du jour)`} controls={magSel}>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
           <KpiCard square={C_OBJECTIF} value={fmtMoney(d.objectif)} label="Objectif" />
@@ -434,18 +456,59 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
           <KpiCard square={C_BONS} value={fmtMoney(d.bonsToday)} label="Bon Assurance" />
         </div>
       </Panel>
+      </div>
 
       {/* 2 ── ACTIVITÉ MENSUELLE ───────────────────────────────────────────── */}
-      <Panel title="Activité Mensuelle" controls={<div className="flex gap-2">{magSel}{moisSel}{anneeSel}</div>}>
-        <Band cells={[
-          { value: fmtInt(d.objectif), label: 'Objectif', bg: C_OBJECTIF },
-          { value: fmtInt(d.caMonth), label: "Chiffre d'Affaires", bg: C_CA },
-          { value: fmtInt(d.payMonth), label: 'Paiements Clients', bg: C_PAY },
-          { value: fmtInt(d.bonsMonth), label: 'Bons Assurance', bg: C_BONS },
-          { value: '0', label: 'AVOIR-CLIENT +', bg: C_AVOIR_P, fg: '#1e3a52' },
-          { value: '0', label: 'AVOIR-CLIENT -', bg: C_AVOIR_M },
-          { value: fmtInt(d.restantMonth), label: 'Montant Restant', bg: C_RESTANT },
-        ]} />
+      <Panel title="ACTIVITÉ MENSUELLE">
+
+        {/* ── Tuiles : même layout 5 colonnes desktop ET mobile ──────────────── */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr) 1fr', borderRadius: 6, overflow: 'hidden', marginBottom: 12 }}>
+          {[
+            { value: fmtInt(d.objectif),  label: 'Objectif',           bg: C_OBJECTIF, fg: '#fff' },
+            { value: fmtInt(d.caMonth),   label: "Chiffre d'Affaires", bg: C_CA,       fg: '#fff' },
+            { value: fmtInt(d.payMonth),  label: 'Paiements Clients',  bg: C_PAY,      fg: '#fff' },
+            { value: fmtInt(d.bonsMonth), label: 'Bons Assurance',     bg: C_BONS,     fg: '#fff' },
+          ].map((c, i) => (
+            <div key={i} style={{
+              backgroundColor: c.bg, color: c.fg,
+              display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
+              padding: 'clamp(8px,2vw,16px) clamp(6px,1.5vw,14px)',
+              minHeight: 'clamp(80px,12vw,120px)',
+            }}>
+              <div style={{ fontWeight: 700, fontSize: 'clamp(0.75rem,2.5vw,1.2rem)', lineHeight: 1.2 }}>{c.value}</div>
+              <div style={{ fontWeight: 700, fontSize: 'clamp(0.6rem,1.5vw,0.82rem)', lineHeight: 1.3, marginTop: 4, wordBreak: 'break-word' }}>{c.label}</div>
+            </div>
+          ))}
+          {/* 5e colonne : AVOIR+ haut / AVOIR- bas */}
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <div style={{ backgroundColor: C_AVOIR_P, color: '#1e3a52', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', padding: 'clamp(8px,2vw,14px) clamp(6px,1.5vw,12px)', flex: 1 }}>
+              <div style={{ fontWeight: 700, fontSize: 'clamp(0.75rem,2.5vw,1rem)' }}>{fmtInt(Math.max(0, d.payMonth + d.bonsMonth - d.caMonth))}</div>
+              <div style={{ fontWeight: 700, fontSize: 'clamp(0.55rem,1.4vw,0.75rem)', lineHeight: 1.3, marginTop: 4, wordBreak: 'break-word' }}>AVOIR-<br />CLIENT +</div>
+            </div>
+            <div style={{ backgroundColor: C_AVOIR_M, color: '#fff', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', padding: 'clamp(8px,2vw,14px) clamp(6px,1.5vw,12px)', flex: 1 }}>
+              <div style={{ fontWeight: 700, fontSize: 'clamp(0.75rem,2.5vw,1rem)' }}>{fmtInt(Math.max(0, d.caMonth - d.payMonth - d.bonsMonth))}</div>
+              <div style={{ fontWeight: 700, fontSize: 'clamp(0.55rem,1.4vw,0.75rem)', lineHeight: 1.3, marginTop: 4, wordBreak: 'break-word' }}>AVOIR-<br />CLIENT -</div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Grande tuile Montant Restant (pleine largeur) ───────────────────── */}
+        <div style={{
+          backgroundColor: C_RESTANT, color: '#fff', borderRadius: 6,
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          padding: '36px 16px', marginBottom: 16, minHeight: 130,
+        }}>
+          <div style={{ fontWeight: 700, fontSize: '2rem', lineHeight: 1 }}>{fmtInt(d.restantMonth)}</div>
+          <div style={{ fontWeight: 700, fontSize: '1.05rem', marginTop: 14, opacity: 0.95, letterSpacing: '0.04em' }}>Montant Restant</div>
+        </div>
+
+        {/* ── Sélecteurs magasin / mois / année ──────────────────────────────── */}
+        <div className="flex flex-wrap gap-3 items-center mb-4">
+          {magSel}
+          {moisSel}
+          {anneeSel}
+        </div>
+
         <ResponsiveContainer width="100%" height={360}>
           <BarChart data={d.dayData}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} />
@@ -470,9 +533,9 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
           {/* Carte coût / marge / remise */}
           <div className="lg:col-span-6">
-            <div className="flex rounded-t overflow-hidden">
-              <div className="flex-1 px-4 py-8 font-bold" style={{ backgroundColor: C_RESTANT, color: '#1a1a1a' }}>{fmtInt(d.coutMonth)}</div>
-              <div className="flex-1 px-4 py-8 font-bold" style={{ backgroundColor: C_PAY, color: '#1a1a1a' }}>{fmtInt(d.brutMonth)}</div>
+            <div className="grid grid-cols-2 rounded-t overflow-hidden">
+              <div className="px-3 py-5 font-bold text-center text-sm break-all" style={{ backgroundColor: C_RESTANT, color: '#1a1a1a' }}>{fmtInt(d.coutMonth)}</div>
+              <div className="px-3 py-5 font-bold text-center text-sm break-all" style={{ backgroundColor: C_PAY, color: '#1a1a1a' }}>{fmtInt(d.brutMonth)}</div>
             </div>
             <div className="px-4 py-6 text-white font-bold rounded-b" style={{ backgroundColor: C_NAVY }}>REMISE {fmtInt(d.remiseMonth)}</div>
           </div>
@@ -563,9 +626,9 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
           { value: fmtInt(d.caGlobalYear), label: "Chiffre d'Affaires", bg: C_CA },
           { value: fmtInt(d.payGlobalYear), label: 'Paiements Clients', bg: C_PAY },
           { value: fmtInt(d.bonsGlobalYear), label: 'Bons Assurance', bg: C_BONS },
-          { value: '0', label: 'AVOIR-CLIENT +', bg: C_AVOIR_P, fg: '#1e3a52' },
-          { value: '0', label: 'AVOIR-CLIENT -', bg: C_AVOIR_M },
-          { value: fmtInt(Math.max(d.caGlobalYear - d.payGlobalYear, 0)), label: 'Montant Restant', bg: C_RESTANT },
+          { value: fmtInt(Math.max(0, d.payGlobalYear + d.bonsGlobalYear - d.caGlobalYear)), label: 'AVOIR-CLIENT +', bg: C_AVOIR_P, fg: '#1e3a52' },
+          { value: fmtInt(Math.max(0, d.caGlobalYear - d.payGlobalYear - d.bonsGlobalYear)), label: 'AVOIR-CLIENT -', bg: C_AVOIR_M },
+          { value: fmtInt(Math.max(d.caGlobalYear - d.payGlobalYear - d.bonsGlobalYear, 0)), label: 'Montant Restant', bg: C_RESTANT },
         ]} />
         <ResponsiveContainer width="100%" height={420}>
           <BarChart data={d.magData} margin={{ bottom: 60 }}>

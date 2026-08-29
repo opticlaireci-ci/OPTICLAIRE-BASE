@@ -51,7 +51,7 @@ export function VisualisationPage() {
   // À quelle source de données correspond chaque rapport.
   const sourceOf = (r: ReportType): string => {
     switch (r) {
-      case 'mouvements': case 'reglements': return 'reglements';
+      case 'mouvements': case 'reglements': return 'reglements-ventes';
       case 'recap-releves': return 'releves';
       case 'ca-assurances': return 'factures-assurance';
       case 'clients': return 'clients';
@@ -72,8 +72,9 @@ export function VisualisationPage() {
       try {
         if (src === 'ventes') {
           const d = await chargerToutesLesVentes(); if (!annule) setVentes(d);
-        } else if (src === 'reglements') {
-          const d = await chargerTousLesReglements(); if (!annule) setReglements(d);
+        } else if (src === 'reglements-ventes') {
+          const [regl, vts] = await Promise.all([chargerTousLesReglements(), chargerToutesLesVentes()]);
+          if (!annule) { setReglements(regl); setVentes(vts); }
         } else if (src === 'releves') {
           const d = await chargerRelevesAssurance(); if (!annule) setReleves(d);
         } else if (src === 'factures-assurance') {
@@ -174,11 +175,10 @@ export function VisualisationPage() {
     switch (activeReport) {
       // ── Ventes-based ────────────────────────────────────────────────────────
       case 'ventes-factures':
-      case 'devis-proforma':
-      case 'sav': {
+      case 'devis-proforma': {
         const isDevis = activeReport === 'devis-proforma';
         const filtered = ventes
-          .filter(v => activeReport === 'sav' ? montantVente(v) <= 5 : (isDevis ? v.type === 'devis' : v.type !== 'devis'))
+          .filter(v => isDevis ? v.type === 'devis' : v.type !== 'devis')
           .filter(v => dansIntervalle(v.date))
           .filter(v => magasinOk(v.magasin_id));
         const rows = filtered.map(v => mkRow(v.id, [
@@ -186,10 +186,28 @@ export function VisualisationPage() {
           v.telephone || '', v.magasin_id || '', v.edite_par || '', fmtMontant(montantVente(v)),
         ]));
         const total = filtered.reduce((s, v) => s + montantVente(v), 0);
-        const title = activeReport === 'sav' ? 'SAV (ventes ≤ 5 FCFA)' : isDevis ? 'DEVIS | PROFORMA' : 'VENTES | FACTURES';
-        return build(title, isDevis ? 'Devis' : activeReport === 'sav' ? 'SAV' : 'Ventes',
+        return build(isDevis ? 'DEVIS | PROFORMA' : 'VENTES | FACTURES', isDevis ? 'Devis' : 'Ventes',
           [{ label: 'Date' }, { label: 'N° Doc' }, { label: 'N° Client' }, { label: 'Client' }, { label: 'Téléphone' }, { label: 'Magasin' }, { label: 'Édité par' }, { label: 'Total', align: 'right' }],
           rows, `Total : ${fmtMontant(total)}`);
+      }
+      case 'sav': {
+        const savRows: Row[] = [];
+        ventes
+          .filter(v => v.type !== 'devis')
+          .filter(v => dansIntervalle(v.date))
+          .filter(v => magasinOk(v.magasin_id))
+          .forEach(v => {
+            const records: any[] = (v.recap as any)?.savRecords || [];
+            records.forEach((r: any, i: number) => {
+              savRows.push(mkRow(`${v.id}-sav-${i}`, [
+                fmtDate(v.date), numDoc(v), v.client || '', v.magasin_id || '',
+                r.reference || '', r.details || '', r.date ? fmtDate(r.date) : '—',
+              ]));
+            });
+          });
+        return build('SERVICE APRÈS-VENTE', 'SAV',
+          [{ label: 'Date Vente' }, { label: 'N° Doc' }, { label: 'Client' }, { label: 'Magasin' }, { label: 'Référence SAV' }, { label: 'Détails SAV' }, { label: 'Date SAV' }],
+          savRows, `${savRows.length} entrée(s) SAV`);
       }
       case 'recap-activites': {
         const filtered = ventes.filter(v => v.type !== 'devis').filter(v => dansIntervalle(v.date)).filter(v => magasinOk(v.magasin_id));
@@ -247,19 +265,34 @@ export function VisualisationPage() {
       // ── Règlements / Mouvements financiers ────────────────────────────────────
       case 'mouvements':
       case 'reglements': {
-        const filtered = reglements
+        const filteredR = reglements
           .filter(r => dansIntervalle(r.date))
           .filter(r => magasinOk(r.magasin_id))
           .filter(r => modePaiement === 'Tous Règlements' ? true : (r.mode_paiement || '').toLowerCase() === modePaiement.toLowerCase());
-        const rows = filtered.map(r => mkRow(r.id, [
+        const regRows = filteredR.map(r => mkRow(r.id, [
           fmtDate(r.date), r.recu || '', r.mode_paiement || '', r.compte_banque || '',
           r.magasin_id || '', r.edite_par || '', fmtMontant(num(r.montant)),
         ]));
-        const total = filtered.reduce((s, r) => s + num(r.montant), 0);
+
+        // Acomptes initiaux des ventes (paiement à la commande, stocké dans recap.acompte)
+        const filteredV = ventes
+          .filter(v => v.type !== 'devis')
+          .filter(v => dansIntervalle(v.date))
+          .filter(v => magasinOk(v.magasin_id))
+          .filter(v => num((v.recap as any)?.acompte) > 0)
+          .filter(v => modePaiement === 'Tous Règlements' ? true : ((v.recap as any)?.modePaiement || '').toLowerCase() === modePaiement.toLowerCase());
+        const acompteRows = filteredV.map(v => mkRow(`acompte-${v.id}`, [
+          fmtDate(v.date), numDoc(v), (v.recap as any)?.modePaiement || '', '',
+          v.magasin_id || '', v.edite_par || '', fmtMontant(num((v.recap as any)?.acompte)),
+        ]));
+
+        const totalR = filteredR.reduce((s, r) => s + num(r.montant), 0);
+        const totalV = filteredV.reduce((s, v) => s + num((v.recap as any)?.acompte), 0);
+        const allRows = [...regRows, ...acompteRows];
         return build(activeReport === 'mouvements' ? 'MOUVEMENTS FINANCIERS' : 'RÈGLEMENTS',
           activeReport === 'mouvements' ? 'Mouvements' : 'Reglements',
-          [{ label: 'Date' }, { label: 'Reçu' }, { label: 'Mode de paiement' }, { label: 'Compte/Banque' }, { label: 'Magasin' }, { label: 'Édité par' }, { label: 'Montant', align: 'right' }],
-          rows, `Total encaissé : ${fmtMontant(total)}`);
+          [{ label: 'Date' }, { label: 'Reçu / N° Doc' }, { label: 'Mode de paiement' }, { label: 'Compte/Banque' }, { label: 'Magasin' }, { label: 'Édité par' }, { label: 'Montant', align: 'right' }],
+          allRows, `Total encaissé : ${fmtMontant(totalR + totalV)}`);
       }
       // ── Assurances ────────────────────────────────────────────────────────────
       case 'recap-releves': {
@@ -370,7 +403,11 @@ export function VisualisationPage() {
       doc.setFontSize(11);
       doc.text(view.footer, 14, y + 8);
     }
-    doc.save(`${view.fileName}.pdf`);
+    doc.autoPrint();
+    const blobViz = doc.output('blob');
+    const urlViz = URL.createObjectURL(blobViz);
+    const winViz = window.open(urlViz, '_blank');
+    if (winViz) winViz.onload = () => { winViz.print(); winViz.onafterprint = () => winViz.close(); };
   };
 
   const exporterExcel = async () => {
@@ -386,17 +423,18 @@ export function VisualisationPage() {
   };
 
   // ── Styles ────────────────────────────────────────────────────────────────
-  const reportBtnStyle = (isActive: boolean) => ({
-    padding: '6px 12px', border: '1px solid #fff',
+  const reportBtnStyle = (isActive: boolean): React.CSSProperties => ({
+    padding: 'clamp(7px,1.8vw,10px) clamp(8px,2vw,14px)',
+    border: '1px solid rgba(255,255,255,0.3)',
     backgroundColor: isActive ? '#06b6d4' : '#2a2a2a', color: '#fff',
-    fontWeight: 600, fontSize: '11px', cursor: 'pointer',
-    whiteSpace: 'nowrap' as const, borderRadius: '3px', opacity: isActive ? 1 : 0.85,
+    fontWeight: 700, fontSize: 'clamp(10px,2.2vw,12px)', cursor: 'pointer',
+    whiteSpace: 'nowrap', borderRadius: '4px', opacity: isActive ? 1 : 0.82,
+    lineHeight: 1.35, minHeight: '40px', textAlign: 'center',
   });
-  const selectStyle = { border: '1px solid #d1d5db', borderRadius: '4px', padding: '6px 10px', fontSize: '14px', backgroundColor: '#fff', outline: 'none', width: '100%' };
-  const inputStyle = { ...selectStyle };
-  const labelStyle = { fontSize: '13px', fontWeight: '600' as const, marginBottom: '4px', display: 'block' };
-  const thStyle = { padding: '8px 10px', fontWeight: 600 as const, fontSize: '12px', borderBottom: '1px solid #0891b2', whiteSpace: 'nowrap' as const };
-  const tdStyle = { padding: '8px 10px', borderBottom: '1px solid #e5e7eb', verticalAlign: 'top' as const };
+  const fieldStyle: React.CSSProperties = { border: '1px solid #d1d5db', borderRadius: '6px', padding: '9px 10px', fontSize: '15px', backgroundColor: '#fff', outline: 'none', width: '100%', boxSizing: 'border-box' };
+  const labelStyle: React.CSSProperties = { fontSize: '12px', fontWeight: 700, marginBottom: '5px', display: 'block', color: '#374151', textTransform: 'uppercase', letterSpacing: '0.03em' };
+  const thStyle: React.CSSProperties = { padding: '9px 10px', fontWeight: 700, fontSize: '12px', borderBottom: '2px solid #0891b2', whiteSpace: 'nowrap', background: '#06b6d4', color: '#fff' };
+  const tdStyle: React.CSSProperties = { padding: '8px 10px', borderBottom: '1px solid #e5e7eb', verticalAlign: 'top', whiteSpace: 'nowrap', fontSize: '13px' };
 
   const isReglements = activeReport === 'mouvements' || activeReport === 'reglements';
 
@@ -405,69 +443,74 @@ export function VisualisationPage() {
   );
 
   return (
-    <div style={{ padding: '24px', backgroundColor: '#f9fafb', minHeight: '100vh' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px', backgroundColor: '#fff', padding: '16px', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
-        <span style={{ fontSize: '20px' }}>🖨️</span>
-        <h1 style={{ fontSize: '16px', fontWeight: '600', margin: 0 }}>Visualisation PDF & EXCEL: {TENANT.nom}</h1>
+    <div style={{ padding: 'clamp(12px,3vw,24px)', backgroundColor: '#f1f5f9', minHeight: '100vh' }}>
+
+      {/* En-tête */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px', backgroundColor: '#fff', padding: '14px 16px', borderRadius: '8px', border: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,.06)' }}>
+        <Printer size={20} color="#06b6d4" />
+        <div>
+          <h1 style={{ fontSize: 'clamp(13px,3vw,16px)', fontWeight: 700, margin: 0, color: '#111827' }}>Visualisation PDF &amp; EXCEL</h1>
+          <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '1px' }}>{TENANT.nom}</div>
+        </div>
       </div>
 
-      <h2 style={{ fontSize: '20px', fontWeight: 'bold', marginBottom: '16px' }}>Visualisation PDF & EXCEL</h2>
-
-      <p style={{ color: '#dc2626', fontStyle: 'italic', fontSize: '14px', marginBottom: '20px', fontWeight: '500' }}>
-        Plus l'intervalle de dates est large, plus le temps de génération du document sera long. Choisissez des intervalles plus courts pour une meilleure performance.
+      <p style={{ color: '#dc2626', fontStyle: 'italic', fontSize: '13px', marginBottom: '14px', fontWeight: 500, lineHeight: 1.5 }}>
+        ⚠️ Plus l'intervalle de dates est large, plus la génération sera longue. Choisissez des intervalles courts pour de meilleures performances.
       </p>
 
-      {/* Onglets États */}
-      <div style={{ display: 'flex', gap: '4px', marginBottom: '12px', flexWrap: 'wrap' }}>
-        {btn('bons-monture', <>ÉTAT BONS DE COMMANDE<br/>MONTURE ACCESSOIRE</>)}
-        {btn('bons-verre', <>ÉTAT BONS DE COMMANDE<br/>VERRE</>)}
-        {btn('stock', 'ÉTAT DE STOCK')}
-        {btn('inventaires', 'ÉTAT INVENTAIRES')}
+      {/* ── Groupes de boutons ── */}
+      <div style={{ backgroundColor: '#e2e8f0', borderRadius: '8px', padding: '10px', marginBottom: '16px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+        {/* Ligne 1 : États stocks / commandes */}
+        <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+          {btn('bons-monture', <>BONS COMMANDE<br/>MONTURE / ACCESS.</>)}
+          {btn('bons-verre',   <>BONS COMMANDE<br/>VERRE</>)}
+          {btn('stock',        'ÉTAT DE STOCK')}
+          {btn('inventaires',  'INVENTAIRES')}
+        </div>
+        {/* Ligne 2 : Rapports commerciaux */}
+        <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+          {btn('mouvements',        <>MOUVEMENTS<br/>FINANCIERS</>)}
+          {btn('recap-activites',   <>RÉCAP.<br/>ACTIVITÉS</>)}
+          {btn('recap-verres',      <>RÉCAP.<br/>VERRES</>)}
+          {btn('recap-montures',    <>RÉCAP.<br/>MONTURES</>)}
+          {btn('recap-accessoires', <>RÉCAP.<br/>ACCESSOIRES</>)}
+          {btn('recap-traitements', <>RÉCAP.<br/>TRAITEMENTS</>)}
+          {btn('devis-proforma',    <>DEVIS /<br/>PROFORMA</>)}
+          {btn('ventes-factures',   <>VENTES /<br/>FACTURES</>)}
+          {btn('sav',               'SAV')}
+          {btn('reglements',        'RÈGLEMENTS')}
+        </div>
+        {/* Ligne 3 : Assurances / Clients */}
+        <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+          {btn('recap-releves',      <>RELEVÉS<br/>ASSURANCE</>)}
+          {btn('ca-assurances',      <>CA<br/>ASSURANCES</>)}
+          {btn('ca-ophtalmologues',  <>CA<br/>OPHTALMOLOGUES</>)}
+          {btn('ca-cabinets',        <>CA<br/>CABINETS OPHT.</>)}
+          {btn('clients',            'CLIENTS')}
+        </div>
       </div>
 
-      {/* Boutons Rapports */}
-      <div style={{ display: 'flex', gap: '4px', marginBottom: '12px', flexWrap: 'wrap' }}>
-        {btn('mouvements', <>MOUVEMENTS<br/>FINANCIERS</>)}
-        {btn('recap-activites', <>RÉCAPITULATIF<br/>ACTIVITÉS</>)}
-        {btn('recap-verres', <>RÉCAPITULATIF<br/>ACTIVITÉS VERRES</>)}
-        {btn('recap-montures', <>RÉCAPITULATIF<br/>ACTIVITÉS MONTURES</>)}
-        {btn('recap-accessoires', <>RÉCAPITULATIF<br/>ACTIVITÉS ACCESSOIRES</>)}
-        {btn('recap-traitements', <>RÉCAPITULATIF<br/>ACTIVITÉS TRAITEMENTS</>)}
-        {btn('devis-proforma', <>DEVIS |<br/>PROFORMA</>)}
-        {btn('ventes-factures', <>VENTES |<br/>FACTURES</>)}
-        {btn('sav', 'SAV')}
-        {btn('reglements', 'RÈGLEMENTS')}
-      </div>
-
-      {/* Boutons du bas */}
-      <div style={{ display: 'flex', gap: '4px', marginBottom: '20px', flexWrap: 'wrap' }}>
-        {btn('recap-releves', <>RÉCAPITULATIF<br/>RELEVÉS</>)}
-        {btn('ca-assurances', <>CHIFFRE D'AFFAIRES<br/>ASSURANCES</>)}
-        {btn('ca-ophtalmologues', <>CHIFFRE D'AFFAIRES<br/>OPHTALMOLOGUES</>)}
-        {btn('ca-cabinets', <>CHIFFRE D'AFFAIRES<br/>CABINETS OPHTALMOLOGUE</>)}
-        {btn('clients', 'CLIENTS')}
-      </div>
-
-      {/* Filtres */}
-      <div style={{ border: '3px solid #06b6d4', borderRadius: '4px', padding: '20px', marginBottom: '24px', backgroundColor: '#fff' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${isReglements ? 4 : 3}, 1fr)`, gap: '16px' }}>
+      {/* ── Filtres ── */}
+      <div style={{ border: '2px solid #06b6d4', borderRadius: '8px', padding: 'clamp(12px,3vw,20px)', marginBottom: '20px', backgroundColor: '#fff' }}>
+        <div style={{ fontWeight: 700, fontSize: '13px', color: '#06b6d4', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Filtres</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px' }}>
           <div>
             <label style={labelStyle}>Date Début</label>
             <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-              <input type="date" style={inputStyle} value={dateDebut} onChange={e => setDateDebut(e.target.value)} />
-              {dateDebut && <X size={14} style={{ position: 'absolute', right: '30px', cursor: 'pointer', color: '#9ca3af' }} onClick={() => setDateDebut('')} />}
+              <input type="date" style={fieldStyle} value={dateDebut} onChange={e => setDateDebut(e.target.value)} />
+              {dateDebut && <X size={14} style={{ position: 'absolute', right: '8px', cursor: 'pointer', color: '#9ca3af' }} onClick={() => setDateDebut('')} />}
             </div>
           </div>
           <div>
             <label style={labelStyle}>Date Fin</label>
             <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-              <input type="date" style={inputStyle} value={dateFin} onChange={e => setDateFin(e.target.value)} />
-              {dateFin && <X size={14} style={{ position: 'absolute', right: '30px', cursor: 'pointer', color: '#9ca3af' }} onClick={() => setDateFin('')} />}
+              <input type="date" style={fieldStyle} value={dateFin} onChange={e => setDateFin(e.target.value)} />
+              {dateFin && <X size={14} style={{ position: 'absolute', right: '8px', cursor: 'pointer', color: '#9ca3af' }} onClick={() => setDateFin('')} />}
             </div>
           </div>
           <div>
             <label style={labelStyle}>Magasin</label>
-            <select style={selectStyle} value={magasin} onChange={e => setMagasin(e.target.value)}>
+            <select style={fieldStyle} value={magasin} onChange={e => setMagasin(e.target.value)}>
               <option>Tous les Magasins</option>
               {getAllMagasinIds().map(id => <option key={id} value={id}>{id.toUpperCase()}</option>)}
             </select>
@@ -475,7 +518,7 @@ export function VisualisationPage() {
           {isReglements && (
             <div>
               <label style={labelStyle}>Mode de Paiement</label>
-              <select style={selectStyle} value={modePaiement} onChange={e => setModePaiement(e.target.value)}>
+              <select style={fieldStyle} value={modePaiement} onChange={e => setModePaiement(e.target.value)}>
                 <option>Tous Règlements</option>
                 <option>Espèces</option>
                 <option>Chèque</option>
@@ -488,28 +531,37 @@ export function VisualisationPage() {
         </div>
       </div>
 
-      {/* Résultats */}
-      <div style={{ border: '1px solid #e5e7eb', borderRadius: '8px', padding: '20px', marginBottom: '24px', backgroundColor: '#fff' }}>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-          <h3 style={{ fontSize: '16px', fontWeight: 'bold', margin: 0 }}>{view.title} — {view.rows.length} résultat(s)</h3>
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-              <Search size={15} style={{ position: 'absolute', left: '8px', color: '#9ca3af' }} />
-              <input type="text" placeholder="Rechercher…" value={recherche} onChange={e => setRecherche(e.target.value)} style={{ ...inputStyle, paddingLeft: '28px', width: '260px' }} />
+      {/* ── Résultats ── */}
+      <div style={{ border: '1px solid #e5e7eb', borderRadius: '8px', padding: 'clamp(12px,3vw,20px)', marginBottom: '24px', backgroundColor: '#fff', boxShadow: '0 1px 4px rgba(0,0,0,.06)' }}>
+
+        {/* Barre titre + actions */}
+        <div style={{ marginBottom: '14px' }}>
+          <h3 style={{ fontSize: 'clamp(13px,3vw,16px)', fontWeight: 700, margin: '0 0 10px 0', color: '#111827' }}>
+            {view.title || 'Rapport'} <span style={{ fontWeight: 400, color: '#6b7280', fontSize: '13px' }}>— {view.rows.length} résultat(s)</span>
+          </h3>
+          {/* Recherche + boutons sur la même ligne, wrappable */}
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+            <div style={{ position: 'relative', display: 'flex', alignItems: 'center', flex: '1 1 180px', minWidth: '140px' }}>
+              <Search size={15} style={{ position: 'absolute', left: '9px', color: '#9ca3af', pointerEvents: 'none' }} />
+              <input type="text" placeholder="Rechercher…" value={recherche} onChange={e => setRecherche(e.target.value)}
+                style={{ ...fieldStyle, paddingLeft: '32px' }} />
             </div>
-            <button onClick={imprimer} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 12px', border: 'none', borderRadius: '4px', backgroundColor: '#374151', color: '#fff', cursor: 'pointer', fontWeight: 600, fontSize: '13px' }}>
-              <Printer size={15} /> Imprimer
+            <button onClick={imprimer}
+              style={{ flex: '1 1 120px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '10px 14px', border: 'none', borderRadius: '6px', backgroundColor: '#374151', color: '#fff', cursor: 'pointer', fontWeight: 700, fontSize: '13px', whiteSpace: 'nowrap' }}>
+              <Printer size={15} /> Imprimer PDF
             </button>
-            <button onClick={exporterExcel} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 12px', border: 'none', borderRadius: '4px', backgroundColor: '#16a34a', color: '#fff', cursor: 'pointer', fontWeight: 600, fontSize: '13px' }}>
+            <button onClick={exporterExcel}
+              style={{ flex: '1 1 120px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '10px 14px', border: 'none', borderRadius: '6px', backgroundColor: '#16a34a', color: '#fff', cursor: 'pointer', fontWeight: 700, fontSize: '13px', whiteSpace: 'nowrap' }}>
               <FileSpreadsheet size={15} /> Excel
             </button>
           </div>
         </div>
 
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+        {/* Tableau scrollable */}
+        <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', borderRadius: '6px', border: '1px solid #e5e7eb' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', minWidth: `${view.headers.length * 110}px` }}>
             <thead>
-              <tr style={{ backgroundColor: '#06b6d4', color: '#fff', textAlign: 'left' }}>
+              <tr>
                 {view.headers.map((h, i) => (
                   <th key={i} style={{ ...thStyle, textAlign: h.align || 'left' }}>{h.label}</th>
                 ))}
@@ -517,13 +569,13 @@ export function VisualisationPage() {
             </thead>
             <tbody>
               {chargement && (
-                <tr><td colSpan={view.headers.length} style={{ ...tdStyle, textAlign: 'center', color: '#6b7280' }}>Chargement…</td></tr>
+                <tr><td colSpan={view.headers.length} style={{ ...tdStyle, textAlign: 'center', color: '#6b7280', whiteSpace: 'normal', padding: '24px' }}>Chargement…</td></tr>
               )}
               {!chargement && view.rows.length === 0 && (
-                <tr><td colSpan={view.headers.length} style={{ ...tdStyle, textAlign: 'center', color: '#6b7280' }}>Aucun résultat trouvé.</td></tr>
+                <tr><td colSpan={view.headers.length} style={{ ...tdStyle, textAlign: 'center', color: '#9ca3af', whiteSpace: 'normal', padding: '24px' }}>Aucun résultat trouvé.</td></tr>
               )}
               {!chargement && view.rows.map((r, i) => (
-                <tr key={r.key} style={{ backgroundColor: i % 2 ? '#f9fafb' : '#fff' }}>
+                <tr key={r.key} style={{ backgroundColor: i % 2 ? '#f8fafc' : '#fff' }}>
                   {r.cells.map((c, j) => (
                     <td key={j} style={{ ...tdStyle, textAlign: view.headers[j]?.align || 'left' }}>{c}</td>
                   ))}
@@ -534,7 +586,7 @@ export function VisualisationPage() {
         </div>
 
         {view.footer && !chargement && view.rows.length > 0 && (
-          <div style={{ marginTop: '12px', textAlign: 'right', fontWeight: 600, fontSize: '14px' }}>{view.footer}</div>
+          <div style={{ marginTop: '12px', textAlign: 'right', fontWeight: 700, fontSize: '14px', color: '#111827' }}>{view.footer}</div>
         )}
       </div>
     </div>
