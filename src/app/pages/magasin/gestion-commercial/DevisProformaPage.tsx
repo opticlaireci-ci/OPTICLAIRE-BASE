@@ -349,10 +349,17 @@ function EtapeI({ data, onChange, magasinId }: { data: ClientInfo; onChange: (d:
       <div className="grid grid-cols-6 gap-3">
         <div><ReqLbl>N° Client</ReqLbl><input className={roCls + ' font-mono font-bold text-blue-700'} readOnly value={data.numeroClient} /></div>
         <div><Lbl>Civilité</Lbl>
-          <select className={selCls} value={data.civilite} onChange={set('civilite')}>
-            <option value="">Civilité...</option>
-            <option>M.</option><option>Mme</option><option>Mlle</option><option>Dr</option>
-          </select>
+          <input
+            list="civilites-devis"
+            className={iCls}
+            placeholder="M., Mme..."
+            value={data.civilite}
+            onChange={set('civilite')}
+            autoComplete="off"
+          />
+          <datalist id="civilites-devis">
+            {CIVILITES.map(c => <option key={c} value={c} />)}
+          </datalist>
         </div>
         <div className="col-span-2 relative" ref={clientBoxRef}><ReqLbl>Nom & Prénoms Client</ReqLbl>
           <input
@@ -1712,7 +1719,7 @@ function ListeDevis({ magasinId, onNouveau, onModifier }: { magasinId: string; o
           {/* ── Tableau desktop (≥ md) ── */}
           <div className="hidden md:block bg-white rounded-lg shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
-            <table className="text-sm border-collapse" style={{ minWidth: 560 }}>
+            <table className="w-full text-sm border-collapse" style={{ minWidth: 560 }}>
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-200 text-xs text-gray-600 uppercase tracking-wide">
                   <th className="text-center px-3 py-3 w-10 whitespace-nowrap">#</th>

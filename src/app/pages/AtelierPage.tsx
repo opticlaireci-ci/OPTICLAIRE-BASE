@@ -259,6 +259,18 @@ export function AtelierPage() {
     doc.setFontSize(13);
     doc.text(`BON DE COMMANDE DE VERRE — ${b.numBC || b.numRef || ''}`, 14, y);
     y += 10;
+
+    // ── Nom du client : mis en évidence (gros, gras, encadré) ────────────────
+    doc.setFillColor(26, 90, 114); // #1a5a72
+    doc.rect(14, y - 5, 182, 10, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(13);
+    doc.setFont(undefined, 'bold');
+    doc.text(`CLIENT : ${(b.client || '—').toUpperCase()}`, 18, y + 2);
+    doc.setTextColor(0, 0, 0);
+    doc.setFont(undefined, 'normal');
+    y += 14;
+
     doc.setFontSize(10);
     const lignes = [
       ['N° Facture', b.numFacture || '-'],
@@ -266,7 +278,6 @@ export function AtelierPage() {
       ['N° Bon de Commande', b.numBC || '-'],
       ['N° Bon de Livraison', b.numBL || '-'],
       ['Fournisseur', b.fournisseur || '-'],
-      ['Client', b.client || '-'],
       ['Officine', b.officine || '-'],
       ['Total Net', `${(b.totalNet || 0).toLocaleString('fr-FR')} FCFA`],
       ['Statut', b.statut || '-'],

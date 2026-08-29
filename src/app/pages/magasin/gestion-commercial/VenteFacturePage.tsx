@@ -1366,10 +1366,17 @@ function StepI({ data, onChange, magasinId }: { data: ClientInfo; onChange: (d: 
       </div>
       <div>
         <Lbl>Civilité</Lbl>
-        <select className={selCls} value={data.civilite} onChange={set('civilite')}>
-          <option value="">C...</option>
-          <option>M.</option><option>Mme</option><option>Mlle</option><option>Dr</option>
-        </select>
+        <input
+          list="civilites-facture"
+          className={iCls}
+          placeholder="M., Mme..."
+          value={data.civilite}
+          onChange={set('civilite')}
+          autoComplete="off"
+        />
+        <datalist id="civilites-facture">
+          {CIVILITES.map(c => <option key={c} value={c} />)}
+        </datalist>
       </div>
       <div className="relative" ref={clientBoxRef}>
         <ReqLbl>Nom & Prénoms Client</ReqLbl>
@@ -5062,7 +5069,7 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
             {/* ── Tableau desktop (≥ md) ── */}
             <div className="hidden md:block bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
               <div className="overflow-x-auto">
-                <table className="text-sm border-collapse" style={{ minWidth: 780 }}>
+                <table className="w-full text-sm border-collapse" style={{ minWidth: 780 }}>
                   <thead>
                     <tr style={{ backgroundColor: '#1a7a96' }}>
                       <th className="px-3 py-3 text-white font-semibold text-xs uppercase border border-gray-300 whitespace-nowrap">#</th>

@@ -289,10 +289,17 @@ function FormulaireVenteFlash({ magasinId, onRetour, onSaved }: { magasinId: str
           </div>
           <div style={{ width: 140 }}>
             <Lbl>Civilité</Lbl>
-            <select className={selCls} value={civilite} onChange={e => setCivilite(e.target.value)}>
-              <option value=""></option>
+            <input
+              list="civilites-flash"
+              className={iCls}
+              placeholder="M., Mme..."
+              value={civilite}
+              onChange={e => setCivilite(e.target.value)}
+              autoComplete="off"
+            />
+            <datalist id="civilites-flash">
               <option>M.</option><option>Mme</option><option>Mlle</option><option>Dr</option>
-            </select>
+            </datalist>
           </div>
           <div className="flex-1">
             <Lbl req>Nom / Prénoms</Lbl>
