@@ -575,6 +575,14 @@ function NavigationMenu() {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
+  // Ferme automatiquement le menu latéral (replié en desktop, masqué en
+  // mobile) à chaque changement de page — quelle que soit la façon dont la
+  // navigation a été déclenchée (clic menu, retour navigateur, etc.).
+  useEffect(() => {
+    setOpen(false);
+    setMobileOpen(false);
+  }, [location.pathname]);
+
   const roleFilteredMenuItems = getFilteredMenuItems(user?.role);
   const isAdminRole = user?.role === 'super_admin' || user?.role === 'admin' || user?.role === 'administrateur';
   const menuAccess = user?.menuAccess || [];

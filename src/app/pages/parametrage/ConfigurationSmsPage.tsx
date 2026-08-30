@@ -342,6 +342,59 @@ export function ConfigurationSmsPage() {
             </div>
           )}
         </div>
+
+        {/* Configuration SMS Renouvellement Verres */}
+        <div className="bg-white rounded-lg shadow p-6">
+          <h2 className="text-xl font-bold mb-4">🔁 SMS de Renouvellement (verres)</h2>
+          <p className="text-sm text-gray-600 mb-4">
+            Informer automatiquement les clients ayant acheté des verres chez nous, 1 an et 8 mois plus tard, qu'ils doivent songer à renouveler leurs verres.
+          </p>
+
+          <div className="mb-4">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={config.envoyerRenouvellement}
+                onChange={(e) => setConfig({ ...config, envoyerRenouvellement: e.target.checked })}
+                className="w-5 h-5"
+              />
+              <span className="font-medium text-gray-700">Activer l'envoi automatique</span>
+            </label>
+          </div>
+
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Message de renouvellement
+            </label>
+            <textarea
+              value={config.messageRenouvellement}
+              onChange={(e) => setConfig({ ...config, messageRenouvellement: e.target.value })}
+              rows={4}
+              disabled={!config.envoyerRenouvellement}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-500"
+              placeholder="Votre message de renouvellement..."
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              {config.messageRenouvellement.length} caractères
+            </p>
+          </div>
+
+          {config.envoyerRenouvellement ? (
+            <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+              <div className="text-sm font-medium text-green-800">✅ Activé</div>
+              <div className="text-xs text-green-700 mt-1">
+                Un SMS est envoyé (une seule fois) aux clients ayant acheté des verres il y a 1 an et 8 mois, pour leur rappeler de songer au renouvellement
+              </div>
+            </div>
+          ) : (
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+              <div className="text-sm font-medium text-gray-700">⏸️ Désactivé</div>
+              <div className="text-xs text-gray-600 mt-1">
+                Aucun rappel de renouvellement ne sera envoyé
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Test SMS */}
@@ -411,6 +464,7 @@ export function ConfigurationSmsPage() {
           <li>• <strong>SMS d'Anniversaire :</strong> Envoyé automatiquement chaque jour aux clients dont c'est l'anniversaire</li>
           <li>• <strong>SMS de Retrait :</strong> Envoyé quand une commande de verres passe au statut « prêt / disponible »</li>
           <li>• <strong>SMS de Remerciement :</strong> Envoyé automatiquement après chaque vente / facture enregistrée</li>
+          <li>• <strong>SMS de Renouvellement :</strong> Envoyé automatiquement aux clients ayant acheté des verres, 1 an et 8 mois après leur achat</li>
           <li>• <strong>Numéros :</strong> Ils sont automatiquement mis au format international (Côte d'Ivoire +225)</li>
           <li>• <strong>Personnalisation :</strong> Vous pouvez modifier les messages à tout moment</li>
           <li>• <strong>Rapport :</strong> Tous les SMS envoyés sont enregistrés dans la page "Rapport SMS"</li>

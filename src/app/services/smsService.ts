@@ -32,6 +32,8 @@ export interface ConfigSms {
   messageRetrait: string;
   envoyerVente: boolean;
   messageVente: string;
+  envoyerRenouvellement: boolean;
+  messageRenouvellement: string;
 }
 
 const CONFIG_DEFAULT: ConfigSms = {
@@ -43,6 +45,8 @@ const CONFIG_DEFAULT: ConfigSms = {
   messageRetrait: `Bonjour, vos lunettes sont prêtes et disponibles en magasin. Vous pouvez passer les récupérer. Merci de votre confiance — ${TENANT.nom}.`,
   envoyerVente: true,
   messageVente: `Merci pour votre achat chez ${TENANT.nom} ! Nous vous remercions de votre confiance et restons à votre disposition. À très bientôt.`,
+  envoyerRenouvellement: true,
+  messageRenouvellement: `Bonjour, cela fait maintenant 1 an et 8 mois que vous avez acquis vos verres chez ${TENANT.nom}. Vos verres approchent de leur fin de vie : pensez à songer à leur renouvellement pour préserver votre confort visuel. Nous restons à votre disposition.`,
 };
 
 /**
@@ -421,12 +425,64 @@ export async function envoyerRetraitsDuJour(
   }
 }
 
-/** Déclenche les envois automatiques quotidiens (anniversaires + retraits). */
+/** Ajoute un nombre de mois à une date (chaîne ISO) et renvoie la Date obtenue. */
+function ajouterMois(dateStr: string | undefined, mois: number): Date | null {
+  if (!dateStr) return null;
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return null;
+  d.setMonth(d.getMonth() + mois);
+  return d;
+}
+
+const MOIS_RENOUVELLEMENT_VERRES = 20; // 1 an et 8 mois
+
+/**
+ * Parcourt toutes les ventes réelles (hors devis) comportant des verres et
+ * notifie les clients dont l'achat date de 1 an et 8 mois (échéance atteinte
+ * ou dépassée) pour les inciter à renouveler leurs verres. Chaque vente n'est
+ * notifiée qu'une seule fois (marqueur permanent).
+ */
+export async function envoyerRenouvellementsDuJour(
+  ventes?: import('./ventesService').VenteSupabase[],
+): Promise<number> {
+  const config = loadConfigSms();
+  if (!config.envoyerRenouvellement) return 0;
+  try {
+    const { chargerToutesLesVentes } = await import('./ventesService');
+    const toutesVentes = ventes || await chargerToutesLesVentes();
+    if (!toutesVentes || !toutesVentes.length) return 0;
+
+    const maintenant = new Date();
+    let envoyes = 0;
+    for (const v of toutesVentes) {
+      if (v.type !== 'vente') continue; // uniquement les ventes réelles, pas les devis
+      if (!v.telephone || v.telephone.trim() === '') continue;
+      if (!v.verres || v.verres.length === 0) continue; // uniquement les achats de verres
+      const dateEcheance = ajouterMois(v.date, MOIS_RENOUVELLEMENT_VERRES);
+      if (!dateEcheance || dateEcheance > maintenant) continue;
+      if (dejaNotifiePermanent('renouvellement', v.id)) continue;
+      void envoyerSmsReel({
+        client: v.client || 'Client',
+        telephone: v.telephone,
+        message: config.messageRenouvellement,
+        nature: 'Renouvellement Verres',
+      });
+      envoyes++;
+    }
+    if (envoyes) logger.log(`🔁 ${envoyes} SMS de renouvellement de verres envoyés`);
+    return envoyes;
+  } catch (err) {
+    logger.error('❌ envoyerRenouvellementsDuJour:', err);
+    return 0;
+  }
+}
+
+/** Déclenche les envois automatiques quotidiens (anniversaires + retraits + renouvellements). */
 export async function lancerEnvoisAutomatiques(): Promise<void> {
   const { configured } = await isSmsConfigure();
   if (!configured) return;
   const config = loadConfigSms();
-  if (!config.envoyerAnniversaire && !config.envoyerRetrait) return;
+  if (!config.envoyerAnniversaire && !config.envoyerRetrait && !config.envoyerRenouvellement) return;
   try {
     // Charger les clients UNE SEULE FOIS et enchaîner les scans en SÉQUENCE :
     // deux téléchargements complets simultanés au démarrage saturaient la
@@ -434,6 +490,7 @@ export async function lancerEnvoisAutomatiques(): Promise<void> {
     const byMag = await chargerClientsParMagasin();
     await envoyerAnniversairesDuJour(byMag);
     await envoyerRetraitsDuJour(byMag);
+    await envoyerRenouvellementsDuJour();
   } catch (err) {
     logger.warn('⚠️ Envois SMS automatiques différés (chargement interrompu):', (err as Error)?.message || err);
   }

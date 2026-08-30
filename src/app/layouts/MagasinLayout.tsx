@@ -328,6 +328,12 @@ export function MagasinLayout() {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
+  // Ferme automatiquement le menu latéral mobile à chaque changement de page,
+  // quelle que soit la façon dont la navigation a été déclenchée.
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [location.pathname]);
+
   useEffect(() => {
     if (isLoading) return;
     if (!isAuthenticated) {
