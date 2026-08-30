@@ -944,79 +944,83 @@ async function telechargerBonExecutionPDF(vente: any, magasinId?: string) {
   y += 14;
 
   // ── Cadre BON ─────────────────────────────────────────────────────────────
+  const boxY = y;
   doc.setDrawColor(0);
   doc.setLineWidth(0.5);
-  doc.rect(14, y, 182, 130);
 
   // Titre
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(16);
-  doc.text('BON DE BONNE EXÉCUTION – LUNETTES', 105, y + 14, { align: 'center' });
+  doc.text('BON DE BONNE EXÉCUTION – LUNETTES', 105, boxY + 14, { align: 'center' });
 
   // Ligne sous le titre
   doc.setLineWidth(0.3);
-  doc.line(20, y + 18, 190, y + 18);
+  doc.line(20, boxY + 18, 190, boxY + 18);
 
   // Date
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(11);
-  doc.text(`Date: ${dateStr}`, 20, y + 28);
-  doc.line(20, y + 30, 190, y + 30);
+  doc.text(`Date: ${dateStr}`, 20, boxY + 28);
+  doc.line(20, boxY + 30, 190, boxY + 30);
 
   // Facture N°
-  doc.text(`Facture N° ${numFacture}`, 20, y + 40);
-  doc.line(20, y + 42, 190, y + 42);
+  doc.text(`Facture N° ${numFacture}`, 20, boxY + 40);
+  doc.line(20, boxY + 42, 190, boxY + 42);
 
   // Déclaration
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(10);
-  doc.text('Déclaration du client:', 20, y + 52);
+  doc.text('Déclaration du client:', 20, boxY + 52);
 
-  // Ligne avec nom en gras
-  const intro = 'Je soussigné(e), ';
-  const clientBold = `${nomClient} (N° ${vente.numeroClient || '—'})`;
-  const suite = ' atteste avoir reçu ce jour mes lunettes en parfait état, conformes à la commande effectuée.';
-  const xIntro = 20;
+  // ── Nom du client : mis en évidence (bandeau plein, plus de superposition) ──
+  const clientLabel = `${nomClient}  (N° ${vente.numeroClient || '—'})`;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(12);
+  const clientLabelLines = doc.splitTextToSize(clientLabel, 160);
+  const bandTop = boxY + 56;
+  const bandHeight = clientLabelLines.length * 6 + 4;
+  doc.setFillColor(26, 90, 114); // #1a5a72
+  doc.rect(20, bandTop, 170, bandHeight, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.text(clientLabelLines, 24, bandTop + 6);
+  doc.setTextColor(0, 0, 0);
+
+  let yTxt = bandTop + bandHeight + 8;
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(10);
-  const wIntro = doc.getTextWidth(intro);
-  doc.text(intro, xIntro, y + 60);
-  doc.setFont('helvetica', 'bold');
-  doc.text(clientBold, xIntro + wIntro, y + 60);
-  doc.setFont('helvetica', 'normal');
-  // Suite sur la même ligne puis coupure auto
-  const fullSentence = intro + clientBold + suite;
-  const lines1 = doc.splitTextToSize(fullSentence, 168);
-  // On ré-imprime tout proprement (la gestion inline bold/normal n'est pas supportée en split)
-  doc.setFont('helvetica', 'normal');
-  doc.text(lines1, xIntro, y + 60);
-  // Souligne le nom dans la première ligne
-  doc.setFont('helvetica', 'bold');
-  const boldStart = xIntro + doc.getTextWidth(intro);
-  doc.text(clientBold, boldStart, y + 60);
-  doc.setFont('helvetica', 'normal');
+  const declarationText = "Je soussigné(e) atteste avoir reçu ce jour mes lunettes en parfait état, conformes à la commande effectuée.";
+  const linesDecl = doc.splitTextToSize(declarationText, 168);
+  doc.text(linesDecl, 20, yTxt);
+  yTxt += linesDecl.length * 5 + 5;
 
   const ligne2 = 'Après vérification, je confirme la conformité de la monture, des verres ainsi que les ajustements réalisés. Je suis pleinement satisfait(e) de la qualité du service ainsi que des conseils reçus.';
   const lines2 = doc.splitTextToSize(ligne2, 168);
-  doc.text(lines2, 20, y + 72);
+  doc.text(lines2, 20, yTxt);
+  yTxt += lines2.length * 5 + 10;
 
   // Observations (gras + souligné)
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
-  doc.text('Observations:', 20, y + 92);
+  doc.text('Observations:', 20, yTxt);
   const obsW = doc.getTextWidth('Observations:');
-  doc.line(20, y + 93, 20 + obsW, y + 93);
+  doc.line(20, yTxt + 1, 20 + obsW, yTxt + 1);
   doc.setFont('helvetica', 'normal');
   const obsText = '* Le client a été informé des recommandations d\'entretien et d\'utilisation de ses lunettes.';
   const linesObs = doc.splitTextToSize(obsText, 168);
-  doc.text(linesObs, 20, y + 99);
+  doc.text(linesObs, 20, yTxt + 7);
+  yTxt += 7 + linesObs.length * 5 + 16;
 
   // Zone signature
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(10);
-  doc.text('Client Signature', 160, y + 118, { align: 'center' });
+  doc.text('Client Signature', 160, yTxt, { align: 'center' });
+  yTxt += 8;
 
-  y += 138;
+  // Bordure du cadre, hauteur adaptée au contenu (jamais moins que 130)
+  const boxHeight = Math.max(130, yTxt - boxY + 6);
+  doc.rect(14, boxY, 182, boxHeight);
+
+  y = boxY + boxHeight + 8;
 
   // ── Pied de page ──────────────────────────────────────────────────────────
   doc.setDrawColor(200);

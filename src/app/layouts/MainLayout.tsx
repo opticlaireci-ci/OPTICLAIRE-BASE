@@ -564,7 +564,7 @@ function trouverAncetres(items: MenuItemType[], cible: string, chemin: string[] 
 }
 
 function NavigationMenu() {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [expandedItems, setExpandedItems] = useState<{ [key: string]: boolean }>({});
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
