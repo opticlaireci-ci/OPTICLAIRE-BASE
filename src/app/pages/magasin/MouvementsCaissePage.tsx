@@ -26,6 +26,7 @@ import { TrendingUp, TrendingDown, AccountBalance, Print, Download, Add } from '
 import { excelHeaderRows } from '../../utils/documentHeader';
 import { useLiveData } from '../../hooks/useLiveData';
 import { chargerVentes, readVentesCache, VenteSupabase } from '../../services/ventesService';
+import { chargerReglementsParMagasin, readReglementsCacheMap, ReglementSupabase } from '../../services/reglementsService';
 import { useAuth } from '../../contexts/AuthContext';
 import { canAdd } from '../../utils/actionRights';
 const GridAny = Grid as any;
@@ -86,9 +87,35 @@ export function MouvementsCaissePage() {
     });
     return derivees;
   };
+  // Dérive une entrée de caisse par RÈGLEMENT (encaissement postérieur à la
+  // vente), daté à la date du règlement — c'est ce que demande le magasin.
+  const deriveFromReglements = (reglements: ReglementSupabase[], mag: string): MouvementCaisse[] => {
+    return (reglements || [])
+      .filter((r) => (r.magasin_id || '').toUpperCase() === (mag || '').toUpperCase())
+      .filter((r) => (Number(r.montant) || 0) > 0)
+      .map((r) => ({
+        id: `reglement-${r.id}`,
+        date: r.date || new Date().toISOString(),
+        magasinId: mag,
+        type: 'entree' as const,
+        categorie: 'Règlement client',
+        montant: Number(r.montant) || 0,
+        libelle: `Règlement ${r.recu || ''}`.trim(),
+        modePaiement: r.mode_paiement || 'Espèces',
+        reference: r.recu || '',
+        responsable: r.edite_par || 'N/A',
+      }));
+  };
+  const readReglementsCacheMagasin = (mag: string): ReglementSupabase[] => {
+    const map = readReglementsCacheMap();
+    return Object.values(map).flat();
+  };
   // Affichage INSTANTANÉ depuis le cache des ventes.
   const [ventesDerivees, setVentesDerivees] = useState<MouvementCaisse[]>(
     () => deriveFromVentes(readVentesCache(magasinId || ''), magasinId || ''),
+  );
+  const [reglementsDerives, setReglementsDerives] = useState<MouvementCaisse[]>(
+    () => deriveFromReglements(readReglementsCacheMagasin(magasinId || ''), magasinId || ''),
   );
   const [mouvements, setMouvements] = useState<MouvementCaisse[]>([]);
   const [filteredMouvements, setFilteredMouvements] = useState<MouvementCaisse[]>([]);
@@ -130,10 +157,34 @@ export function MouvementsCaissePage() {
     };
   }, [magasinId]);
 
-  // Agrégation ventes dérivées + mouvements personnalisés du magasin
+  // Dérivation des RÈGLEMENTS (encaissements) depuis Firestore — chaque
+  // règlement apparaît comme une entrée datée à sa propre date.
+  useEffect(() => {
+    if (!magasinId) { setReglementsDerives([]); return; }
+    let annule = false;
+    setReglementsDerives(deriveFromReglements(readReglementsCacheMagasin(magasinId), magasinId));
+    const load = () => {
+      chargerReglementsParMagasin(magasinId).then((regls) => {
+        if (!annule) setReglementsDerives(deriveFromReglements(regls, magasinId));
+      }).catch(() => {});
+    };
+    load();
+    const interval = setInterval(load, 10000);
+    const onUpdate = () => load();
+    window.addEventListener('reglements-updated', onUpdate);
+    window.addEventListener('storage', onUpdate);
+    return () => {
+      annule = true;
+      clearInterval(interval);
+      window.removeEventListener('reglements-updated', onUpdate);
+      window.removeEventListener('storage', onUpdate);
+    };
+  }, [magasinId]);
+
+  // Agrégation ventes dérivées + règlements + mouvements personnalisés du magasin
   useEffect(() => {
     if (!magasinId) return;
-    const allMouvements: MouvementCaisse[] = [...ventesDerivees];
+    const allMouvements: MouvementCaisse[] = [...ventesDerivees, ...reglementsDerives];
 
     const mouvementsMagasin = mouvementsPersonnalises.filter(
       (m: MouvementCaisse) => m.magasinId === magasinId
@@ -144,7 +195,7 @@ export function MouvementsCaissePage() {
     allMouvements.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
     setMouvements(allMouvements);
-  }, [magasinId, ventesDerivees, mouvementsPersonnalises]);
+  }, [magasinId, ventesDerivees, reglementsDerives, mouvementsPersonnalises]);
 
   useEffect(() => {
     applyFilters();

@@ -19,6 +19,67 @@ export interface SmsRapport {
 
 const LS_RAPPORT = 'leclaire_rapport_sms';
 const LS_CONFIG_SMS = 'leclaire_config_sms';
+const LS_CREDITS_SMS = 'leclaire_credits_sms';
+
+// ── Compteur / crédit de SMS ─────────────────────────────────────────────────
+// Permet de saisir le NOMBRE RÉEL de SMS disponibles. Ce compteur diminue à
+// chaque SMS envoyé, passe en JAUNE quand il est presque épuisé, puis en ROUGE
+// quand il est terminé.
+export interface CreditsSms {
+  total: number;   // nombre saisi (référence)
+  restant: number; // nombre encore disponible
+}
+
+const CREDITS_DEFAULT: CreditsSms = { total: 0, restant: 0 };
+export const SMS_CREDITS_EVENT = 'sms-credits-updated';
+
+/** Charge le crédit SMS (total saisi + restant). */
+export function loadCreditsSms(): CreditsSms {
+  try {
+    const stored = localStorage.getItem(LS_CREDITS_SMS);
+    if (stored) return { ...CREDITS_DEFAULT, ...JSON.parse(stored) };
+  } catch (error) {
+    logger.error('Erreur chargement crédits SMS:', error);
+  }
+  return { ...CREDITS_DEFAULT };
+}
+
+function persistCredits(c: CreditsSms): void {
+  try {
+    localStorage.setItem(LS_CREDITS_SMS, JSON.stringify(c));
+    if (typeof window !== 'undefined') window.dispatchEvent(new Event(SMS_CREDITS_EVENT));
+  } catch (error) {
+    logger.error('Erreur sauvegarde crédits SMS:', error);
+  }
+}
+
+/** Définit le nombre réel de SMS disponibles (réinitialise total + restant). */
+export function setCreditsSms(total: number): void {
+  const t = Math.max(0, Math.floor(Number(total) || 0));
+  persistCredits({ total: t, restant: t });
+}
+
+/** Décrémente le crédit d'un SMS (jamais en dessous de 0). Appelé à chaque envoi réussi. */
+export function decrementerCreditSms(): void {
+  const c = loadCreditsSms();
+  if (c.total <= 0) return; // compteur non configuré : on ne suit pas
+  persistCredits({ total: c.total, restant: Math.max(0, c.restant - 1) });
+}
+
+/**
+ * État du crédit pour l'affichage :
+ * - 'ok'     : il reste assez de SMS (> 15 % du total)
+ * - 'warn'   : presque terminé (≤ 15 % du total, mais > 0) → JAUNE
+ * - 'danger' : terminé (0 restant) → ROUGE
+ * - 'none'   : compteur non configuré (total = 0)
+ */
+export function etatCreditSms(): 'ok' | 'warn' | 'danger' | 'none' {
+  const c = loadCreditsSms();
+  if (c.total <= 0) return 'none';
+  if (c.restant <= 0) return 'danger';
+  const seuil = Math.max(5, Math.ceil(c.total * 0.15));
+  return c.restant <= seuil ? 'warn' : 'ok';
+}
 
 /**
  * Configuration SMS
@@ -32,8 +93,12 @@ export interface ConfigSms {
   messageRetrait: string;
   envoyerVente: boolean;
   messageVente: string;
+  // Rappel de renouvellement des verres : envoyé un certain nombre de mois après
+  // l'achat de verres (par défaut 20 mois = 1 an et 8 mois) pour inviter le
+  // client à renouveler son équipement avant péremption/évolution de la vue.
   envoyerRenouvellement: boolean;
   messageRenouvellement: string;
+  delaiRenouvellementMois: number;
 }
 
 const CONFIG_DEFAULT: ConfigSms = {
@@ -46,7 +111,8 @@ const CONFIG_DEFAULT: ConfigSms = {
   envoyerVente: true,
   messageVente: `Merci pour votre achat chez ${TENANT.nom} ! Nous vous remercions de votre confiance et restons à votre disposition. À très bientôt.`,
   envoyerRenouvellement: true,
-  messageRenouvellement: `Bonjour, cela fait maintenant 1 an et 8 mois que vous avez acquis vos verres chez ${TENANT.nom}. Vos verres approchent de leur fin de vie : pensez à songer à leur renouvellement pour préserver votre confort visuel. Nous restons à votre disposition.`,
+  messageRenouvellement: `Bonjour, cela fait bientôt 2 ans que vous avez acheté vos verres chez ${TENANT.nom}. Vos verres arrivent en fin de vie : pensez à les renouveler pour préserver votre confort visuel. Passez nous voir, nous serons ravis de vous accueillir.`,
+  delaiRenouvellementMois: 20,
 };
 
 /**
@@ -175,6 +241,7 @@ export async function envoyerSmsReel(params: {
     const json = await res.json().catch(() => ({}));
     if (res.ok && json?.success) {
       upsertRapport({ ...base, resultat: 'Envoyé' });
+      decrementerCreditSms(); // le compteur de SMS diminue à chaque envoi réussi
       logger.log(`📤 SMS envoyé à ${params.client} (${params.telephone})`);
       return { success: true };
     }
@@ -425,41 +492,35 @@ export async function envoyerRetraitsDuJour(
   }
 }
 
-/** Ajoute un nombre de mois à une date (chaîne ISO) et renvoie la Date obtenue. */
-function ajouterMois(dateStr: string | undefined, mois: number): Date | null {
-  if (!dateStr) return null;
-  const d = new Date(dateStr);
-  if (isNaN(d.getTime())) return null;
-  d.setMonth(d.getMonth() + mois);
-  return d;
-}
-
-const MOIS_RENOUVELLEMENT_VERRES = 20; // 1 an et 8 mois
-
 /**
- * Parcourt toutes les ventes réelles (hors devis) comportant des verres et
- * notifie les clients dont l'achat date de 1 an et 8 mois (échéance atteinte
- * ou dépassée) pour les inciter à renouveler leurs verres. Chaque vente n'est
- * notifiée qu'une seule fois (marqueur permanent).
+ * Rappel de renouvellement des verres : parcourt toutes les ventes réelles
+ * comportant des verres et notifie les clients dont l'achat remonte à AU MOINS
+ * `delaiRenouvellementMois` (par défaut 20 mois = 1 an et 8 mois). Chaque vente
+ * n'est notifiée qu'une seule fois (dédoublonnage permanent).
  */
-export async function envoyerRenouvellementsDuJour(
-  ventes?: import('./ventesService').VenteSupabase[],
-): Promise<number> {
+export async function envoyerRenouvellementsDuJour(): Promise<number> {
   const config = loadConfigSms();
   if (!config.envoyerRenouvellement) return 0;
   try {
     const { chargerToutesLesVentes } = await import('./ventesService');
-    const toutesVentes = ventes || await chargerToutesLesVentes();
-    if (!toutesVentes || !toutesVentes.length) return 0;
+    const ventes = await chargerToutesLesVentes();
+    if (!ventes || !ventes.length) return 0;
 
-    const maintenant = new Date();
+    const delai = config.delaiRenouvellementMois || 20;
+    const seuil = new Date();
+    seuil.setMonth(seuil.getMonth() - delai);
+
     let envoyes = 0;
-    for (const v of toutesVentes) {
-      if (v.type !== 'vente') continue; // uniquement les ventes réelles, pas les devis
-      if (!v.telephone || v.telephone.trim() === '') continue;
-      if (!v.verres || v.verres.length === 0) continue; // uniquement les achats de verres
-      const dateEcheance = ajouterMois(v.date, MOIS_RENOUVELLEMENT_VERRES);
-      if (!dateEcheance || dateEcheance > maintenant) continue;
+    for (const v of ventes) {
+      // Uniquement les ventes réelles (pas les devis) comportant des verres.
+      if (v.type !== 'vente') continue;
+      if (!Array.isArray(v.verres) || v.verres.length === 0) continue;
+      if (!v.telephone || !v.telephone.trim()) continue;
+      const dateAchat = new Date(v.date || v.created_at || '');
+      if (isNaN(dateAchat.getTime())) continue;
+      // On notifie dès que l'achat a dépassé le délai (fenêtre ouverte : le
+      // dédoublonnage permanent garantit un seul envoi par vente).
+      if (dateAchat > seuil) continue;
       if (dejaNotifiePermanent('renouvellement', v.id)) continue;
       void envoyerSmsReel({
         client: v.client || 'Client',
@@ -469,7 +530,7 @@ export async function envoyerRenouvellementsDuJour(
       });
       envoyes++;
     }
-    if (envoyes) logger.log(`🔁 ${envoyes} SMS de renouvellement de verres envoyés`);
+    if (envoyes) logger.log(`🔁 ${envoyes} SMS de renouvellement envoyés`);
     return envoyes;
   } catch (err) {
     logger.error('❌ envoyerRenouvellementsDuJour:', err);

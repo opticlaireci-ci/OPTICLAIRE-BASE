@@ -3,7 +3,6 @@ import { Search, Printer, Download } from 'lucide-react';
 import { excelHeaderRows, printHeaderHTML } from '../../utils/documentHeader';
 import { useLiveData } from '../../hooks/useLiveData';
 import { TENANT } from '../../config/tenant';
-import { imprimerHtmlDansApp } from '../../utils/printInApp';
 
 interface StockItem {
   id: string;
@@ -100,6 +99,8 @@ export function EtatStockGlobalPage() {
           <title>État de Stock - ${TENANT.nom}</title>
           <style>
             @page { margin: 0; size: A4; }
+            @media screen { body { visibility: hidden; } }
+            @media print { body { visibility: visible; } }
             body { font-family: Arial, sans-serif; padding: 20px; }
             h1 { font-size: 24px; margin-bottom: 20px; text-align: center; }
             table { width: 100%; border-collapse: collapse; margin-top: 20px; }
@@ -143,10 +144,17 @@ export function EtatStockGlobalPage() {
             <strong>Total articles:</strong> ${filteredStocks.length}<br>
             <strong>Valeur totale:</strong> ${filteredStocks.reduce((sum, item) => sum + item.stock * item.prix, 0).toLocaleString('fr-FR')} F CFA
           </div>
+          <script>
+            window.addEventListener('load', function() {
+              window.print();
+              window.onafterprint = function() { window.close(); };
+            });
+          </script>
         </body>
       </html>
     `;
-    imprimerHtmlDansApp(printContent);
+    const printWindow = window.open('', '_blank');
+    if (printWindow) { printWindow.document.write(printContent); printWindow.document.close(); }
   };
 
   const handleExportExcel = async () => {

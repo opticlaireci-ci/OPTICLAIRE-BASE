@@ -13,8 +13,13 @@ import { chargerInventaires, type InventaireRow } from '../services/inventairesS
 import { loadStocksParMagasin, type StockMagasin } from '../services/inventaireService';
 import { getAllMagasinIds } from '../constants/magasins';
 import { pdfHeader, excelHeaderRows } from '../utils/documentHeader';
+import { afficherPdfBlob } from '../utils/inAppViewer';
+import { useModesPaiement } from '../utils/venteLookups';
 import { TENANT } from '../config/tenant';
-import { imprimerPdfDansApp } from '../utils/printInApp';
+
+// Option spéciale du filtre « mode de paiement » : sélectionne toutes les
+// factures réglées (partiellement ou totalement) par bon d'assurance.
+const OPTION_BON_ASSURANCE = "Bon d'assurance";
 
 type ReportType =
   | 'bons-monture' | 'bons-verre' | 'stock' | 'inventaires'
@@ -25,7 +30,17 @@ type ReportType =
 
 interface Column { label: string; align?: 'right' }
 interface Row { key: string; cells: string[]; search: string }
-interface ReportView { title: string; fileName: string; headers: Column[]; rows: Row[]; footer?: string }
+interface ReportView {
+  title: string;
+  fileName: string;
+  headers: Column[];
+  rows: Row[];
+  footer?: string;
+  /** Sous-titre (ex. « PÉRIODE : … | … ») affiché sous le titre dans le PDF/Excel. */
+  subtitle?: string;
+  /** Ligne TOTAL affichée en pied de tableau (cellules alignées sur les colonnes). */
+  foot?: string[];
+}
 
 export function VisualisationPage() {
   const [activeReport, setActiveReport] = useState<ReportType>('ventes-factures');
@@ -126,13 +141,21 @@ export function VisualisationPage() {
     return (magId || '').toUpperCase() === magasin.toUpperCase();
   };
 
-  const fmtMontant = (n?: number) => (typeof n === 'number' && !isNaN(n) ? n : 0).toLocaleString('fr-FR') + ' FCFA';
+  const fmtMontant = (n?: number) =>
+    // Remplace les espaces insécables/étroits (U+00A0, U+202F) produits par
+    // toLocaleString('fr-FR') par une espace normale : sinon ils s'affichent
+    // comme une barre verticale (« | ») dans le PDF (police jsPDF).
+    (typeof n === 'number' && !isNaN(n) ? n : 0)
+      .toLocaleString('fr-FR')
+      .replace(/[\u00a0\u202f\u2009]/g, ' ') + ' FCFA';
   const fmtDate = (iso?: string | null) => {
     if (!iso) return '';
     const d = new Date(iso);
     return isNaN(d.getTime()) ? String(iso) : d.toLocaleDateString('fr-FR');
   };
   const num = (v: any): number => { const n = Number(v); return isNaN(n) ? 0 : n; };
+  // Nom de magasin toujours en MAJUSCULES dans les rapports (écran, PDF, Excel).
+  const magU = (m?: string | null): string => (m || '').toUpperCase();
 
   // Montant total d'une vente/devis (gère devis à propositions).
   const montantVente = (v: VenteSupabase): number => {
@@ -169,8 +192,22 @@ export function VisualisationPage() {
   // ── Construction de la vue selon le rapport ────────────────────────────────
   const view: ReportView = useMemo(() => {
     const q = recherche.trim().toLowerCase();
-    const build = (title: string, fileName: string, headers: Column[], rows: Row[], footer?: string): ReportView => ({
-      title, fileName, headers, rows: rows.filter(r => !q || r.search.includes(q)), footer,
+    // Libellé de période « jj-mm-aaaa | jj-mm-aaaa » à partir des filtres de date.
+    const fmtP = (iso: string): string => {
+      const d = parseFiltreDate(iso);
+      if (!d) return '…';
+      const p = (n: number) => String(n).padStart(2, '0');
+      return `${p(d.getDate())}-${p(d.getMonth() + 1)}-${d.getFullYear()}`;
+    };
+    const periode = (dateDebut || dateFin)
+      ? `PÉRIODE : ${fmtP(dateDebut)} | ${fmtP(dateFin)}`
+      : 'PÉRIODE : Toutes les dates';
+    const build = (
+      title: string, fileName: string, headers: Column[], rows: Row[],
+      footer?: string, extra?: { subtitle?: string; foot?: string[] },
+    ): ReportView => ({
+      title, fileName, headers, rows: rows.filter(r => !q || r.search.includes(q)),
+      footer, subtitle: extra?.subtitle ?? periode, foot: extra?.foot,
     });
 
     switch (activeReport) {
@@ -184,7 +221,7 @@ export function VisualisationPage() {
           .filter(v => magasinOk(v.magasin_id));
         const rows = filtered.map(v => mkRow(v.id, [
           fmtDate(v.date), numDoc(v), v.numero_client || '', v.client || '',
-          v.telephone || '', v.magasin_id || '', v.edite_par || '', fmtMontant(montantVente(v)),
+          v.telephone || '', magU(v.magasin_id), v.edite_par || '', fmtMontant(montantVente(v)),
         ]));
         const total = filtered.reduce((s, v) => s + montantVente(v), 0);
         return build(isDevis ? 'DEVIS | PROFORMA' : 'VENTES | FACTURES', isDevis ? 'Devis' : 'Ventes',
@@ -201,7 +238,7 @@ export function VisualisationPage() {
             const records: any[] = (v.recap as any)?.savRecords || [];
             records.forEach((r: any, i: number) => {
               savRows.push(mkRow(`${v.id}-sav-${i}`, [
-                fmtDate(v.date), numDoc(v), v.client || '', v.magasin_id || '',
+                fmtDate(v.date), numDoc(v), v.client || '', magU(v.magasin_id),
                 r.reference || '', r.details || '', r.date ? fmtDate(r.date) : '—',
               ]));
             });
@@ -213,7 +250,7 @@ export function VisualisationPage() {
       case 'recap-activites': {
         const filtered = ventes.filter(v => v.type !== 'devis').filter(v => dansIntervalle(v.date)).filter(v => magasinOk(v.magasin_id));
         const rows = filtered.map(v => mkRow(v.id, [
-          fmtDate(v.date), numDoc(v), v.client || '', v.magasin_id || '',
+          fmtDate(v.date), numDoc(v), v.client || '', magU(v.magasin_id),
           modePaiementVente(v), v.edite_par || '', fmtMontant(montantVente(v)),
         ]));
         const total = filtered.reduce((s, v) => s + montantVente(v), 0);
@@ -229,7 +266,7 @@ export function VisualisationPage() {
         const rows: Row[] = [];
         if (activeReport === 'recap-verres') {
           filtered.forEach(v => lignesVerres(v).forEach((l, i) => rows.push(mkRow(`${v.id}-${i}`, [
-            fmtDate(v.date), numDoc(v), v.client || '', v.magasin_id || '', l.designation, l.prix,
+            fmtDate(v.date), numDoc(v), v.client || '', magU(v.magasin_id), l.designation, l.prix,
           ]))));
           return build('RÉCAPITULATIF ACTIVITÉS VERRES', 'Recap_Verres',
             [{ label: 'Date' }, { label: 'N° Doc' }, { label: 'Client' }, { label: 'Magasin' }, { label: 'Verre' }, { label: 'Prix', align: 'right' }],
@@ -238,7 +275,7 @@ export function VisualisationPage() {
         const type = activeReport === 'recap-montures' ? 'monture' : activeReport === 'recap-accessoires' ? 'accessoire' : 'traitement';
         const label = type === 'monture' ? 'MONTURES' : type === 'accessoire' ? 'ACCESSOIRES' : 'TRAITEMENTS';
         filtered.forEach(v => lignesArticles(v, type).forEach((l, i) => rows.push(mkRow(`${v.id}-${i}`, [
-          fmtDate(v.date), numDoc(v), v.client || '', v.magasin_id || '', l.designation, l.qte, l.prix, l.total,
+          fmtDate(v.date), numDoc(v), v.client || '', magU(v.magasin_id), l.designation, l.qte, l.prix, l.total,
         ]))));
         return build(`RÉCAPITULATIF ACTIVITÉS ${label}`, `Recap_${label}`,
           [{ label: 'Date' }, { label: 'N° Doc' }, { label: 'Client' }, { label: 'Magasin' }, { label: 'Désignation' }, { label: 'Qté' }, { label: 'Prix', align: 'right' }, { label: 'Total', align: 'right' }],
@@ -266,14 +303,54 @@ export function VisualisationPage() {
       // ── Règlements / Mouvements financiers ────────────────────────────────────
       case 'mouvements':
       case 'reglements': {
+        // Colonnes conformes à l'état imprimé : Client, Total Net (montant de la
+        // facture), Règlement (montant encaissé), N° Facture, N° Reçu,
+        // Mode de Paiement, Détails.
+        const headersReg: Column[] = [
+          { label: 'Client' },
+          { label: 'Total Net', align: 'right' },
+          { label: 'Règlement', align: 'right' },
+          { label: 'N° Facture' },
+          { label: 'N° Reçu' },
+          { label: 'Mode de Paiement' },
+          { label: 'Détails' },
+        ];
+        const vById = new Map(ventes.map(v => [v.id, v]));
+        const titre = activeReport === 'mouvements' ? 'MOUVEMENTS FINANCIERS' : 'ÉTAT RÈGLEMENTS';
+        const nomFichier = activeReport === 'mouvements' ? 'Mouvements' : 'Reglements';
+
+        const filtreAssurance = modePaiement === OPTION_BON_ASSURANCE;
+        // Cas spécial : « Bon d'assurance » → toutes les factures ayant un bon
+        // d'assurance (peu importe le mode de paiement enregistré).
+        if (filtreAssurance) {
+          const filteredAss = ventes
+            .filter(v => v.type !== 'devis')
+            .filter(v => dansIntervalle(v.date))
+            .filter(v => magasinOk(v.magasin_id))
+            .filter(v => Array.isArray(v.bons_assurance) && v.bons_assurance.length > 0);
+          const assRows = filteredAss.map(v => mkRow(`ass-${v.id}`, [
+            v.client || '', fmtMontant(montantVente(v)), fmtMontant(montantVente(v)),
+            numDoc(v), '', OPTION_BON_ASSURANCE, magU(v.magasin_id),
+          ]));
+          const totalAss = filteredAss.reduce((s, v) => s + montantVente(v), 0);
+          return build(titre, nomFichier, headersReg, assRows,
+            `Total factures avec assurance : ${fmtMontant(totalAss)}`,
+            { foot: ['T O T A L', fmtMontant(totalAss), fmtMontant(totalAss), '', '', '', ''] });
+        }
+
         const filteredR = reglements
           .filter(r => dansIntervalle(r.date))
           .filter(r => magasinOk(r.magasin_id))
           .filter(r => modePaiement === 'Tous Règlements' ? true : (r.mode_paiement || '').toLowerCase() === modePaiement.toLowerCase());
-        const regRows = filteredR.map(r => mkRow(r.id, [
-          fmtDate(r.date), r.recu || '', r.mode_paiement || '', r.compte_banque || '',
-          r.magasin_id || '', r.edite_par || '', fmtMontant(num(r.montant)),
-        ]));
+        const regRows = filteredR.map(r => {
+          const v = vById.get(r.vente_id);
+          const totalNet = v ? montantVente(v) : 0;
+          return mkRow(r.id, [
+            v?.client || '', fmtMontant(totalNet), fmtMontant(num(r.montant)),
+            v ? numDoc(v) : '', r.recu || '', r.mode_paiement || '',
+            r.compte_banque || magU(r.magasin_id),
+          ]);
+        });
 
         // Acomptes initiaux des ventes (paiement à la commande, stocké dans recap.acompte)
         const filteredV = ventes
@@ -283,23 +360,30 @@ export function VisualisationPage() {
           .filter(v => num((v.recap as any)?.acompte) > 0)
           .filter(v => modePaiement === 'Tous Règlements' ? true : ((v.recap as any)?.modePaiement || '').toLowerCase() === modePaiement.toLowerCase());
         const acompteRows = filteredV.map(v => mkRow(`acompte-${v.id}`, [
-          fmtDate(v.date), numDoc(v), (v.recap as any)?.modePaiement || '', '',
-          v.magasin_id || '', v.edite_par || '', fmtMontant(num((v.recap as any)?.acompte)),
+          v.client || '', fmtMontant(montantVente(v)), fmtMontant(num((v.recap as any)?.acompte)),
+          numDoc(v), '', (v.recap as any)?.modePaiement || '',
+          `Acompte · ${magU(v.magasin_id)}`,
         ]));
 
         const totalR = filteredR.reduce((s, r) => s + num(r.montant), 0);
         const totalV = filteredV.reduce((s, v) => s + num((v.recap as any)?.acompte), 0);
+        // Total Net distinct par facture (évite de compter deux fois une facture
+        // ayant plusieurs règlements).
+        const facturesUniques = new Map<string, number>();
+        filteredR.forEach(r => { const v = vById.get(r.vente_id); if (v) facturesUniques.set(v.id, montantVente(v)); });
+        filteredV.forEach(v => facturesUniques.set(v.id, montantVente(v)));
+        const totalNetDistinct = Array.from(facturesUniques.values()).reduce((s, n) => s + n, 0);
+        const totalEncaisse = totalR + totalV;
         const allRows = [...regRows, ...acompteRows];
-        return build(activeReport === 'mouvements' ? 'MOUVEMENTS FINANCIERS' : 'RÈGLEMENTS',
-          activeReport === 'mouvements' ? 'Mouvements' : 'Reglements',
-          [{ label: 'Date' }, { label: 'Reçu / N° Doc' }, { label: 'Mode de paiement' }, { label: 'Compte/Banque' }, { label: 'Magasin' }, { label: 'Édité par' }, { label: 'Montant', align: 'right' }],
-          allRows, `Total encaissé : ${fmtMontant(totalR + totalV)}`);
+        return build(titre, nomFichier, headersReg, allRows,
+          `Total encaissé : ${fmtMontant(totalEncaisse)}`,
+          { foot: ['T O T A L', fmtMontant(totalNetDistinct), fmtMontant(totalEncaisse), '', '', '', ''] });
       }
       // ── Assurances ────────────────────────────────────────────────────────────
       case 'recap-releves': {
         const filtered = releves.filter(r => dansIntervalle(r.date_releve)).filter(r => magasinOk(r.magasin_id));
         const rows = filtered.map(r => mkRow(r.id, [
-          fmtDate(r.date_releve), r.assurance || '', r.magasin_id || '', fmtMontant(num(r.montant)),
+          fmtDate(r.date_releve), r.assurance || '', magU(r.magasin_id), fmtMontant(num(r.montant)),
         ]));
         const total = filtered.reduce((s, r) => s + num(r.montant), 0);
         return build('RÉCAPITULATIF RELEVÉS', 'Releves',
@@ -310,7 +394,7 @@ export function VisualisationPage() {
         const filtered = facturesAss.filter(f => dansIntervalle(f.date_facture)).filter(f => magasinOk(f.magasin_id));
         const rows = filtered.map(f => mkRow(f.id, [
           fmtDate(f.date_facture), f.numero || '', f.client_nom || '', f.assurance || '',
-          f.magasin_id || '', fmtMontant(num(f.part_assurance)), fmtMontant(num(f.montant_total)),
+          magU(f.magasin_id), fmtMontant(num(f.part_assurance)), fmtMontant(num(f.montant_total)),
         ]));
         const total = filtered.reduce((s, f) => s + num(f.part_assurance), 0);
         return build("CHIFFRE D'AFFAIRES ASSURANCES", 'CA_Assurances',
@@ -322,7 +406,7 @@ export function VisualisationPage() {
         const filtered = clients.filter(c => magasinOk(c.magasin_id));
         const rows = filtered.map(c => mkRow(c.id, [
           c.numero_client || '', c.nom || '', c.telephone || '', c.email || '',
-          c.magasin_id || '', c.profession || '', fmtMontant(num(c.solde)),
+          magU(c.magasin_id), c.profession || '', fmtMontant(num(c.solde)),
         ]));
         return build('CLIENTS', 'Clients',
           [{ label: 'N° Client' }, { label: 'Nom' }, { label: 'Téléphone' }, { label: 'Email' }, { label: 'Magasin' }, { label: 'Profession' }, { label: 'Solde', align: 'right' }],
@@ -335,7 +419,7 @@ export function VisualisationPage() {
           .filter(b => dansIntervalle(b.date))
           .filter(b => magasinOk(b.magasin_source) || magasinOk(b.magasin_destination));
         const rows = filtered.map(b => mkRow(b.id, [
-          fmtDate(b.date), b.numero || '', b.magasin_source || b.magasin_destination || '',
+          fmtDate(b.date), b.numero || '', magU(b.magasin_source || b.magasin_destination),
           b.responsable || '', String((b.items || []).length), b.statut || '',
         ]));
         return build('ÉTAT BONS DE COMMANDE MONTURE / ACCESSOIRE', 'Bons_Commande',
@@ -348,7 +432,7 @@ export function VisualisationPage() {
           .filter(b => magasinOk(b.magasin || b.officine));
         const rows = filtered.map(b => mkRow(b.id, [
           fmtDate(b.date), b.num_bc || b.num_ref || '', b.fournisseur || '', b.client || '',
-          b.magasin || b.officine || '', b.statut || '', fmtMontant(num(b.total_net)),
+          magU(b.magasin || b.officine), b.statut || '', fmtMontant(num(b.total_net)),
         ]));
         const total = filtered.reduce((s, b) => s + num(b.total_net), 0);
         return build('ÉTAT BONS DE COMMANDE VERRE', 'Bons_Verres',
@@ -358,7 +442,7 @@ export function VisualisationPage() {
       case 'inventaires': {
         const filtered = inventaires.filter(iv => dansIntervalle(iv.date_inventaire)).filter(iv => magasinOk(iv.magasin_id));
         const rows = filtered.map(iv => mkRow(iv.id, [
-          fmtDate(iv.date_inventaire), iv.magasin_id || '', iv.responsable || '',
+          fmtDate(iv.date_inventaire), imagU(v.magasin_id), iv.responsable || '',
           String((Array.isArray(iv.items) ? iv.items.length : 0)), String(num(iv.total_ecarts)),
         ]));
         return build('ÉTAT INVENTAIRES', 'Inventaires',
@@ -368,7 +452,7 @@ export function VisualisationPage() {
       case 'stock': {
         const filtered = stocks.filter(s => magasinOk(s.magasinId));
         const rows = filtered.map((s, i) => mkRow(`${s.magasinId}-${s.produitId}-${i}`, [
-          s.designation || '', s.produitType || '', s.magasinId || '',
+          s.designation || '', s.produitType || '', magU(s.magasinId),
           String(num(s.quantiteDisponible)), fmtMontant(num(s.prixVente)),
         ]));
         const totalQte = filtered.reduce((s, r) => s + num(r.quantiteDisponible), 0);
@@ -388,32 +472,64 @@ export function VisualisationPage() {
       import('jspdf'),
       import('jspdf-autotable'),
     ]);
-    const doc = new jsPDF(view.headers.length > 6 ? 'landscape' : 'portrait');
+    const doc = new jsPDF(view.headers.length > 7 ? 'landscape' : 'portrait');
     const startY = pdfHeader(doc);
-    doc.setFontSize(13);
-    doc.text(view.title, 14, startY);
+    const pageW = doc.internal.pageSize.getWidth();
+    const marginX = 14;
+
+    // Encadré titre + période (fond gris clair, bordure noire) — comme l'état imprimé.
+    const boxX = marginX;
+    const boxW = pageW - marginX * 2;
+    const boxH = view.subtitle ? 15 : 10;
+    doc.setDrawColor(0, 0, 0);
+    doc.setLineWidth(0.3);
+    doc.setFillColor(230, 230, 230);
+    doc.rect(boxX, startY - 5, boxW, boxH, 'FD');
+    doc.setTextColor(0, 0, 0);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(12);
+    doc.text(view.title, boxX + 3, startY + 1);
+    if (view.subtitle) {
+      doc.setFontSize(10);
+      doc.text(view.subtitle, boxX + 3, startY + 7);
+    }
+    doc.setFont('helvetica', 'normal');
+
     autoTable(doc, {
-      startY: startY + 5,
+      startY: startY - 5 + boxH + 4,
       head: [view.headers.map(h => h.label)],
       body: view.rows.map(r => r.cells),
-      styles: { fontSize: 8 },
-      headStyles: { fillColor: [6, 182, 212] },
+      foot: view.foot ? [view.foot] : undefined,
+      styles: { fontSize: 8, lineColor: [0, 0, 0], lineWidth: 0.1 },
+      headStyles: { fillColor: [230, 230, 230], textColor: [0, 0, 0], fontStyle: 'bold' },
+      footStyles: { fillColor: [230, 230, 230], textColor: [0, 0, 0], fontStyle: 'bold' },
+      columnStyles: view.headers.reduce((acc, h, i) => {
+        if (h.align === 'right') acc[i] = { halign: 'right' };
+        return acc;
+      }, {} as Record<number, any>),
     });
-    if (view.footer) {
+    if (view.footer && !view.foot) {
       const y = (doc as any).lastAutoTable?.finalY || startY + 20;
       doc.setFontSize(11);
-      doc.text(view.footer, 14, y + 8);
+      doc.text(view.footer, marginX, y + 8);
     }
-    const blobViz = doc.output('blob');
-    imprimerPdfDansApp(blobViz);
+    // Impression DIRECTE dans l'application (pas de page/onglet externe, pas
+    // d'aperçu intermédiaire) : la boîte d'impression s'ouvre immédiatement.
+    afficherPdfBlob(doc.output('blob'), { titre: view.title });
   };
 
   const exporterExcel = async () => {
     // Import paresseux : xlsx chargé uniquement au moment de l'export.
     const XLSX = await import('xlsx');
     const headers = view.headers.map(h => h.label);
-    const aoa = [...excelHeaderRows(), headers, ...view.rows.map(r => r.cells)];
-    if (view.footer) aoa.push([view.footer]);
+    const aoa: any[][] = [...excelHeaderRows()];
+    aoa.push([view.title]);
+    if (view.subtitle) aoa.push([view.subtitle]);
+    aoa.push([]);
+    aoa.push(headers);
+    aoa.push(...view.rows.map(r => r.cells));
+    if (view.foot) aoa.push(view.foot);
+    else if (view.footer) aoa.push([view.footer]);
     const ws = XLSX.utils.aoa_to_sheet(aoa);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, view.fileName.slice(0, 30) || 'Rapport');
@@ -435,6 +551,20 @@ export function VisualisationPage() {
   const tdStyle: React.CSSProperties = { padding: '8px 10px', borderBottom: '1px solid #e5e7eb', verticalAlign: 'top', whiteSpace: 'nowrap', fontSize: '13px' };
 
   const isReglements = activeReport === 'mouvements' || activeReport === 'reglements';
+
+  // Modes de paiement disponibles dans le filtre : ceux enregistrés dans la
+  // configuration + ceux rencontrés dans les ventes et règlements chargés,
+  // plus l'option spéciale « Bon d'assurance ».
+  const modesEnregistres = useModesPaiement();
+  const modesDisponibles = useMemo(() => {
+    const set = new Set<string>();
+    modesEnregistres.forEach(m => { if (m && m.trim()) set.add(m.trim()); });
+    ventes.forEach(v => { const m = (v.recap as any)?.modePaiement; if (m && String(m).trim()) set.add(String(m).trim()); });
+    reglements.forEach(r => { if (r.mode_paiement && r.mode_paiement.trim()) set.add(r.mode_paiement.trim()); });
+    const arr = Array.from(set).filter(m => m.toLowerCase() !== OPTION_BON_ASSURANCE.toLowerCase());
+    arr.sort((a, b) => a.localeCompare(b, 'fr'));
+    return arr;
+  }, [modesEnregistres, ventes, reglements]);
 
   const btn = (r: ReportType, label: React.ReactNode) => (
     <button style={reportBtnStyle(activeReport === r)} onClick={() => setActiveReport(r)}>{label}</button>
@@ -518,11 +648,8 @@ export function VisualisationPage() {
               <label style={labelStyle}>Mode de Paiement</label>
               <select style={fieldStyle} value={modePaiement} onChange={e => setModePaiement(e.target.value)}>
                 <option>Tous Règlements</option>
-                <option>Espèces</option>
-                <option>Chèque</option>
-                <option>Virement</option>
-                <option>Carte bancaire</option>
-                <option>Mobile Money</option>
+                {modesDisponibles.map(m => <option key={m} value={m}>{m}</option>)}
+                <option value={OPTION_BON_ASSURANCE}>{OPTION_BON_ASSURANCE}</option>
               </select>
             </div>
           )}
@@ -546,7 +673,7 @@ export function VisualisationPage() {
             </div>
             <button onClick={imprimer}
               style={{ flex: '1 1 120px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '10px 14px', border: 'none', borderRadius: '6px', backgroundColor: '#374151', color: '#fff', cursor: 'pointer', fontWeight: 700, fontSize: '13px', whiteSpace: 'nowrap' }}>
-              <Printer size={15} /> Imprimer PDF
+              <Printer size={15} /> PDF
             </button>
             <button onClick={exporterExcel}
               style={{ flex: '1 1 120px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '10px 14px', border: 'none', borderRadius: '6px', backgroundColor: '#16a34a', color: '#fff', cursor: 'pointer', fontWeight: 700, fontSize: '13px', whiteSpace: 'nowrap' }}>
@@ -555,37 +682,27 @@ export function VisualisationPage() {
           </div>
         </div>
 
-        {/* Tableau scrollable */}
-        <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', borderRadius: '6px', border: '1px solid #e5e7eb' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', minWidth: `${view.headers.length * 110}px` }}>
-            <thead>
-              <tr>
-                {view.headers.map((h, i) => (
-                  <th key={i} style={{ ...thStyle, textAlign: h.align || 'left' }}>{h.label}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {chargement && (
-                <tr><td colSpan={view.headers.length} style={{ ...tdStyle, textAlign: 'center', color: '#6b7280', whiteSpace: 'normal', padding: '24px' }}>Chargement…</td></tr>
+        {/* Les listes ne sont plus affichées à l'écran : uniquement l'impression
+            PDF ou le téléchargement Excel via les boutons ci-dessus. */}
+        <div style={{ borderRadius: '6px', border: '1px dashed #cbd5e1', backgroundColor: '#f8fafc', padding: '28px 20px', textAlign: 'center' }}>
+          {chargement ? (
+            <div style={{ color: '#6b7280', fontSize: '14px' }}>Chargement…</div>
+          ) : view.rows.length === 0 ? (
+            <div style={{ color: '#9ca3af', fontSize: '14px' }}>Aucun résultat trouvé pour ces critères.</div>
+          ) : (
+            <div>
+              <div style={{ fontSize: '15px', fontWeight: 700, color: '#111827', marginBottom: '6px' }}>
+                {view.rows.length} résultat(s) prêt(s)
+              </div>
+              {view.footer && (
+                <div style={{ fontSize: '14px', fontWeight: 700, color: '#111827', marginBottom: '10px' }}>{view.footer}</div>
               )}
-              {!chargement && view.rows.length === 0 && (
-                <tr><td colSpan={view.headers.length} style={{ ...tdStyle, textAlign: 'center', color: '#9ca3af', whiteSpace: 'normal', padding: '24px' }}>Aucun résultat trouvé.</td></tr>
-              )}
-              {!chargement && view.rows.map((r, i) => (
-                <tr key={r.key} style={{ backgroundColor: i % 2 ? '#f8fafc' : '#fff' }}>
-                  {r.cells.map((c, j) => (
-                    <td key={j} style={{ ...tdStyle, textAlign: view.headers[j]?.align || 'left' }}>{c}</td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+              <div style={{ fontSize: '13px', color: '#6b7280' }}>
+                Cliquez sur <strong>PDF</strong> pour lancer l'impression ou sur <strong>Excel</strong> pour télécharger le fichier.
+              </div>
+            </div>
+          )}
         </div>
-
-        {view.footer && !chargement && view.rows.length > 0 && (
-          <div style={{ marginTop: '12px', textAlign: 'right', fontWeight: 700, fontSize: '14px', color: '#111827' }}>{view.footer}</div>
-        )}
       </div>
     </div>
   );

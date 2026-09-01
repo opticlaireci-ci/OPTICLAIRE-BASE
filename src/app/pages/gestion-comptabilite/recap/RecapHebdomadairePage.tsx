@@ -292,6 +292,8 @@ export function RecapHebdomadairePage() {
   const handleExportPDF = async () => {
     const { default: jsPDF } = await import('jspdf');
     const autoTable = (await import('jspdf-autotable')).default;
+    // Charge le correctif global d'affichage des montants (espaces insécables).
+    await import('../../../utils/documentHeader');
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
     doc.setFontSize(13);
     doc.text('Récapitulatif Hebdomadaire — Recettes & Dépenses', 14, 15);

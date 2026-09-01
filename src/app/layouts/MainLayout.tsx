@@ -76,7 +76,6 @@ import { SyncIndicator } from '../components/SyncIndicator';
 import { getMagasins } from '../constants/magasins';
 import { pathToButtonKey } from '../constants/appButtons';
 import { TENANT } from '../config/tenant';
-import { imprimerHtmlDansApp } from '../utils/printInApp';
 
 const drawerWidth = 280;
 
@@ -565,7 +564,7 @@ function trouverAncetres(items: MenuItemType[], cible: string, chemin: string[] 
 }
 
 function NavigationMenu() {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(true);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [expandedItems, setExpandedItems] = useState<{ [key: string]: boolean }>({});
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
@@ -575,14 +574,6 @@ function NavigationMenu() {
   const { logout, user } = useAuth();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
-
-  // Ferme automatiquement le menu latéral (replié en desktop, masqué en
-  // mobile) à chaque changement de page — quelle que soit la façon dont la
-  // navigation a été déclenchée (clic menu, retour navigateur, etc.).
-  useEffect(() => {
-    setOpen(false);
-    setMobileOpen(false);
-  }, [location.pathname]);
 
   const roleFilteredMenuItems = getFilteredMenuItems(user?.role);
   const isAdminRole = user?.role === 'super_admin' || user?.role === 'admin' || user?.role === 'administrateur';
@@ -636,7 +627,10 @@ function NavigationMenu() {
   };
 
   const handleNavigate = (path: string) => {
+    // Le menu latéral se referme automatiquement à chaque page ouverte :
+    // fermeture complète sur mobile, repli en mode mini sur desktop.
     if (isMobile) setMobileOpen(false);
+    else setOpen(false);
     navigate(path);
   };
 
@@ -779,6 +773,9 @@ function NavigationMenu() {
         });
       });
 
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) return;
+
       const content = `
         <!DOCTYPE html>
         <html>
@@ -825,10 +822,19 @@ function NavigationMenu() {
                 </tr>
               </tbody>
             </table>
+            <script>
+              window.onload = function() {
+                window.print();
+                window.onafterprint = function() {
+                  window.close();
+                };
+              };
+            </script>
           </body>
         </html>
       `;
-      imprimerHtmlDansApp(content);
+      printWindow.document.write(content);
+      printWindow.document.close();
     };
 
     const handleExportMonturesExcel = () => {
@@ -884,6 +890,9 @@ function NavigationMenu() {
         });
       });
 
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) return;
+
       const content = `
         <!DOCTYPE html>
         <html>
@@ -930,10 +939,19 @@ function NavigationMenu() {
                 </tr>
               </tbody>
             </table>
+            <script>
+              window.onload = function() {
+                window.print();
+                window.onafterprint = function() {
+                  window.close();
+                };
+              };
+            </script>
           </body>
         </html>
       `;
-      imprimerHtmlDansApp(content);
+      printWindow.document.write(content);
+      printWindow.document.close();
     };
 
     const handleExportAccessoiresExcel = () => {
@@ -1316,6 +1334,14 @@ function MainLayoutContent() {
     }
   }, [isLoading, isAuthenticated, user, location.pathname, navigate]);
 
+  // Remonter automatiquement EN HAUT de la page d'affichage à chaque changement
+  // de page (clic sur n'importe quel bouton de navigation). Sans cela, une page
+  // ouverte pouvait s'afficher au milieu/en bas là où on avait laissé la
+  // précédente.
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+  }, [location.pathname]);
+
   // Attendre la fin de la vérification de session.
   // On affiche un écran d'attente PLUTÔT QUE `null` : ces deux états sont censés
   // être fugaces, mais s'ils se bloquent (Supabase injoignable au démarrage) un
@@ -1360,9 +1386,16 @@ function MainLayoutContent() {
       <NavigationMenu />
       <Box component="main" sx={{ flexGrow: 1, p: { xs: 1, sm: 2, md: 3 }, maxWidth: '100vw', overflowX: { xs: 'auto', md: 'hidden' }, minWidth: 0 }}>
         <Toolbar sx={{ minHeight: { xs: 40, md: 40 } }} />
-        <div key={location.pathname} className="page-transition">
+        {/* Contenu CENTRÉ sur grands écrans (desktop) : largeur maximale confortable
+            et marges automatiques. Sur mobile/tablette la largeur reste à 100 %
+            (aucun changement du comportement mobile). */}
+        <Box
+          key={location.pathname}
+          className="page-transition"
+          sx={{ width: '100%', maxWidth: { xs: '100%', lg: 1600 }, mx: 'auto' }}
+        >
           <Outlet />
-        </div>
+        </Box>
       </Box>
       <SessionIndicator />
     </Box>

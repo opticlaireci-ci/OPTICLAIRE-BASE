@@ -328,12 +328,6 @@ export function MagasinLayout() {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
-  // Ferme automatiquement le menu latéral mobile à chaque changement de page,
-  // quelle que soit la façon dont la navigation a été déclenchée.
-  useEffect(() => {
-    setMobileOpen(false);
-  }, [location.pathname]);
-
   useEffect(() => {
     if (isLoading) return;
     if (!isAuthenticated) {
@@ -369,6 +363,11 @@ export function MagasinLayout() {
       navigate(`/magasin/${magasinId}/accueil`, { replace: true });
     }
   }, [isLoading, isAuthenticated, user, location.pathname, magasinId, navigate]);
+
+  // Remonter automatiquement EN HAUT de la page à chaque changement de page.
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+  }, [location.pathname]);
 
   if (isLoading || !isAuthenticated) {
     return null;
@@ -459,7 +458,9 @@ export function MagasinLayout() {
   };
 
   const handleNavigate = (path: string) => {
-    if (isMobile) setMobileOpen(false);
+    // Le menu latéral se referme automatiquement à chaque page ouverte
+    // (sur mobile ET desktop) — cf. drawer temporaire ci-dessous.
+    setMobileOpen(false);
     navigate(path);
   };
 
@@ -559,13 +560,10 @@ export function MagasinLayout() {
 
   const drawerContent = (
     <>
-      {!isMobile && <Toolbar />}
-      {isMobile && (
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 2, py: 1, borderBottom: '1px solid #eee' }}>
-          <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>{magasinNom}</Typography>
-          <IconButton size="small" onClick={() => setMobileOpen(false)}><ArrowBack fontSize="small" /></IconButton>
-        </Box>
-      )}
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 2, py: 1, borderBottom: '1px solid #eee' }}>
+        <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>{magasinNom}</Typography>
+        <IconButton size="small" onClick={() => setMobileOpen(false)}><ArrowBack fontSize="small" /></IconButton>
+      </Box>
       <Box sx={{ overflow: 'auto', py: 0.5 }}>
         <List sx={{ py: 0 }}>
           {visibleMenuItems.map((item) => renderMenuItem(item))}
@@ -578,12 +576,11 @@ export function MagasinLayout() {
     <Box sx={{ display: 'flex', height: '100dvh', minHeight: '100svh' }}>
       <AppBar position="fixed" sx={{ zIndex: (theme) => theme.zIndex.drawer + 1, backgroundColor: '#000', color: '#fff' }}>
         <Toolbar variant="dense" sx={{ minHeight: 40, px: 1.5 }}>
-          {isMobile ? (
-            <IconButton edge="start" onClick={() => setMobileOpen(true)} sx={{ mr: 1, color: '#fff' }}>
-              <MenuIcon />
-            </IconButton>
-          ) : (
-            <IconButton edge="start" onClick={handleBack} sx={{ mr: 2, color: '#fff' }}>
+          <IconButton edge="start" onClick={() => setMobileOpen(true)} sx={{ mr: 1, color: '#fff' }}>
+            <MenuIcon />
+          </IconButton>
+          {!isMobile && (
+            <IconButton onClick={handleBack} sx={{ mr: 1, color: '#fff' }}>
               <ArrowBack />
             </IconButton>
           )}
@@ -657,41 +654,24 @@ export function MagasinLayout() {
         )}
       </AppBar>
 
-      {/* Drawer permanent sur desktop, temporaire sur mobile */}
-      <Box component="nav" sx={{ width: { md: drawerWidth }, flexShrink: { md: 0 } }}>
-        {isMobile ? (
-          <Drawer
-            variant="temporary"
-            open={mobileOpen}
-            onClose={() => setMobileOpen(false)}
-            ModalProps={{ keepMounted: true }}
-            sx={{
-              '& .MuiDrawer-paper': {
-                width: drawerWidth,
-                boxSizing: 'border-box',
-                backgroundColor: '#fff',
-              },
-            }}
-          >
-            {drawerContent}
-          </Drawer>
-        ) : (
-          <Drawer
-            variant="permanent"
-            sx={{
+      {/* Drawer temporaire (mobile ET desktop) : il se referme automatiquement
+          à chaque navigation pour laisser toute la largeur au contenu. */}
+      <Box component="nav">
+        <Drawer
+          variant="temporary"
+          open={mobileOpen}
+          onClose={() => setMobileOpen(false)}
+          ModalProps={{ keepMounted: true }}
+          sx={{
+            '& .MuiDrawer-paper': {
               width: drawerWidth,
-              flexShrink: 0,
-              '& .MuiDrawer-paper': {
-                width: drawerWidth,
-                boxSizing: 'border-box',
-                backgroundColor: '#fff',
-              },
-            }}
-            open
-          >
-            {drawerContent}
-          </Drawer>
-        )}
+              boxSizing: 'border-box',
+              backgroundColor: '#fff',
+            },
+          }}
+        >
+          {drawerContent}
+        </Drawer>
       </Box>
 
       <Box
@@ -700,7 +680,7 @@ export function MagasinLayout() {
           flexGrow: 1,
           minWidth: 0,
           p: { xs: 1, sm: 2, md: 3 },
-          width: { xs: '100%', md: `calc(100% - ${drawerWidth}px)` },
+          width: '100%',
           maxWidth: '100vw',
           // Sur mobile : le contenu large défile horizontalement au lieu d'être
           // coupé ; sur desktop on masque le débordement comme avant.
@@ -710,9 +690,13 @@ export function MagasinLayout() {
         <Toolbar sx={{ minHeight: { xs: 40, md: 40 } }} />
         {/* Espace pour la barre raccourcis dépliée sur mobile */}
         {isMobile && shortcutsOpen && <Box sx={{ height: 52 }} />}
-        <div key={location.pathname} style={{ animation: 'pageFadeIn 0.15s ease-out both', willChange: 'opacity, transform' }}>
+        {/* Contenu CENTRÉ sur grands écrans (desktop), largeur 100 % sur mobile. */}
+        <Box
+          key={location.pathname}
+          sx={{ width: '100%', maxWidth: { xs: '100%', lg: 1600 }, mx: 'auto', animation: 'pageFadeIn 0.15s ease-out both', willChange: 'opacity, transform' }}
+        >
           <Outlet />
-        </div>
+        </Box>
       </Box>
       <SessionIndicator />
       <style>{`

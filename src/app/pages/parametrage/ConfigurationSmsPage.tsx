@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { ArrowLeft, Save, Send } from 'lucide-react';
-import { loadConfigSms, saveConfigSms, type ConfigSms, getStatistiquesSms, envoyerSmsReel, isSmsConfigure } from '../../services/smsService';
+import { loadConfigSms, saveConfigSms, type ConfigSms, getStatistiquesSms, envoyerSmsReel, isSmsConfigure, loadCreditsSms, setCreditsSms, etatCreditSms, SMS_CREDITS_EVENT } from '../../services/smsService';
 
 export function ConfigurationSmsPage() {
   const navigate = useNavigate();
   const [config, setConfig] = useState<ConfigSms>(loadConfigSms());
   const [stats, setStats] = useState(getStatistiquesSms());
+  const [credits, setCredits] = useState(loadCreditsSms());
+  const [creditsInput, setCreditsInput] = useState(String(loadCreditsSms().total || ''));
   const [saved, setSaved] = useState(false);
 
   // Test SMS
@@ -22,7 +24,21 @@ export function ConfigurationSmsPage() {
   useEffect(() => {
     rafraichirStats();
     isSmsConfigure().then(setInfobip);
+    // Rafraîchit le compteur de SMS en direct (baisse à chaque envoi).
+    const majCredits = () => setCredits(loadCreditsSms());
+    window.addEventListener(SMS_CREDITS_EVENT, majCredits);
+    window.addEventListener('storage', majCredits);
+    return () => {
+      window.removeEventListener(SMS_CREDITS_EVENT, majCredits);
+      window.removeEventListener('storage', majCredits);
+    };
   }, []);
+
+  function handleSaveCredits() {
+    const n = Math.max(0, parseInt(creditsInput, 10) || 0);
+    setCreditsSms(n);
+    setCredits(loadCreditsSms());
+  }
 
   function rafraichirStats() {
     setStats(getStatistiquesSms());
@@ -127,6 +143,65 @@ export function ConfigurationSmsPage() {
           </div>
         </div>
       </div>
+
+      {/* Compteur / crédit de SMS disponibles */}
+      {(() => {
+        const etat = etatCreditSms();
+        const restant = credits.restant;
+        const total = credits.total;
+        const pct = total > 0 ? Math.round((restant / total) * 100) : 0;
+        const couleur =
+          etat === 'danger' ? { bg: 'bg-red-50', border: 'border-red-300', text: 'text-red-700', bar: 'bg-red-500' }
+          : etat === 'warn' ? { bg: 'bg-yellow-50', border: 'border-yellow-300', text: 'text-yellow-700', bar: 'bg-yellow-400' }
+          : etat === 'ok' ? { bg: 'bg-green-50', border: 'border-green-300', text: 'text-green-700', bar: 'bg-green-500' }
+          : { bg: 'bg-gray-50', border: 'border-gray-200', text: 'text-gray-700', bar: 'bg-gray-400' };
+        return (
+          <div className={`mb-6 rounded-lg p-6 border ${couleur.bg} ${couleur.border}`}>
+            <h2 className="text-xl font-bold mb-1 text-gray-800">📶 Crédit de SMS disponibles</h2>
+            <p className="text-sm text-gray-600 mb-4">
+              Saisissez le nombre réel de SMS dont vous disposez. Ce compteur diminue à chaque SMS envoyé,
+              passe en <span className="font-semibold text-yellow-600">jaune</span> quand il est presque épuisé,
+              puis en <span className="font-semibold text-red-600">rouge</span> quand il est terminé.
+            </p>
+
+            <div className="flex flex-wrap items-end gap-4 mb-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Nombre de SMS disponibles</label>
+                <input
+                  type="number"
+                  min={0}
+                  value={creditsInput}
+                  onChange={(e) => setCreditsInput(e.target.value)}
+                  className="w-40 px-3 py-2 border border-gray-300 rounded-lg"
+                  placeholder="Ex : 1000"
+                />
+              </div>
+              <button
+                onClick={handleSaveCredits}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700"
+              >
+                Enregistrer le crédit
+              </button>
+            </div>
+
+            {total > 0 ? (
+              <>
+                <div className="flex items-baseline gap-2 mb-2">
+                  <span className={`text-4xl font-extrabold ${couleur.text}`}>{restant}</span>
+                  <span className="text-gray-500">/ {total} SMS restants</span>
+                  {etat === 'danger' && <span className="ml-2 font-semibold text-red-600">— Crédit épuisé !</span>}
+                  {etat === 'warn' && <span className="ml-2 font-semibold text-yellow-600">— Bientôt épuisé</span>}
+                </div>
+                <div className="w-full h-3 bg-white rounded-full overflow-hidden border border-gray-200">
+                  <div className={`h-full ${couleur.bar} transition-all`} style={{ width: `${pct}%` }} />
+                </div>
+              </>
+            ) : (
+              <div className="text-sm text-gray-500">Aucun crédit configuré. Saisissez un nombre pour activer le suivi.</div>
+            )}
+          </div>
+        );
+      })()}
 
       <div className="grid grid-cols-2 gap-6">
         {/* Configuration SMS Bienvenue */}
@@ -343,11 +418,12 @@ export function ConfigurationSmsPage() {
           )}
         </div>
 
-        {/* Configuration SMS Renouvellement Verres */}
+        {/* Configuration SMS Renouvellement des verres */}
         <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-xl font-bold mb-4">🔁 SMS de Renouvellement (verres)</h2>
+          <h2 className="text-xl font-bold mb-4">🔁 SMS de Renouvellement des verres</h2>
           <p className="text-sm text-gray-600 mb-4">
-            Informer automatiquement les clients ayant acheté des verres chez nous, 1 an et 8 mois plus tard, qu'ils doivent songer à renouveler leurs verres.
+            Rappeler automatiquement aux clients ayant acheté des verres de penser à les renouveler,
+            un certain temps après leur achat (par défaut 1 an et 8 mois).
           </p>
 
           <div className="mb-4">
@@ -364,6 +440,24 @@ export function ConfigurationSmsPage() {
 
           <div className="mb-4">
             <label className="block text-sm font-medium text-gray-700 mb-2">
+              Délai après achat (en mois)
+            </label>
+            <input
+              type="number"
+              min={1}
+              max={60}
+              value={config.delaiRenouvellementMois}
+              onChange={(e) => setConfig({ ...config, delaiRenouvellementMois: Math.max(1, parseInt(e.target.value, 10) || 1) })}
+              disabled={!config.envoyerRenouvellement}
+              className="w-32 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-500"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              20 mois = 1 an et 8 mois. Le SMS part une seule fois par vente, une fois ce délai atteint.
+            </p>
+          </div>
+
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
               Message de renouvellement
             </label>
             <textarea
@@ -372,7 +466,7 @@ export function ConfigurationSmsPage() {
               rows={4}
               disabled={!config.envoyerRenouvellement}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-500"
-              placeholder="Votre message de renouvellement..."
+              placeholder="Votre message de rappel de renouvellement..."
             />
             <p className="text-xs text-gray-500 mt-1">
               {config.messageRenouvellement.length} caractères
@@ -383,7 +477,7 @@ export function ConfigurationSmsPage() {
             <div className="bg-green-50 border border-green-200 rounded-lg p-3">
               <div className="text-sm font-medium text-green-800">✅ Activé</div>
               <div className="text-xs text-green-700 mt-1">
-                Un SMS est envoyé (une seule fois) aux clients ayant acheté des verres il y a 1 an et 8 mois, pour leur rappeler de songer au renouvellement
+                Un SMS de rappel est envoyé (une seule fois) aux clients {config.delaiRenouvellementMois} mois après l'achat de leurs verres
               </div>
             </div>
           ) : (
@@ -464,7 +558,7 @@ export function ConfigurationSmsPage() {
           <li>• <strong>SMS d'Anniversaire :</strong> Envoyé automatiquement chaque jour aux clients dont c'est l'anniversaire</li>
           <li>• <strong>SMS de Retrait :</strong> Envoyé quand une commande de verres passe au statut « prêt / disponible »</li>
           <li>• <strong>SMS de Remerciement :</strong> Envoyé automatiquement après chaque vente / facture enregistrée</li>
-          <li>• <strong>SMS de Renouvellement :</strong> Envoyé automatiquement aux clients ayant acheté des verres, 1 an et 8 mois après leur achat</li>
+          <li>• <strong>SMS de Renouvellement :</strong> Envoyé une seule fois aux clients ayant acheté des verres, une fois le délai configuré atteint (par défaut 1 an et 8 mois)</li>
           <li>• <strong>Numéros :</strong> Ils sont automatiquement mis au format international (Côte d'Ivoire +225)</li>
           <li>• <strong>Personnalisation :</strong> Vous pouvez modifier les messages à tout moment</li>
           <li>• <strong>Rapport :</strong> Tous les SMS envoyés sont enregistrés dans la page "Rapport SMS"</li>

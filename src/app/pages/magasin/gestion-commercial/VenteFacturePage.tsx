@@ -8,6 +8,7 @@ import { addCreateAudit, addUpdateAudit, formatDate, resolveUserName, AuditInfo 
 import { genNumFacture, genCodeBarre, genRefBonCommandeVerre, genNumRecu } from '../../../utils/autoNumbers';
 import { autoSaveOphtalmologue, autoSaveCabinet } from '../../../utils/autoActeur';
 import { autoSaveClient } from '../../../utils/autoClient';
+import { afficherPdfBlob, afficherHtml } from '../../../utils/inAppViewer';
 import { useSupabaseSync } from '../../../hooks/useSupabaseSync';
 import {
   useTypesVerre, useVerresList, findVerreByName, VerreRecord,
@@ -18,7 +19,6 @@ import {
   useFournisseurs,
 } from '../../../utils/venteLookups';
 import { ajouterReglement, chargerReglements, chargerTousLesReglements, readReglementsCacheMap, subscriberReglementsVente, ReglementSupabase } from '../../../services/reglementsService';
-import { imprimerHtmlDansApp, imprimerPdfDansApp } from '../../../utils/printInApp';
 import { ajouterVente, chargerVentes as chargerVentesSupabase, subscriberVentesMagasin, readVentesCache, supprimerVente, mettreAJourVente, VenteSupabase } from '../../../services/ventesService';
 import { enregistrerVente } from '../../../services/inventaireService';
 import { verifierStockVente, messageRuptures } from '../../../utils/stockVente';
@@ -283,8 +283,8 @@ async function telechargerFacturePDF(factureData: {
   doc.setTextColor(120);
   doc.text(`${e.adresse} Téléphone: ${e.telephone} Email: ${e.email}`, 105, 290, { align: 'center' });
 
-  const blobFacture = doc.output('blob');
-  imprimerPdfDansApp(blobFacture);
+  // Affichage + impression DANS l'application (aucune fenêtre externe).
+  afficherPdfBlob(doc.output('blob'), { titre: 'Facture', imprimerAuto: true });
 }
 
 async function telechargerFactureExcel(factureData: {
@@ -565,8 +565,7 @@ async function telechargerFichePDF(vente: any, magasinId?: string) {
   doc.text('INDICATIONS SPÉCIALES:', 17, y + 9.5);
   doc.text(assurance ? assurance.toUpperCase() : '', 17, y + 16);
 
-  const blobFiche = doc.output('blob');
-  imprimerPdfDansApp(blobFiche);
+  afficherPdfBlob(doc.output('blob'), { titre: 'Fiche', imprimerAuto: true });
 }
 
 async function telechargerDossierClientPDF(vente: any, magasinId?: string) {
@@ -735,8 +734,7 @@ async function telechargerDossierClientPDF(vente: any, magasinId?: string) {
   doc.setTextColor(80);
   doc.text(`${directionEntete.telephone} | ${directionEntete.email} | 8 Pool, R.point de la rivera Palmeraie`, 105, 286, { align: 'center' });
 
-  const blobDossier = doc.output('blob');
-  imprimerPdfDansApp(blobDossier);
+  afficherPdfBlob(doc.output('blob'), { titre: 'Dossier', imprimerAuto: true });
 }
 
 async function telechargerReglementPDF(reglement: any, vente: any, magasinId?: string) {
@@ -907,8 +905,7 @@ async function telechargerReglementPDF(reglement: any, vente: any, magasinId?: s
   doc.setTextColor(60);
   doc.text(`${e.adresse}  Téléphone: ${e.telephone}  Email: ${e.email}`, 105, 291, { align: 'center' });
 
-  const blobReg = doc.output('blob');
-  imprimerPdfDansApp(blobReg);
+  afficherPdfBlob(doc.output('blob'), { titre: 'Reçu de règlement', imprimerAuto: true });
 }
 
 // ── BON DE BONNE EXÉCUTION – LUNETTES ───────────────────────────────────────
@@ -933,83 +930,92 @@ async function telechargerBonExecutionPDF(vente: any, magasinId?: string) {
   y += 14;
 
   // ── Cadre BON ─────────────────────────────────────────────────────────────
-  const boxY = y;
   doc.setDrawColor(0);
   doc.setLineWidth(0.5);
+  doc.rect(14, y, 182, 130);
 
   // Titre
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(16);
-  doc.text('BON DE BONNE EXÉCUTION – LUNETTES', 105, boxY + 14, { align: 'center' });
+  doc.text('BON DE BONNE EXÉCUTION – LUNETTES', 105, y + 14, { align: 'center' });
 
   // Ligne sous le titre
   doc.setLineWidth(0.3);
-  doc.line(20, boxY + 18, 190, boxY + 18);
+  doc.line(20, y + 18, 190, y + 18);
 
   // Date
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(11);
-  doc.text(`Date: ${dateStr}`, 20, boxY + 28);
-  doc.line(20, boxY + 30, 190, boxY + 30);
+  doc.text(`Date: ${dateStr}`, 20, y + 28);
+  doc.line(20, y + 30, 190, y + 30);
 
   // Facture N°
-  doc.text(`Facture N° ${numFacture}`, 20, boxY + 40);
-  doc.line(20, boxY + 42, 190, boxY + 42);
+  doc.text(`Facture N° ${numFacture}`, 20, y + 40);
+  doc.line(20, y + 42, 190, y + 42);
 
   // Déclaration
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(10);
-  doc.text('Déclaration du client:', 20, boxY + 52);
+  doc.text('Déclaration du client:', 20, y + 52);
 
-  // ── Nom du client : mis en évidence (bandeau plein, plus de superposition) ──
-  const clientLabel = `${nomClient}  (N° ${vente.numeroClient || '—'})`;
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(12);
-  const clientLabelLines = doc.splitTextToSize(clientLabel, 160);
-  const bandTop = boxY + 56;
-  const bandHeight = clientLabelLines.length * 6 + 4;
-  doc.setFillColor(26, 90, 114); // #1a5a72
-  doc.rect(20, bandTop, 170, bandHeight, 'F');
-  doc.setTextColor(255, 255, 255);
-  doc.text(clientLabelLines, 24, bandTop + 6);
-  doc.setTextColor(0, 0, 0);
-
-  let yTxt = bandTop + bandHeight + 8;
-  doc.setFont('helvetica', 'normal');
+  // Ligne avec nom du client en gras.
+  // NB : on effectue un rendu « rich-text » mot par mot avec retour à la ligne
+  // automatique — chaque mot conserve sa police (normal/gras). L'ancienne
+  // approche imprimait la phrase plusieurs fois par-dessus elle-même, ce qui
+  // rendait le nom du client illisible (chevauchement).
+  const intro = 'Je soussigné(e), ';
+  const clientBold = `${nomClient} (N° ${vente.numeroClient || '—'})`;
+  const suite = ' atteste avoir reçu ce jour mes lunettes en parfait état, conformes à la commande effectuée.';
+  const xIntro = 20;
+  const maxX = 190;
   doc.setFontSize(10);
-  const declarationText = "Je soussigné(e) atteste avoir reçu ce jour mes lunettes en parfait état, conformes à la commande effectuée.";
-  const linesDecl = doc.splitTextToSize(declarationText, 168);
-  doc.text(linesDecl, 20, yTxt);
-  yTxt += linesDecl.length * 5 + 5;
+
+  const segments: { text: string; bold: boolean }[] = [
+    { text: intro, bold: false },
+    { text: clientBold, bold: true },
+    { text: suite, bold: false },
+  ];
+  const tokens: { w: string; bold: boolean }[] = [];
+  for (const seg of segments) {
+    const parts = seg.text.split(' ');
+    parts.forEach((p, i) => {
+      if (p === '' && i < parts.length - 1) { tokens.push({ w: ' ', bold: seg.bold }); return; }
+      tokens.push({ w: p + (i < parts.length - 1 ? ' ' : ''), bold: seg.bold });
+    });
+  }
+
+  let cx = xIntro;
+  let ty = y + 60;
+  for (const tok of tokens) {
+    doc.setFont('helvetica', tok.bold ? 'bold' : 'normal');
+    const wTok = doc.getTextWidth(tok.w);
+    if (cx + wTok > maxX && cx > xIntro) { ty += 6; cx = xIntro; }
+    doc.text(tok.w, cx, ty);
+    cx += wTok;
+  }
+  doc.setFont('helvetica', 'normal');
 
   const ligne2 = 'Après vérification, je confirme la conformité de la monture, des verres ainsi que les ajustements réalisés. Je suis pleinement satisfait(e) de la qualité du service ainsi que des conseils reçus.';
   const lines2 = doc.splitTextToSize(ligne2, 168);
-  doc.text(lines2, 20, yTxt);
-  yTxt += lines2.length * 5 + 10;
+  doc.text(lines2, 20, y + 72);
 
   // Observations (gras + souligné)
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
-  doc.text('Observations:', 20, yTxt);
+  doc.text('Observations:', 20, y + 92);
   const obsW = doc.getTextWidth('Observations:');
-  doc.line(20, yTxt + 1, 20 + obsW, yTxt + 1);
+  doc.line(20, y + 93, 20 + obsW, y + 93);
   doc.setFont('helvetica', 'normal');
   const obsText = '* Le client a été informé des recommandations d\'entretien et d\'utilisation de ses lunettes.';
   const linesObs = doc.splitTextToSize(obsText, 168);
-  doc.text(linesObs, 20, yTxt + 7);
-  yTxt += 7 + linesObs.length * 5 + 16;
+  doc.text(linesObs, 20, y + 99);
 
   // Zone signature
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(10);
-  doc.text('Client Signature', 160, yTxt, { align: 'center' });
-  yTxt += 8;
+  doc.text('Client Signature', 160, y + 118, { align: 'center' });
 
-  // Bordure du cadre, hauteur adaptée au contenu (jamais moins que 130)
-  const boxHeight = Math.max(130, yTxt - boxY + 6);
-  doc.rect(14, boxY, 182, boxHeight);
-
-  y = boxY + boxHeight + 8;
+  y += 138;
 
   // ── Pied de page ──────────────────────────────────────────────────────────
   doc.setDrawColor(200);
@@ -1020,8 +1026,7 @@ async function telechargerBonExecutionPDF(vente: any, magasinId?: string) {
   doc.setTextColor(80);
   doc.text(`${e.telephone} | ${e.email} | ${e.adresse}`, 105, 287, { align: 'center' });
 
-  const blobBon = doc.output('blob');
-  imprimerPdfDansApp(blobBon);
+  afficherPdfBlob(doc.output('blob'), { titre: 'Bon de livraison', imprimerAuto: true });
 }
 
 function imprimerReglement(reglement: any, vente: any, magasinId?: string) {
@@ -1089,8 +1094,17 @@ function imprimerReglement(reglement: any, vente: any, magasinId?: string) {
       font-family:Arial,Helvetica,sans-serif; font-size:13px; color:#111;
       padding:18mm 16mm 14mm 16mm;
     }
+    /* Cache le contenu à l'écran — seule la boîte de dialogue d'impression s'ouvre */
+    @media screen { body { visibility:hidden; } }
+    @media print  { body { visibility:visible; } }
     table { border-collapse:collapse; }
   </style>
+  <script>
+    window.addEventListener('load', function() {
+      window.print();
+      window.onafterprint = function() { window.close(); };
+    });
+  </script>
 </head>
 <body>
   ${printHeaderHTML(magasinId || '', { date: dateReg })}
@@ -1160,7 +1174,7 @@ function imprimerReglement(reglement: any, vente: any, magasinId?: string) {
 </body>
 </html>`;
 
-  imprimerHtmlDansApp(html);
+  afficherHtml(html, { titre: 'Document', imprimerAuto: true });
 }
 
 // ── Auto-ID generators ───────────────────────────────────────────────────────
@@ -1344,16 +1358,22 @@ function StepI({ data, onChange, magasinId }: { data: ClientInfo; onChange: (d: 
       </div>
       <div>
         <Lbl>Civilité</Lbl>
+        {/* Saisie libre + proposition à l'écriture (M., Mme, Mlle, Dr…) */}
         <input
-          list="civilites-facture"
           className={iCls}
-          placeholder="M., Mme..."
+          list="vente-civilites"
+          placeholder="C..."
           value={data.civilite}
           onChange={set('civilite')}
           autoComplete="off"
         />
-        <datalist id="civilites-facture">
-          {CIVILITES.map(c => <option key={c} value={c} />)}
+        <datalist id="vente-civilites">
+          <option value="M." />
+          <option value="Mme" />
+          <option value="Mlle" />
+          <option value="Dr" />
+          <option value="Pr" />
+          <option value="Me" />
         </datalist>
       </div>
       <div className="relative" ref={clientBoxRef}>
@@ -2406,6 +2426,8 @@ function imprimerFacture(f: FactureData, magasinId?: string) {
       font-family: Arial, sans-serif; font-size: 13px; color: #222;
       padding: 18mm 16mm 14mm 16mm;
     }
+    @media screen { body { visibility: hidden; } }
+    @media print  { body { visibility: visible; } }
     .section { margin-bottom: 20px; }
     .section-title { font-size: 11px; font-weight: 700; color: #1a7a96; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; border-left: 3px solid #1a7a96; padding-left: 8px; }
     .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 20px; font-size: 12px; }
@@ -2423,6 +2445,12 @@ function imprimerFacture(f: FactureData, magasinId?: string) {
     .totaux-row.reste { font-size: 14px; font-weight: 700; color: ${reste > 0 ? '#c62828' : '#2e7d32'}; }
     .signature-box { border: 1px dashed #ccc; width: 180px; height: 60px; display: flex; align-items: center; justify-content: center; color: #bbb; font-size: 11px; border-radius: 4px; }
   </style>
+  <script>
+    window.addEventListener('load', function() {
+      window.print();
+      window.onafterprint = function() { window.close(); };
+    });
+  </script>
 </head>
 <body>
   ${printHeaderHTML(magasinId || '', { date: f.date })}
@@ -2493,7 +2521,7 @@ function imprimerFacture(f: FactureData, magasinId?: string) {
 </body>
 </html>`;
 
-  imprimerHtmlDansApp(html);
+  afficherHtml(html, { titre: 'Devis', imprimerAuto: true });
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -3183,8 +3211,8 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
   // La commande de verre est réservée aux opticiens, directeurs, comptables et
   // administrateurs — masquée pour les conseillères (et autres rôles).
   const peutCommanderVerre = ['super_admin', 'admin', 'administrateur', 'directeur', 'comptable', 'opticien'].includes(user?.role || '');
-  // Le règlement (encaissement) dans le détail de vente est accessible aux opticiens,
-  // directeurs, comptables, administrateurs et conseillères.
+  // Le règlement (encaissement) dans le détail de vente est accessible aux
+  // opticiens, conseillères, directeurs, comptables et administrateurs.
   const peutReglement = ['super_admin', 'admin', 'administrateur', 'directeur', 'comptable', 'opticien', 'conseillere'].includes(user?.role || '');
   const { magasinId = '' } = useParams<{ magasinId: string }>();
   const [searchFacture, setSearchFacture] = useState('');
@@ -5036,7 +5064,7 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
             {/* ── Tableau desktop (≥ md) ── */}
             <div className="hidden md:block bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
               <div className="overflow-x-auto">
-                <table className="w-full text-sm border-collapse" style={{ minWidth: 780 }}>
+                <table className="text-sm border-collapse" style={{ minWidth: 780 }}>
                   <thead>
                     <tr style={{ backgroundColor: '#1a7a96' }}>
                       <th className="px-3 py-3 text-white font-semibold text-xs uppercase border border-gray-300 whitespace-nowrap">#</th>

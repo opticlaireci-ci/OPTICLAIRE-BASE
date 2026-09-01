@@ -7,6 +7,7 @@ import { Plus, Eye, X, FileText, Calendar, Printer, ArrowRightLeft, MoreHorizont
 import { addCreateAudit, addUpdateAudit, formatDate, AuditInfo } from '../../../utils/auditUtils';
 import { autoSaveOphtalmologue, autoSaveCabinet } from '../../../utils/autoActeur';
 import { autoSaveClient } from '../../../utils/autoClient';
+import { afficherPdfBlob } from '../../../utils/inAppViewer';
 import { useTypesVerre, useVerresList, findVerreByName, VerreRecord, useOphtalmologues, useCabinets, useProfessions, useClientRecordsMagasin, ClientRecord, useVenteProducts, findVenteProduct, VenteProduct } from '../../../utils/venteLookups';
 import { genCodeBarre, genNumFacture } from '../../../utils/autoNumbers';
 import { printHeaderHTML } from '../../../utils/documentHeader';
@@ -265,7 +266,8 @@ async function telechargerDevisPDF(d: DevisRecord, magasinId: string) {
   const footerParts = [e.telephone, e.email, e.adresse].filter(Boolean);
   doc.text(footerParts.join(' | '), 105, footerY, { align: 'center' });
 
-  doc.save(`Devis_${d.numDevis}_${(d.client || '').replace(/\s+/g, '_')}.pdf`);
+  // Affichage + impression DANS l'application (aucune page/onglet externe).
+  afficherPdfBlob(doc.output('blob'), { titre: `Devis ${d.numDevis || ''}`.trim(), imprimerAuto: true });
 }
 
 // ── Étape I ───────────────────────────────────────────────────────────────────
@@ -349,16 +351,22 @@ function EtapeI({ data, onChange, magasinId }: { data: ClientInfo; onChange: (d:
       <div className="grid grid-cols-6 gap-3">
         <div><ReqLbl>N° Client</ReqLbl><input className={roCls + ' font-mono font-bold text-blue-700'} readOnly value={data.numeroClient} /></div>
         <div><Lbl>Civilité</Lbl>
+          {/* Saisie libre + proposition à l'écriture (M., Mme, Mlle, Dr…) */}
           <input
-            list="civilites-devis"
             className={iCls}
-            placeholder="M., Mme..."
+            list="devis-civilites"
+            placeholder="Civilité..."
             value={data.civilite}
             onChange={set('civilite')}
             autoComplete="off"
           />
-          <datalist id="civilites-devis">
-            {CIVILITES.map(c => <option key={c} value={c} />)}
+          <datalist id="devis-civilites">
+            <option value="M." />
+            <option value="Mme" />
+            <option value="Mlle" />
+            <option value="Dr" />
+            <option value="Pr" />
+            <option value="Me" />
           </datalist>
         </div>
         <div className="col-span-2 relative" ref={clientBoxRef}><ReqLbl>Nom & Prénoms Client</ReqLbl>
@@ -1719,7 +1727,7 @@ function ListeDevis({ magasinId, onNouveau, onModifier }: { magasinId: string; o
           {/* ── Tableau desktop (≥ md) ── */}
           <div className="hidden md:block bg-white rounded-lg shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
-            <table className="w-full text-sm border-collapse" style={{ minWidth: 560 }}>
+            <table className="text-sm border-collapse" style={{ minWidth: 560 }}>
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-200 text-xs text-gray-600 uppercase tracking-wide">
                   <th className="text-center px-3 py-3 w-10 whitespace-nowrap">#</th>

@@ -7,7 +7,6 @@ import { printHeaderHTML } from '../../utils/documentHeader';
 import { ImportCatalogueCsvDialog } from '../../components/ImportCatalogueCsvDialog';
 import { MODELE_TRAITEMENTS } from '../../utils/catalogueCsv';
 import { TENANT } from '../../config/tenant';
-import { imprimerHtmlDansApp } from '../../utils/printInApp';
 
 interface Traitement extends AuditInfo {
   id: string; designation: string; prix: number; createdAt: string;
@@ -68,7 +67,8 @@ function printCatalogueTraitements(traitements: Traitement[]) {
     <table><thead><tr><th>#</th><th>Traitement</th><th>Prix / Verre</th></tr></thead>
     <tbody>${traitements.map((t, i) => `<tr><td>${i + 1}</td><td>${t.designation}</td><td>${t.prix.toLocaleString('fr-FR')} F CFA</td></tr>`).join('')}
     </tbody></table></body></html>`;
-  imprimerHtmlDansApp(html);
+  const w = window.open('', '_blank');
+  if (w) { w.document.write(html); w.document.close(); w.print(); }
 }
 
 export function TraitementPage() {

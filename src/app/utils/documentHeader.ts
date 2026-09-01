@@ -9,9 +9,34 @@
  * pour pouvoir être inséré dans les PDF jsPDF.
  */
 
+import { jsPDF } from 'jspdf';
 import logoUrl from '../../imports/image-1.png';
 import { getMagasinById, getMagasinLabel } from '../constants/magasins';
 import { TENANT } from '../config/tenant';
+
+// ── Correctif GLOBAL d'affichage des montants dans les PDF ────────────────────
+// `Number.toLocaleString('fr-FR')` sépare les milliers par une espace INSÉCABLE
+// ÉTROITE (U+202F / U+00A0). Les polices standard de jsPDF ne connaissent pas ce
+// caractère et l'affichent comme une BARRE VERTICALE (« 1|000 FCFA »).
+// On corrige une fois pour toutes en remplaçant ces espaces par une espace
+// normale dans TOUT texte écrit dans un PDF (y compris via jspdf-autotable, qui
+// passe par doc.text en interne).
+const ESPACES_PDF = /[\u00a0\u202f\u2007\u2009\u2060]/g;
+const nettoyerTextePdf = (t: any): any => {
+  if (typeof t === 'string') return t.replace(ESPACES_PDF, ' ');
+  if (Array.isArray(t)) return t.map(nettoyerTextePdf);
+  return t;
+};
+if (!(jsPDF as any).__patchEspaces) {
+  (jsPDF as any).__patchEspaces = true;
+  const proto: any = (jsPDF as any).API || (jsPDF as any).prototype;
+  if (proto && typeof proto.text === 'function') {
+    const originalText = proto.text;
+    proto.text = function (this: any, text: any, ...rest: any[]) {
+      return originalText.call(this, nettoyerTextePdf(text), ...rest);
+    };
+  }
+}
 
 // ── Informations de la DIRECTION ─────────────────────────────────────────────
 // DÉRIVÉES des réglages de l'enseigne : voir src/app/config/tenant.ts.
@@ -142,7 +167,7 @@ export function excelHeaderRows(magasinId?: string, opts?: { date?: string }): a
   ];
 }
 
-// ── En-tête HTML (impression dans l'application, via iframe caché) ───────────
+// ── En-tête HTML (impression / window.open) ──────────────────────────────────
 /**
  * Bloc HTML d'en-tête au style du reçu de l'enseigne : nom en gros gras noir +
  * coordonnées à GAUCHE, logo à DROITE, filet noir en dessous.
