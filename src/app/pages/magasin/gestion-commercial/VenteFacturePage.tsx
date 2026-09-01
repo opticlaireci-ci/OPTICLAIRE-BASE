@@ -1089,9 +1089,6 @@ function imprimerReglement(reglement: any, vente: any, magasinId?: string) {
       font-family:Arial,Helvetica,sans-serif; font-size:13px; color:#111;
       padding:18mm 16mm 14mm 16mm;
     }
-    /* Cache le contenu à l'écran — seule la boîte de dialogue d'impression s'ouvre */
-    @media screen { body { visibility:hidden; } }
-    @media print  { body { visibility:visible; } }
     table { border-collapse:collapse; }
   </style>
 </head>
@@ -2409,8 +2406,6 @@ function imprimerFacture(f: FactureData, magasinId?: string) {
       font-family: Arial, sans-serif; font-size: 13px; color: #222;
       padding: 18mm 16mm 14mm 16mm;
     }
-    @media screen { body { visibility: hidden; } }
-    @media print  { body { visibility: visible; } }
     .section { margin-bottom: 20px; }
     .section-title { font-size: 11px; font-weight: 700; color: #1a7a96; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; border-left: 3px solid #1a7a96; padding-left: 8px; }
     .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 20px; font-size: 12px; }

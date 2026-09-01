@@ -100,8 +100,6 @@ export function EtatStockGlobalPage() {
           <title>État de Stock - ${TENANT.nom}</title>
           <style>
             @page { margin: 0; size: A4; }
-            @media screen { body { visibility: hidden; } }
-            @media print { body { visibility: visible; } }
             body { font-family: Arial, sans-serif; padding: 20px; }
             h1 { font-size: 24px; margin-bottom: 20px; text-align: center; }
             table { width: 100%; border-collapse: collapse; margin-top: 20px; }

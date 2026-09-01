@@ -10,8 +10,34 @@
  * IMPORTANT : l'aperçu doit être RÉELLEMENT VISIBLE (pas un iframe caché ou
  * placé hors de l'écran). Sur de nombreux navigateurs, un iframe invisible
  * ou hors-champ empêche la visionneuse PDF interne de s'initialiser et
- * bloque silencieusement l'impression — c'est pour cette raison que
- * l'impression des PDF ne fonctionnait pas avec la version précédente.
+ * bloque silencieusement l'impression.
+ *
+ * DEUX PROBLÈMES CONNUS ET LEURS CORRECTIFS DANS CE FICHIER :
+ *
+ * 1) « Ça ne sort pas en couleur » — La plupart des navigateurs
+ *    n'impriment PAS les couleurs de fond par défaut (économie d'encre),
+ *    sauf si :
+ *      a) le CSS force `print-color-adjust: exact` (fait ci-dessous, sur
+ *         TOUS les éléments, avec !important) ET
+ *      b) l'option "Graphiques d'arrière-plan" / "Background graphics" de
+ *         la boîte de dialogue d'impression du navigateur n'est pas
+ *         décochée manuellement par l'utilisateur, ET
+ *      c) l'imprimante elle-même n'est pas réglée en mode "Noir et blanc"
+ *         / "Économie d'encre" au niveau du pilote — ce réglage matériel
+ *         est hors de portée du code de l'application.
+ *    On force donc le CSS le plus largement possible, et on affiche un
+ *    petit rappel visuel dans l'aperçu pour guider l'utilisateur si malgré
+ *    tout rien ne sort en couleur.
+ *
+ * 2) « Le PDF ne s'imprime pas toujours » — `iframe.contentWindow.print()`
+ *    sur une visionneuse PDF intégrée (Chrome PDFium, etc.) est connu pour
+ *    être capricieux : il peut échouer silencieusement si l'appel se
+ *    produit avant que la visionneuse ait fini de s'initialiser, ou ne
+ *    fonctionne pas du tout sur certains navigateurs mobiles. On attend
+ *    donc un signal de chargement réel (évènement `load`) avant de tenter
+ *    l'impression, ET on fournit toujours un bouton "Télécharger" qui,
+ *    lui, fonctionne dans 100 % des cas (l'utilisateur peut alors imprimer
+ *    depuis sa visionneuse PDF native, où le bouton natif est fiable).
  */
 
 interface Apercu {
@@ -20,7 +46,11 @@ interface Apercu {
   imprimer: () => void;
 }
 
-function creerApercuVisible(titre: string, onFermer?: () => void): Apercu {
+function creerApercuVisible(
+  titre: string,
+  onFermer?: () => void,
+  onTelecharger?: () => void,
+): Apercu {
   const overlay = document.createElement('div');
   overlay.setAttribute('data-apercu-impression', 'true');
   Object.assign(overlay.style, {
@@ -57,6 +87,8 @@ function creerApercuVisible(titre: string, onFermer?: () => void): Apercu {
     fontSize: '14px',
     fontWeight: '600',
     flexShrink: '0',
+    gap: '12px',
+    flexWrap: 'wrap',
   } as Partial<CSSStyleDeclaration>);
 
   const titreEl = document.createElement('span');
@@ -65,38 +97,49 @@ function creerApercuVisible(titre: string, onFermer?: () => void): Apercu {
   const btnGroup = document.createElement('div');
   btnGroup.style.display = 'flex';
   btnGroup.style.gap = '8px';
+  btnGroup.style.flexWrap = 'wrap';
 
-  const btnImprimer = document.createElement('button');
-  btnImprimer.type = 'button';
-  btnImprimer.textContent = '🖨️ Imprimer';
-  Object.assign(btnImprimer.style, {
-    padding: '7px 16px',
-    borderRadius: '6px',
-    border: 'none',
-    background: '#fff',
-    color: '#1a7a96',
-    fontWeight: '700',
-    cursor: 'pointer',
-    fontSize: '13px',
-  } as Partial<CSSStyleDeclaration>);
+  const faireBouton = (label: string, primaire: boolean) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = label;
+    Object.assign(btn.style, {
+      padding: '7px 16px',
+      borderRadius: '6px',
+      border: primaire ? 'none' : '1px solid rgba(255,255,255,0.7)',
+      background: primaire ? '#fff' : 'transparent',
+      color: primaire ? '#1a7a96' : '#fff',
+      fontWeight: primaire ? '700' : '600',
+      cursor: 'pointer',
+      fontSize: '13px',
+    } as Partial<CSSStyleDeclaration>);
+    return btn;
+  };
 
-  const btnFermer = document.createElement('button');
-  btnFermer.type = 'button';
-  btnFermer.textContent = 'Fermer';
-  Object.assign(btnFermer.style, {
-    padding: '7px 16px',
-    borderRadius: '6px',
-    border: '1px solid rgba(255,255,255,0.7)',
-    background: 'transparent',
-    color: '#fff',
-    cursor: 'pointer',
-    fontSize: '13px',
-  } as Partial<CSSStyleDeclaration>);
+  const btnImprimer = faireBouton('🖨️ Imprimer', true);
+  const btnTelecharger = faireBouton('⬇️ Télécharger', false);
+  const btnFermer = faireBouton('Fermer', false);
 
   btnGroup.appendChild(btnImprimer);
+  if (onTelecharger) btnGroup.appendChild(btnTelecharger);
   btnGroup.appendChild(btnFermer);
   toolbar.appendChild(titreEl);
   toolbar.appendChild(btnGroup);
+
+  // Rappel discret : aide au diagnostic si les couleurs ne sortent pas à
+  // l'impression malgré le CSS forcé (réglage propre au navigateur / à
+  // l'imprimante, hors de portée du code).
+  const astuce = document.createElement('div');
+  astuce.textContent = "Astuce : si l'impression sort sans couleur, activez « Graphiques d'arrière-plan » dans les options d'impression du navigateur (ou téléchargez le fichier et imprimez-le depuis votre visionneuse PDF).";
+  Object.assign(astuce.style, {
+    padding: '6px 16px',
+    background: '#eef7fa',
+    color: '#0f4c5c',
+    fontFamily: 'Arial, Helvetica, sans-serif',
+    fontSize: '11.5px',
+    flexShrink: '0',
+    borderBottom: '1px solid #d8ecf1',
+  } as Partial<CSSStyleDeclaration>);
 
   const iframe = document.createElement('iframe');
   Object.assign(iframe.style, {
@@ -107,6 +150,7 @@ function creerApercuVisible(titre: string, onFermer?: () => void): Apercu {
   } as Partial<CSSStyleDeclaration>);
 
   panel.appendChild(toolbar);
+  panel.appendChild(astuce);
   panel.appendChild(iframe);
   overlay.appendChild(panel);
   document.body.appendChild(overlay);
@@ -121,15 +165,18 @@ function creerApercuVisible(titre: string, onFermer?: () => void): Apercu {
 
   const imprimer = () => {
     try {
+      iframe.focus();
       iframe.contentWindow?.focus();
       iframe.contentWindow?.print();
     } catch {
-      // Ignoré : on laisse l'utilisateur réessayer via le bouton.
+      // Ignoré : on laisse l'utilisateur réessayer via le bouton, ou
+      // utiliser le bouton "Télécharger" qui fonctionne toujours.
     }
   };
 
   btnFermer.addEventListener('click', fermer);
   btnImprimer.addEventListener('click', imprimer);
+  if (onTelecharger) btnTelecharger.addEventListener('click', onTelecharger);
   overlay.addEventListener('click', (e) => {
     if (e.target === overlay) fermer();
   });
@@ -147,11 +194,24 @@ function creerApercuVisible(titre: string, onFermer?: () => void): Apercu {
 /**
  * Force l'impression des couleurs et fonds (beaucoup de navigateurs
  * n'impriment pas les couleurs de fond par défaut, sauf indication
- * explicite dans le CSS).
+ * explicite dans le CSS). Appliqué avec la plus large spécificité possible
+ * (sélecteur universel + !important) pour ne rien laisser passer, y
+ * compris les couleurs posées en `style="..."` inline.
  */
 function injecterCssImpressionCouleur(html: string): string {
   const styleForce = `<style>
-    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
+    *, *::before, *::after {
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+      color-adjust: exact !important;
+    }
+    @media print {
+      html, body {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        color-adjust: exact !important;
+      }
+    }
   </style>`;
   if (/<\/head>/i.test(html)) {
     return html.replace(/<\/head>/i, `${styleForce}</head>`);
@@ -163,28 +223,63 @@ function injecterCssImpressionCouleur(html: string): string {
 }
 
 /**
+ * Attend que toutes les images du document (logo, QR code...) soient
+ * réellement chargées avant de déclencher l'impression, avec un plafond de
+ * sécurité pour ne jamais bloquer indéfiniment (ex. image externe qui ne
+ * répond pas).
+ */
+function attendreImages(doc: Document, delaiMaxMs = 2500): Promise<void> {
+  const images = Array.from(doc.images || []);
+  if (images.length === 0) return Promise.resolve();
+
+  const attentes = images.map((img) => {
+    if (img.complete) return Promise.resolve();
+    return new Promise<void>((resolve) => {
+      img.addEventListener('load', () => resolve(), { once: true });
+      img.addEventListener('error', () => resolve(), { once: true });
+    });
+  });
+
+  const timeout = new Promise<void>((resolve) => setTimeout(resolve, delaiMaxMs));
+  return Promise.race([Promise.all(attentes).then(() => undefined), timeout]);
+}
+
+/**
  * Affiche un aperçu (facture, devis, bon, reçu, état de stock...) dans une
  * fenêtre superposée à l'intérieur de l'application, avec un bouton
  * "Imprimer" — sans jamais ouvrir de nouvel onglet. Remplace l'ancien
  * pattern `window.open(...).document.write(html)`.
  *
- * L'impression est aussi tentée automatiquement après le chargement, pour
- * ne pas ajouter de clic supplémentaire dans le cas courant ; le bouton
- * "Imprimer" reste disponible si l'utilisateur doit relancer la boîte de
- * dialogue (par ex. après l'avoir annulée).
+ * L'impression est aussi tentée automatiquement une fois les images (logo,
+ * QR code...) réellement chargées, pour ne pas ajouter de clic
+ * supplémentaire dans le cas courant ; le bouton "Imprimer" reste
+ * disponible si l'utilisateur doit relancer la boîte de dialogue (par ex.
+ * après l'avoir annulée).
  */
 export function imprimerHtmlDansApp(html: string, titre = 'Aperçu avant impression'): void {
-  const { iframe, imprimer } = creerApercuVisible(titre);
+  const htmlAvecCouleurs = injecterCssImpressionCouleur(html);
+
+  const telecharger = () => {
+    const blob = new Blob([htmlAvecCouleurs], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${titre.replace(/[^\w\- ]+/g, '').trim() || 'document'}.html`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  };
+
+  const { iframe, imprimer } = creerApercuVisible(titre, undefined, telecharger);
   const doc = iframe.contentWindow?.document;
   if (!doc) return;
 
   doc.open();
-  doc.write(injecterCssImpressionCouleur(html));
+  doc.write(htmlAvecCouleurs);
   doc.close();
 
-  // On laisse le temps aux styles/images/QR codes de se charger avant
-  // de proposer l'impression automatiquement.
-  setTimeout(imprimer, 500);
+  attendreImages(doc).then(imprimer);
 }
 
 /**
@@ -192,24 +287,39 @@ export function imprimerHtmlDansApp(html: string, titre = 'Aperçu avant impress
  * `doc.output('blob')`) dans une fenêtre superposée à l'intérieur de
  * l'application — sans jamais ouvrir de nouvel onglet. Remplace l'ancien
  * pattern `window.open(url, '_blank')` + `win.print()`.
+ *
+ * `iframe.contentWindow.print()` sur une visionneuse PDF intégrée peut
+ * échouer silencieusement (voir note en tête de fichier) : le bouton
+ * "Télécharger", lui, fonctionne toujours et permet d'imprimer depuis la
+ * visionneuse PDF native de l'appareil si l'impression automatique ne se
+ * déclenche pas.
  */
 export function imprimerPdfDansApp(blob: Blob, titre = 'Aperçu avant impression'): void {
   const url = URL.createObjectURL(blob);
   const nettoyerUrl = () => URL.revokeObjectURL(url);
-  const { iframe, imprimer } = creerApercuVisible(titre, nettoyerUrl);
+  const telecharger = () => {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${titre.replace(/[^\w\- ]+/g, '').trim() || 'document'}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
+  const { iframe, imprimer } = creerApercuVisible(titre, nettoyerUrl, telecharger);
 
   let tente = false;
   const tenterImpression = () => {
     if (tente) return;
     tente = true;
-    setTimeout(imprimer, 500);
+    setTimeout(imprimer, 600);
   };
 
   iframe.onload = tenterImpression;
   iframe.src = url;
   // Filet de sécurité si l'événement `load` ne se déclenche pas comme
-  // attendu (certains navigateurs, gros PDF...).
-  setTimeout(tenterImpression, 1500);
+  // attendu (certains navigateurs, gros PDF, visionneuse interne lente...).
+  setTimeout(tenterImpression, 2000);
 }
 
 /**

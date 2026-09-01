@@ -144,8 +144,6 @@ export function EtatStockMagasinPage() {
         <title>État de Stock - ${getMagasinLabel(magasinId || '')}</title>
         <style>
           @page { margin: 0; size: A4; }
-          @media screen { body { visibility: hidden; } }
-          @media print { body { visibility: visible; } }
           body { font-family: Arial, sans-serif; padding: 20px; }
           h1 { text-align: center; color: #1976d2; margin-bottom: 10px; }
           .subtitle { text-align: center; color: #666; margin-bottom: 30px; }
