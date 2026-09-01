@@ -18,6 +18,7 @@ import {
   useFournisseurs,
 } from '../../../utils/venteLookups';
 import { ajouterReglement, chargerReglements, chargerTousLesReglements, readReglementsCacheMap, subscriberReglementsVente, ReglementSupabase } from '../../../services/reglementsService';
+import { imprimerHtmlDansApp, imprimerPdfDansApp } from '../../../utils/printInApp';
 import { ajouterVente, chargerVentes as chargerVentesSupabase, subscriberVentesMagasin, readVentesCache, supprimerVente, mettreAJourVente, VenteSupabase } from '../../../services/ventesService';
 import { enregistrerVente } from '../../../services/inventaireService';
 import { verifierStockVente, messageRuptures } from '../../../utils/stockVente';
@@ -282,11 +283,8 @@ async function telechargerFacturePDF(factureData: {
   doc.setTextColor(120);
   doc.text(`${e.adresse} Téléphone: ${e.telephone} Email: ${e.email}`, 105, 290, { align: 'center' });
 
-  doc.autoPrint();
   const blobFacture = doc.output('blob');
-  const urlFacture = URL.createObjectURL(blobFacture);
-  const winFacture = window.open(urlFacture, '_blank');
-  if (winFacture) winFacture.onload = () => { winFacture.print(); winFacture.onafterprint = () => winFacture.close(); };
+  imprimerPdfDansApp(blobFacture);
 }
 
 async function telechargerFactureExcel(factureData: {
@@ -567,11 +565,8 @@ async function telechargerFichePDF(vente: any, magasinId?: string) {
   doc.text('INDICATIONS SPÉCIALES:', 17, y + 9.5);
   doc.text(assurance ? assurance.toUpperCase() : '', 17, y + 16);
 
-  doc.autoPrint();
   const blobFiche = doc.output('blob');
-  const urlFiche = URL.createObjectURL(blobFiche);
-  const winFiche = window.open(urlFiche, '_blank');
-  if (winFiche) winFiche.onload = () => { winFiche.print(); winFiche.onafterprint = () => winFiche.close(); };
+  imprimerPdfDansApp(blobFiche);
 }
 
 async function telechargerDossierClientPDF(vente: any, magasinId?: string) {
@@ -740,11 +735,8 @@ async function telechargerDossierClientPDF(vente: any, magasinId?: string) {
   doc.setTextColor(80);
   doc.text(`${directionEntete.telephone} | ${directionEntete.email} | 8 Pool, R.point de la rivera Palmeraie`, 105, 286, { align: 'center' });
 
-  doc.autoPrint();
   const blobDossier = doc.output('blob');
-  const urlDossier = URL.createObjectURL(blobDossier);
-  const winDossier = window.open(urlDossier, '_blank');
-  if (winDossier) winDossier.onload = () => { winDossier.print(); winDossier.onafterprint = () => winDossier.close(); };
+  imprimerPdfDansApp(blobDossier);
 }
 
 async function telechargerReglementPDF(reglement: any, vente: any, magasinId?: string) {
@@ -915,11 +907,8 @@ async function telechargerReglementPDF(reglement: any, vente: any, magasinId?: s
   doc.setTextColor(60);
   doc.text(`${e.adresse}  Téléphone: ${e.telephone}  Email: ${e.email}`, 105, 291, { align: 'center' });
 
-  doc.autoPrint();
   const blobReg = doc.output('blob');
-  const urlReg = URL.createObjectURL(blobReg);
-  const winReg = window.open(urlReg, '_blank');
-  if (winReg) winReg.onload = () => { winReg.print(); winReg.onafterprint = () => winReg.close(); };
+  imprimerPdfDansApp(blobReg);
 }
 
 // ── BON DE BONNE EXÉCUTION – LUNETTES ───────────────────────────────────────
@@ -1031,11 +1020,8 @@ async function telechargerBonExecutionPDF(vente: any, magasinId?: string) {
   doc.setTextColor(80);
   doc.text(`${e.telephone} | ${e.email} | ${e.adresse}`, 105, 287, { align: 'center' });
 
-  doc.autoPrint();
   const blobBon = doc.output('blob');
-  const urlBon = URL.createObjectURL(blobBon);
-  const winBon = window.open(urlBon, '_blank');
-  if (winBon) winBon.onload = () => { winBon.print(); winBon.onafterprint = () => winBon.close(); };
+  imprimerPdfDansApp(blobBon);
 }
 
 function imprimerReglement(reglement: any, vente: any, magasinId?: string) {
@@ -1183,10 +1169,7 @@ function imprimerReglement(reglement: any, vente: any, magasinId?: string) {
 </body>
 </html>`;
 
-  const win = window.open('', '_blank', 'width=900,height=800');
-  if (!win) return;
-  win.document.write(html);
-  win.document.close();
+  imprimerHtmlDansApp(html);
 }
 
 // ── Auto-ID generators ───────────────────────────────────────────────────────
@@ -2527,10 +2510,7 @@ function imprimerFacture(f: FactureData, magasinId?: string) {
 </body>
 </html>`;
 
-  const win = window.open('', '_blank', 'width=900,height=700');
-  if (!win) return;
-  win.document.write(html);
-  win.document.close();
+  imprimerHtmlDansApp(html);
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -3220,9 +3200,9 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
   // La commande de verre est réservée aux opticiens, directeurs, comptables et
   // administrateurs — masquée pour les conseillères (et autres rôles).
   const peutCommanderVerre = ['super_admin', 'admin', 'administrateur', 'directeur', 'comptable', 'opticien'].includes(user?.role || '');
-  // Le règlement (encaissement) dans le détail de vente est réservé aux opticiens,
-  // directeurs, comptables et administrateurs — la conseillère n'y a PAS accès.
-  const peutReglement = ['super_admin', 'admin', 'administrateur', 'directeur', 'comptable', 'opticien'].includes(user?.role || '');
+  // Le règlement (encaissement) dans le détail de vente est accessible aux opticiens,
+  // directeurs, comptables, administrateurs et conseillères.
+  const peutReglement = ['super_admin', 'admin', 'administrateur', 'directeur', 'comptable', 'opticien', 'conseillere'].includes(user?.role || '');
   const { magasinId = '' } = useParams<{ magasinId: string }>();
   const [searchFacture, setSearchFacture] = useState('');
   const [searchClient, setSearchClient] = useState('');

@@ -23,6 +23,7 @@ import PrintIcon from '@mui/icons-material/Print';
 import DownloadIcon from '@mui/icons-material/Download';
 import { recalculerStockMagasin, readStockCache, type StockMagasin } from '../../../services/inventaireService';
 import { excelHeaderRows, printHeaderHTML } from '../../../utils/documentHeader';
+import { imprimerHtmlDansApp } from '../../../utils/printInApp';
 
 interface ProduitStock {
   id: string;
@@ -136,9 +137,6 @@ export function EtatStockMagasinPage() {
   const valeurStock = filteredMontures.reduce((sum, m) => sum + (m.prix * m.stock), 0);
 
   const handlePrint = () => {
-    const printWindow = window.open('', '', 'height=800,width=1000');
-    if (!printWindow) return;
-
     const printContent = `
       <!DOCTYPE html>
       <html>
@@ -233,18 +231,11 @@ export function EtatStockMagasinPage() {
         <div class="footer">
           Document généré le ${new Date().toLocaleString('fr-FR')} - OPTICLAIRE
         </div>
-        <script>
-          window.addEventListener('load', function() {
-            window.print();
-            window.onafterprint = function() { window.close(); };
-          });
-        </script>
       </body>
       </html>
     `;
 
-    printWindow.document.write(printContent);
-    printWindow.document.close();
+    imprimerHtmlDansApp(printContent);
   };
 
   const handleExportExcel = async () => {

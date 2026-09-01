@@ -10,6 +10,7 @@ import { printHeaderHTML } from '../../utils/documentHeader';
 import { ImportCatalogueCsvDialog } from '../../components/ImportCatalogueCsvDialog';
 import { MODELE_VERRES } from '../../utils/catalogueCsv';
 import { TENANT } from '../../config/tenant';
+import { imprimerHtmlDansApp } from '../../utils/printInApp';
 
 function ComboBox({ value, onChange, options, placeholder }: {
   value: string;
@@ -312,8 +313,7 @@ function printCatalogueVerres(verres: Verre[]) {
     <table><thead><tr><th>#</th><th>Fournisseur</th><th>Type Verre</th><th>Verre</th><th>Traitement</th><th>Matière</th><th>Diamètre</th><th>Prix / Verre</th></tr></thead>
     <tbody>${verres.map((v, i) => `<tr><td>${i + 1}</td><td>${v.fournisseur}</td><td>${v.typeVerre}</td><td>${v.verre}</td><td>${v.traitement}</td><td>${v.matiere}</td><td>${v.diametre}</td><td>${v.prixVerre.toLocaleString('fr-FR')} F CFA</td></tr>`).join('')}
     </tbody></table></body></html>`;
-  const w = window.open('', '_blank');
-  if (w) { w.document.write(html); w.document.close(); w.print(); }
+  imprimerHtmlDansApp(html);
 }
 
 export function VerrePage() {

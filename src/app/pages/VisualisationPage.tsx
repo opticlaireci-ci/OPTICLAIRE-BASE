@@ -14,6 +14,7 @@ import { loadStocksParMagasin, type StockMagasin } from '../services/inventaireS
 import { getAllMagasinIds } from '../constants/magasins';
 import { pdfHeader, excelHeaderRows } from '../utils/documentHeader';
 import { TENANT } from '../config/tenant';
+import { imprimerPdfDansApp } from '../utils/printInApp';
 
 type ReportType =
   | 'bons-monture' | 'bons-verre' | 'stock' | 'inventaires'
@@ -403,11 +404,8 @@ export function VisualisationPage() {
       doc.setFontSize(11);
       doc.text(view.footer, 14, y + 8);
     }
-    doc.autoPrint();
     const blobViz = doc.output('blob');
-    const urlViz = URL.createObjectURL(blobViz);
-    const winViz = window.open(urlViz, '_blank');
-    if (winViz) winViz.onload = () => { winViz.print(); winViz.onafterprint = () => winViz.close(); };
+    imprimerPdfDansApp(blobViz);
   };
 
   const exporterExcel = async () => {

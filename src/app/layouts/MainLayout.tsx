@@ -76,6 +76,7 @@ import { SyncIndicator } from '../components/SyncIndicator';
 import { getMagasins } from '../constants/magasins';
 import { pathToButtonKey } from '../constants/appButtons';
 import { TENANT } from '../config/tenant';
+import { imprimerHtmlDansApp } from '../utils/printInApp';
 
 const drawerWidth = 280;
 
@@ -778,9 +779,6 @@ function NavigationMenu() {
         });
       });
 
-      const printWindow = window.open('', '_blank');
-      if (!printWindow) return;
-
       const content = `
         <!DOCTYPE html>
         <html>
@@ -827,19 +825,10 @@ function NavigationMenu() {
                 </tr>
               </tbody>
             </table>
-            <script>
-              window.onload = function() {
-                window.print();
-                window.onafterprint = function() {
-                  window.close();
-                };
-              };
-            </script>
           </body>
         </html>
       `;
-      printWindow.document.write(content);
-      printWindow.document.close();
+      imprimerHtmlDansApp(content);
     };
 
     const handleExportMonturesExcel = () => {
@@ -895,9 +884,6 @@ function NavigationMenu() {
         });
       });
 
-      const printWindow = window.open('', '_blank');
-      if (!printWindow) return;
-
       const content = `
         <!DOCTYPE html>
         <html>
@@ -944,19 +930,10 @@ function NavigationMenu() {
                 </tr>
               </tbody>
             </table>
-            <script>
-              window.onload = function() {
-                window.print();
-                window.onafterprint = function() {
-                  window.close();
-                };
-              };
-            </script>
           </body>
         </html>
       `;
-      printWindow.document.write(content);
-      printWindow.document.close();
+      imprimerHtmlDansApp(content);
     };
 
     const handleExportAccessoiresExcel = () => {

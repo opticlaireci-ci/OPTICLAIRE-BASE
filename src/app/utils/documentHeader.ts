@@ -142,7 +142,7 @@ export function excelHeaderRows(magasinId?: string, opts?: { date?: string }): a
   ];
 }
 
-// ── En-tête HTML (impression / window.open) ──────────────────────────────────
+// ── En-tête HTML (impression dans l'application, via iframe caché) ───────────
 /**
  * Bloc HTML d'en-tête au style du reçu de l'enseigne : nom en gros gras noir +
  * coordonnées à GAUCHE, logo à DROITE, filet noir en dessous.
