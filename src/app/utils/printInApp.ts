@@ -40,11 +40,11 @@ function retirerIframe(iframe: HTMLIFrameElement) {
  * ouvrir de nouvel onglet. Remplace l'ancien pattern
  * `window.open(...).document.write(html)`.
  *
- * Certains contenus intègrent déjà leur propre `<script>` qui appelle
- * `window.print()` au chargement (pattern historique de l'app) : dans ce
- * cas on laisse ce script gérer l'impression (il s'exécutera dans l'iframe)
- * et on se contente de nettoyer l'iframe ensuite. Sinon, on déclenche
- * nous-mêmes l'impression.
+ * L'impression est toujours déclenchée explicitement par cette fonction
+ * (après un court délai pour laisser le temps au contenu — styles, images,
+ * QR codes — de se charger), plutôt que de dépendre d'un éventuel script
+ * interne au HTML ou de l'événement `load` de l'iframe, dont le déclenchement
+ * n'est pas garanti de façon fiable dans un iframe selon les navigateurs.
  */
 export function imprimerHtmlDansApp(html: string): void {
   const iframe = creerIframeHorsEcran();
@@ -54,8 +54,6 @@ export function imprimerHtmlDansApp(html: string): void {
     retirerIframe(iframe);
     return;
   }
-
-  const contientImpressionAutonome = /window\.print\s*\(/.test(html);
 
   doc.open();
   doc.write(html);
@@ -78,19 +76,15 @@ export function imprimerHtmlDansApp(html: string): void {
     }
   };
 
-  // Si le HTML ne déclenche pas déjà son impression, on s'en charge nous-mêmes,
-  // en laissant le temps aux styles/images/QR codes de se charger.
-  if (!contientImpressionAutonome) {
-    setTimeout(lancerImpression, 500);
-  }
+  // On laisse le temps aux styles/images/QR codes de se charger avant d'imprimer.
+  setTimeout(lancerImpression, 500);
 
   try {
     win.onafterprint = () => nettoyer();
   } catch {
     // ignoré
   }
-  // Filet de sécurité si `onafterprint` ne se déclenche pas (ex: Safari,
-  // ou si le script interne appelle window.close() qui est sans effet ici).
+  // Filet de sécurité si `onafterprint` ne se déclenche pas (ex: Safari).
   setTimeout(nettoyer, 30000);
 }
 

@@ -1094,12 +1094,6 @@ function imprimerReglement(reglement: any, vente: any, magasinId?: string) {
     @media print  { body { visibility:visible; } }
     table { border-collapse:collapse; }
   </style>
-  <script>
-    window.addEventListener('load', function() {
-      window.print();
-      window.onafterprint = function() { window.close(); };
-    });
-  </script>
 </head>
 <body>
   ${printHeaderHTML(magasinId || '', { date: dateReg })}
@@ -2434,12 +2428,6 @@ function imprimerFacture(f: FactureData, magasinId?: string) {
     .totaux-row.reste { font-size: 14px; font-weight: 700; color: ${reste > 0 ? '#c62828' : '#2e7d32'}; }
     .signature-box { border: 1px dashed #ccc; width: 180px; height: 60px; display: flex; align-items: center; justify-content: center; color: #bbb; font-size: 11px; border-radius: 4px; }
   </style>
-  <script>
-    window.addEventListener('load', function() {
-      window.print();
-      window.onafterprint = function() { window.close(); };
-    });
-  </script>
 </head>
 <body>
   ${printHeaderHTML(magasinId || '', { date: f.date })}
