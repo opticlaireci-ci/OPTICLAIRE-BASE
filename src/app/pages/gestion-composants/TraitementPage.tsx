@@ -4,6 +4,7 @@ import { addCreateAudit, addUpdateAudit, formatDate, AuditInfo } from '../../uti
 import { syncCatalogueToMagasins, removeCatalogueFromMagasins } from '../../utils/syncCataloguesToMagasins';
 import { useLiveData } from '../../hooks/useLiveData';
 import { printHeaderHTML } from '../../utils/documentHeader';
+import { afficherHtml } from '../../utils/inAppViewer';
 import { ImportCatalogueCsvDialog } from '../../components/ImportCatalogueCsvDialog';
 import { MODELE_TRAITEMENTS } from '../../utils/catalogueCsv';
 import { TENANT } from '../../config/tenant';
@@ -67,8 +68,11 @@ function printCatalogueTraitements(traitements: Traitement[]) {
     <table><thead><tr><th>#</th><th>Traitement</th><th>Prix / Verre</th></tr></thead>
     <tbody>${traitements.map((t, i) => `<tr><td>${i + 1}</td><td>${t.designation}</td><td>${t.prix.toLocaleString('fr-FR')} F CFA</td></tr>`).join('')}
     </tbody></table></body></html>`;
-  const w = window.open('', '_blank');
-  if (w) { w.document.write(html); w.document.close(); w.print(); }
+  // Impression intégrée (attend le chargement complet, y compris le logo,
+  // avant d'ouvrir la boîte d'impression — au lieu d'un window.open() +
+  // print() immédiat qui pouvait imprimer une page vide sur certains
+  // navigateurs).
+  afficherHtml(html, { titre: 'Catalogue Traitements' });
 }
 
 export function TraitementPage() {
