@@ -109,10 +109,97 @@ function creerApercu(
   assign(iframe);
 }
 
-/** Affiche un PDF dans l'aperçu intégré à l'application. */
-export function afficherPdfBlob(blob: Blob, opts: ViewerOptions = {}): void {
+/** Affiche un PDF dans un véritable aperçu intégré à l'application.
+ *
+ * Le PDF est rendu page par page avec pdfjs-dist dans la modale. Cela évite de
+ * dépendre du lecteur PDF interne de Chrome/Edge, qui peut être vide ou
+ * différent selon le navigateur. Le bouton « Imprimer » imprime toujours le
+ * PDF original, sans perte d'information.
+ */
+export async function afficherPdfBlob(blob: Blob, opts: ViewerOptions = {}): Promise<void> {
   const url = URL.createObjectURL(blob);
-  creerApercu((iframe) => { iframe.src = url; }, opts, url);
+  fermerApercu();
+
+  const overlay = document.createElement('div');
+  overlay.style.cssText = [
+    'position:fixed','inset:0','z-index:2147483647','background:rgba(15,23,42,.72)',
+    'display:flex','flex-direction:column','font-family:Arial,sans-serif'
+  ].join(';');
+
+  const toolbar = document.createElement('div');
+  toolbar.style.cssText = 'height:58px;min-height:58px;background:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 16px;box-sizing:border-box;box-shadow:0 1px 8px rgba(0,0,0,.2);';
+
+  const title = document.createElement('div');
+  title.textContent = opts.titre || 'Aperçu PDF avant impression';
+  title.style.cssText = 'font-size:16px;font-weight:600;color:#111827;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-right:16px;';
+
+  const actions = document.createElement('div');
+  actions.style.cssText = 'display:flex;gap:8px;align-items:center;flex-shrink:0;';
+  const makeButton = (label: string, primary = false) => {
+    const b = document.createElement('button'); b.type='button'; b.textContent=label;
+    b.style.cssText = primary
+      ? 'border:0;border-radius:7px;padding:9px 15px;background:#2563eb;color:#fff;font-weight:600;cursor:pointer;'
+      : 'border:1px solid #d1d5db;border-radius:7px;padding:9px 15px;background:#fff;color:#374151;font-weight:600;cursor:pointer;';
+    return b;
+  };
+  const fermer = makeButton('Fermer');
+  const imprimer = makeButton('Imprimer', true);
+  actions.append(fermer, imprimer); toolbar.append(title, actions);
+
+  const zone = document.createElement('div');
+  zone.style.cssText = 'flex:1;min-height:0;overflow:auto;padding:20px;box-sizing:border-box;background:#e5e7eb;';
+  const pages = document.createElement('div');
+  pages.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:20px;min-height:100%;';
+  zone.appendChild(pages); overlay.append(toolbar, zone); document.body.appendChild(overlay); activeOverlay=overlay;
+
+  const cleanup = () => { try { URL.revokeObjectURL(url); } catch {} };
+  const close = () => { cleanup(); if (activeOverlay===overlay) { overlay.remove(); activeOverlay=null; } };
+  fermer.onclick=close;
+  overlay.addEventListener('click', e => { if(e.target===overlay) close(); });
+
+  // Impression du PDF original via un iframe caché : aucune nouvelle fenêtre.
+  imprimer.onclick = () => {
+    const frame=document.createElement('iframe');
+    frame.style.cssText='position:fixed;width:1px;height:1px;right:0;bottom:0;border:0;opacity:0;';
+    frame.src=url; document.body.appendChild(frame);
+    frame.onload=()=>setTimeout(()=>{ try { frame.contentWindow?.focus(); frame.contentWindow?.print(); } finally { setTimeout(()=>frame.remove(),1500); } },300);
+  };
+
+  const onKey=(e:KeyboardEvent)=>{ if(e.key==='Escape' && activeOverlay===overlay){ document.removeEventListener('keydown',onKey); close(); } };
+  document.addEventListener('keydown',onKey);
+
+  try {
+    // pdfjs-dist est déjà présent dans le projet. Le worker est désactivé pour
+    // rendre le composant fiable avec Vite et éviter toute URL de worker externe.
+    const pdfjs = await import('pdfjs-dist');
+    const data = new Uint8Array(await blob.arrayBuffer());
+    const pdf = await pdfjs.getDocument({ data, disableWorker: true }).promise;
+
+    const info = document.createElement('div');
+    info.textContent = `${pdf.numPages} page${pdf.numPages > 1 ? 's' : ''} — aperçu complet`;
+    info.style.cssText='width:min(900px,100%);font-size:13px;color:#4b5563;text-align:center;';
+    pages.appendChild(info);
+
+    for (let pageNo=1; pageNo<=pdf.numPages; pageNo++) {
+      const page=await pdf.getPage(pageNo);
+      const base=page.getViewport({scale:1});
+      const maxWidth=Math.min(900, Math.max(320, zone.clientWidth-40));
+      const scale=maxWidth/base.width;
+      const viewport=page.getViewport({scale});
+      const canvas=document.createElement('canvas');
+      canvas.width=Math.ceil(viewport.width); canvas.height=Math.ceil(viewport.height);
+      canvas.style.cssText='display:block;background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.22);max-width:100%;height:auto;';
+      pages.appendChild(canvas);
+      await page.render({canvas, viewport}).promise;
+    }
+  } catch (e) {
+    console.error('Aperçu PDF impossible:', e);
+    pages.innerHTML='';
+    const msg=document.createElement('div');
+    msg.style.cssText='margin:auto;padding:24px;background:#fff;border-radius:10px;color:#b91c1c;font-weight:600;';
+    msg.textContent='Impossible d’afficher l’aperçu PDF. Vous pouvez néanmoins cliquer sur « Imprimer ».';
+    pages.appendChild(msg);
+  }
 }
 
 /** Affiche un document HTML dans l'aperçu intégré à l'application. */

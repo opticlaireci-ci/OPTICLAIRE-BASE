@@ -526,12 +526,9 @@ export function VisualisationPage() {
       doc.setFontSize(11);
       doc.text(view.footer, marginX, y + 8);
     }
-    // `autoPrint` intègre au PDF une action d'ouverture de la boîte d'impression :
-    // renforce l'impression automatique une fois le PDF rendu dans l'iframe.
-    try { (doc as any).autoPrint(); } catch { /* certaines versions n'exposent pas autoPrint */ }
-    // Impression DIRECTE dans l'application (pas de page/onglet externe, pas
-    // d'aperçu intermédiaire) : la boîte d'impression s'ouvre immédiatement.
-    afficherPdfBlob(doc.output('blob'), { titre: view.title });
+    // Afficher d'abord toutes les pages du PDF dans l'aperçu intégré.
+    // L'utilisateur clique ensuite sur « Imprimer » quand il a vérifié le document.
+    await afficherPdfBlob(doc.output('blob'), { titre: view.title });
   };
 
   const exporterExcel = async () => {
