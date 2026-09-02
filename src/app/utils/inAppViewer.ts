@@ -117,7 +117,8 @@ function creerApercu(
  * PDF original, sans perte d'information.
  */
 export async function afficherPdfBlob(blob: Blob, opts: ViewerOptions = {}): Promise<void> {
-  const url = URL.createObjectURL(blob);
+  const safeBlob = blob.type === 'application/pdf' ? blob : new Blob([blob], { type: 'application/pdf' });
+  const url = URL.createObjectURL(safeBlob);
   fermerApercu();
 
   const overlay = document.createElement('div');
@@ -187,10 +188,12 @@ export async function afficherPdfBlob(blob: Blob, opts: ViewerOptions = {}): Pro
       const scale=maxWidth/base.width;
       const viewport=page.getViewport({scale});
       const canvas=document.createElement('canvas');
+      const context = canvas.getContext('2d', { alpha: false });
+      if (!context) throw new Error('Canvas 2D indisponible dans ce navigateur');
       canvas.width=Math.ceil(viewport.width); canvas.height=Math.ceil(viewport.height);
       canvas.style.cssText='display:block;background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.22);max-width:100%;height:auto;';
       pages.appendChild(canvas);
-      await page.render({ canvasContext: canvas.getContext('2d')!, viewport }).promise;
+      await page.render({ canvasContext: context, viewport }).promise;
     }
   } catch (e) {
     // Fallback de dernier recours : on n'affiche JAMAIS le message d'erreur PDF.
@@ -206,6 +209,12 @@ export async function afficherPdfBlob(blob: Blob, opts: ViewerOptions = {}): Pro
     fallback.style.cssText = 'width:min(900px,100%);height:calc(100vh - 110px);min-height:500px;border:0;background:#fff;border-radius:6px;box-shadow:0 2px 16px rgba(0,0,0,.25);';
     pages.style.cssText = 'display:flex;justify-content:center;align-items:flex-start;gap:0;min-height:100%;';
     pages.appendChild(fallback);
+    fallback.addEventListener('error', () => {
+      const msg = document.createElement('div');
+      msg.style.cssText = 'padding:24px;background:#fff;border-radius:8px;color:#374151;max-width:700px;text-align:center;font-family:Arial,sans-serif;';
+      msg.innerHTML = '<strong>Aperçu PDF indisponible dans ce navigateur.</strong><br><br>Utilisez le bouton Imprimer pour ouvrir le document PDF avec le lecteur système.';
+      fallback.replaceWith(msg);
+    });
   }
 }
 
