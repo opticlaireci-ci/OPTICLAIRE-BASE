@@ -4977,10 +4977,10 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
               (v.verres?.reduce((s: number, vr: any) => s + (parseFloat(vr.totalVerres) || 0), 0) || 0);
             const rowBgColor = reste > 0 ? '#fee2e2' : '#dcfce7';
             const actions = (
-              <div className="flex items-center gap-0.5">
-                <button onClick={() => setDetail(v)} title="Voir / Détails" aria-label="Voir / Détails" className="flex items-center justify-center rounded border border-gray-300 bg-white text-gray-600 hover:bg-gray-100" style={{ width: 25, height: 25 }}><MoreHorizontal size={13} /></button>
-                {peutModifier && onModifier && <button onClick={() => onModifier(v)} title="Modifier" aria-label="Modifier" className="flex items-center justify-center rounded text-white" style={{ width: 25, height: 25, backgroundColor: '#f59e0b' }}><Pencil size={12} /></button>}
-                {peutSupprimer && onSupprimer && <button onClick={() => onSupprimer(v)} title="Supprimer" aria-label="Supprimer" className="flex items-center justify-center rounded text-white" style={{ width: 25, height: 25, backgroundColor: '#dc2626' }}><Trash2 size={12} /></button>}
+              <div className="flex flex-col items-center justify-center gap-1">
+                <button onClick={() => setDetail(v)} title="Voir / Détails" aria-label="Voir / Détails" className="flex items-center justify-center rounded border border-gray-300 bg-white text-gray-600 hover:bg-gray-100" style={{ width: 21, height: 21 }}><MoreHorizontal size={11} /></button>
+                {peutModifier && onModifier && <button onClick={() => onModifier(v)} title="Modifier" aria-label="Modifier" className="flex items-center justify-center rounded text-white" style={{ width: 21, height: 21, backgroundColor: '#f59e0b' }}><Pencil size={10} /></button>}
+                {peutSupprimer && onSupprimer && <button onClick={() => onSupprimer(v)} title="Supprimer" aria-label="Supprimer" className="flex items-center justify-center rounded text-white" style={{ width: 21, height: 21, backgroundColor: '#dc2626' }}><Trash2 size={10} /></button>}
               </div>
             );
             return { v, i, acompte, totalAssurance, totalReglements, reste, remisePct, totalBrut, rowBgColor, actions };
