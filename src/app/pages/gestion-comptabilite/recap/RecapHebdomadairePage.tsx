@@ -6,7 +6,7 @@ import { useLiveData } from '../../../hooks/useLiveData';
 import { useAuth } from '../../../contexts/AuthContext';
 import { addCreateAudit, addUpdateAudit, AuditInfo } from '../../../utils/auditUtils';
 import { TENANT } from '../../../config/tenant';
-import { imprimerPageCourante } from '../../../utils/inAppViewer';
+import { afficherPdfBlob, imprimerPageCourante } from '../../../utils/inAppViewer';
 
 // Jours de la semaine (lundi → dimanche) tels qu'affichés dans le tableau.
 const JOURS = ['LUNDI', 'MARDI', 'MERCREDI', 'JEUDI', 'VENDREDI', 'SAMEDI', 'DIMANCHE'] as const;
@@ -321,7 +321,8 @@ export function RecapHebdomadairePage() {
       startY = (doc as any).lastAutoTable.finalY + 6;
       if (startY > 260) { doc.addPage(); startY = 15; }
     });
-    doc.save(`Recap_Hebdomadaire_${semaine}.pdf`);
+    const pdfBlob = doc.output('blob');
+    await afficherPdfBlob(pdfBlob, { titre: `Récapitulatif hebdomadaire — ${semaine}`, nomFichier: `Recap_Hebdomadaire_${semaine}.pdf` });
   };
 
   return (

@@ -7,6 +7,7 @@ import { AtelierMontageTab } from './AtelierMontageTab';
 import type { SubTab } from './AtelierMontageTab';
 import { TENANT } from '../config/tenant';
 
+import { afficherPdfBlob } from '../utils/inAppViewer';
 type TabType = 'bon-verre' | 'fournisseur' | 'montage';
 
 interface BonCommande {
@@ -274,7 +275,8 @@ export function AtelierPage() {
       ['Date récupération', formatDate(b.dateRecuperation)],
     ];
     lignes.forEach(([k, v]) => { doc.text(`${k} : ${v}`, 14, y); y += 7; });
-    doc.save(`bon-commande-${b.numBC || b.numRef || b.id}.pdf`);
+    const pdfBlob = doc.output('blob');
+    await afficherPdfBlob(pdfBlob, { titre: `Bon de commande ${b.numBC || b.numRef || b.id}`, nomFichier: `bon-commande-${b.numBC || b.numRef || b.id}.pdf` });
   };
 
   const th: React.CSSProperties = { padding: '10px 8px', textAlign: 'left', fontWeight: 700, color: '#2c3e50', fontSize: '13px', whiteSpace: 'nowrap' };

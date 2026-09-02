@@ -190,15 +190,22 @@ export async function afficherPdfBlob(blob: Blob, opts: ViewerOptions = {}): Pro
       canvas.width=Math.ceil(viewport.width); canvas.height=Math.ceil(viewport.height);
       canvas.style.cssText='display:block;background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.22);max-width:100%;height:auto;';
       pages.appendChild(canvas);
-      await page.render({canvas, viewport}).promise;
+      await page.render({ canvasContext: canvas.getContext('2d')!, viewport }).promise;
     }
   } catch (e) {
-    console.error('Aperçu PDF impossible:', e);
-    pages.innerHTML='';
-    const msg=document.createElement('div');
-    msg.style.cssText='margin:auto;padding:24px;background:#fff;border-radius:10px;color:#b91c1c;font-weight:600;';
-    msg.textContent='Impossible d’afficher l’aperçu PDF. Vous pouvez néanmoins cliquer sur « Imprimer ».';
-    pages.appendChild(msg);
+    // Fallback de dernier recours : on n'affiche JAMAIS le message d'erreur PDF.
+    // Certains navigateurs/extensions peuvent empêcher PDF.js de charger ou de
+    // rasteriser un PDF (PDF très lourd, API canvas indisponible, etc.). Dans ce
+    // cas, le lecteur PDF natif du navigateur prend automatiquement le relais
+    // dans la même modale, sans nouvel onglet.
+    console.error('PDF.js preview failed, fallback to native PDF viewer:', e);
+    pages.innerHTML = '';
+    const fallback = document.createElement('iframe');
+    fallback.title = opts.titre || 'Aperçu PDF';
+    fallback.src = url;
+    fallback.style.cssText = 'width:min(900px,100%);height:calc(100vh - 110px);min-height:500px;border:0;background:#fff;border-radius:6px;box-shadow:0 2px 16px rgba(0,0,0,.25);';
+    pages.style.cssText = 'display:flex;justify-content:center;align-items:flex-start;gap:0;min-height:100%;';
+    pages.appendChild(fallback);
   }
 }
 
