@@ -117,55 +117,100 @@ function creerApercu(
  * PDF original, sans perte d'information.
  */
 export async function afficherPdfBlob(blob: Blob, opts: ViewerOptions = {}): Promise<void> {
-  // Comportement volontairement direct : un clic sur « PDF » ou « Imprimer »
-  // doit conduire immédiatement à l'impression, sans passer par une page
-  // d'aperçu/visionnage intermédiaire.
+  // IMPORTANT : ne pas confier l'impression au lecteur PDF natif de Chrome/Edge.
+  // Un PDF chargé dans un iframe invisible (1x1 px) peut être affiché par le
+  // plugin PDF interne sans que frame.contentWindow.print() n'ouvre la boîte
+  // d'impression. On rend donc les pages nous-mêmes avec pdf.js, puis on imprime
+  // un document HTML classique : window.print() est beaucoup plus fiable.
   const safeBlob = blob.type === 'application/pdf'
     ? blob
     : new Blob([blob], { type: 'application/pdf' });
-  const url = URL.createObjectURL(safeBlob);
+
+  const frame = document.createElement('iframe');
+  frame.title = opts.titre || 'Document à imprimer';
+  frame.setAttribute('aria-hidden', 'true');
+  frame.style.cssText = [
+    'position:fixed', 'left:-100000px', 'top:0',
+    'width:794px', 'height:1123px', 'border:0',
+    'opacity:0', 'pointer-events:none', 'background:#fff'
+  ].join(';');
+  document.body.appendChild(frame);
+
+  const cleanup = () => {
+    setTimeout(() => {
+      try { frame.remove(); } catch { /* ignore */ }
+    }, 1500);
+  };
 
   try {
-    const frame = document.createElement('iframe');
-    frame.title = opts.titre || 'Document à imprimer';
-    frame.setAttribute('aria-hidden', 'true');
-    frame.style.cssText = [
-      'position:fixed', 'left:-10000px', 'top:0',
-      'width:1px', 'height:1px', 'border:0',
-      'opacity:0', 'pointer-events:none'
-    ].join(';');
-    document.body.appendChild(frame);
+    const win = frame.contentWindow;
+    const doc = frame.contentDocument;
+    if (!win || !doc) throw new Error('Fenêtre d’impression indisponible');
 
-    let printed = false;
-    const print = () => {
-      if (printed) return;
-      printed = true;
-      try {
-        frame.contentWindow?.focus();
-        frame.contentWindow?.print();
-      } catch (e) {
-        console.error('Impression PDF impossible:', e);
-      } finally {
-        // Laisser au navigateur le temps d'ouvrir sa page/dialogue
-        // d'impression avant de nettoyer l'iframe et l'ObjectURL.
-        setTimeout(() => {
-          try { frame.remove(); } catch { /* ignore */ }
-          try { URL.revokeObjectURL(url); } catch { /* ignore */ }
-        }, 5000);
-      }
+    doc.open();
+    doc.write(`<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>${(opts.titre || 'Document').replace(/[<>&"]/g, '')}</title>
+  <style>
+    @page { margin: 0; }
+    html, body { margin: 0; padding: 0; background: #fff; }
+    .pdf-page { display: block; width: 100%; break-after: page; page-break-after: always; }
+    .pdf-page:last-child { break-after: auto; page-break-after: auto; }
+    canvas { display: block; width: 100%; height: auto; }
+  </style>
+</head>
+<body></body>
+</html>`);
+    doc.close();
+
+    const pdfjsLib = await import('pdfjs-dist');
+    const workerUrl = (await import('pdfjs-dist/build/pdf.worker.min.mjs?url')).default;
+    pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
+
+    const bytes = new Uint8Array(await safeBlob.arrayBuffer());
+    const pdf = await pdfjsLib.getDocument({ data: bytes }).promise;
+
+    // 144 dpi environ : assez net à l'impression sans exploser la mémoire.
+    const renderScale = 2;
+    for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
+      const page = await pdf.getPage(pageNumber);
+      const viewport = page.getViewport({ scale: renderScale });
+
+      const holder = doc.createElement('div');
+      holder.className = 'pdf-page';
+      const canvas = doc.createElement('canvas');
+      canvas.width = Math.ceil(viewport.width);
+      canvas.height = Math.ceil(viewport.height);
+      holder.appendChild(canvas);
+      doc.body.appendChild(holder);
+
+      const context = canvas.getContext('2d', { alpha: false });
+      if (!context) throw new Error('Canvas d’impression indisponible');
+      await page.render({ canvas, canvasContext: context, viewport }).promise;
+    }
+
+    // Laisser le navigateur terminer le layout des canvas avant print().
+    await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+
+    let cleaned = false;
+    const afterPrint = () => {
+      if (cleaned) return;
+      cleaned = true;
+      win.removeEventListener('afterprint', afterPrint);
+      cleanup();
     };
+    win.addEventListener('afterprint', afterPrint);
 
-    frame.onload = () => setTimeout(print, 350);
-    frame.src = url;
+    win.focus();
+    win.print();
 
-    // Filet de sécurité pour certains lecteurs PDF qui ne déclenchent pas
-    // correctement l'événement load.
-    setTimeout(() => {
-      if (!printed) print();
-    }, 1800);
+    // Secours si afterprint n'est pas émis par le navigateur.
+    setTimeout(afterPrint, 60000);
   } catch (e) {
-    try { URL.revokeObjectURL(url); } catch { /* ignore */ }
-    console.error('Création de l'impression PDF impossible:', e);
+    console.error('Impression PDF impossible:', e);
+    cleanup();
   }
 }
 
