@@ -682,9 +682,7 @@ export function MagasinLayout() {
           p: { xs: 1, sm: 2, md: 3 },
           width: '100%',
           maxWidth: '100vw',
-          // Sur mobile : le contenu large défile horizontalement au lieu d'être
-          // coupé ; sur desktop on masque le débordement comme avant.
-          overflowX: 'auto',
+          overflowX: 'hidden',
         }}
       >
         <Toolbar sx={{ minHeight: { xs: 40, md: 40 } }} />

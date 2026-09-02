@@ -136,3 +136,102 @@ img, svg { max-width: 100%; height: auto; }
   table { display: table !important; white-space: normal !important; }
   * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   DESKTOP RESPONSIVE — adaptation automatique à la largeur de l'écran
+   Objectif : afficher le contenu dans la largeur disponible sans barre de
+   défilement horizontale sur les écrans desktop (petits comme larges).
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+html, body, #root {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden !important;
+}
+
+/* Tous les conteneurs flex/grid doivent pouvoir rétrécir. */
+main, main > *, .page-transition, .page-transition > *,
+.MuiBox-root, .MuiPaper-root, .MuiCard-root {
+  max-width: 100%;
+}
+
+/* Desktop : les tableaux s'adaptent à la largeur disponible et le texte
+   revient à la ligne au lieu de provoquer un défilement horizontal. */
+@media (min-width: 768px) {
+  .overflow-x-auto {
+    overflow-x: hidden !important;
+    max-width: 100%;
+  }
+  .overflow-x-auto table,
+  table {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    table-layout: fixed;
+  }
+  th, td,
+  .MuiTableCell-root {
+    min-width: 0 !important;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+}
+
+/* Les groupes flex sont autorisés à revenir à la ligne lorsque l'écran est
+   trop étroit. Les barres de navigation restent compactes. */
+.page-transition .flex:not(.flex-nowrap),
+.page-transition [style*="display: flex"]:not([style*="position: fixed"]) {
+  min-width: 0;
+}
+
+@media (min-width: 1024px) and (max-width: 1279px) {
+  /* 1024–1279 px : densité intermédiaire pour les écrans desktop étroits. */
+  .page-transition { font-size: 13px; }
+  .page-transition .MuiTableCell-root { padding: 6px 7px !important; }
+  .page-transition button { max-width: 100%; }
+  .page-transition .grid { gap: 0.75rem !important; }
+  .page-transition .gap-6 { gap: 1rem !important; }
+  .page-transition .gap-5 { gap: 0.75rem !important; }
+  .page-transition .p-6 { padding: 1rem !important; }
+  .page-transition .px-6 { padding-left: 1rem !important; padding-right: 1rem !important; }
+}
+
+@media (min-width: 768px) and (max-width: 1100px) {
+  /* Écrans 768–1100 : aucune largeur minimale ne doit imposer un scroll. */
+  .page-transition * { min-width: 0 !important; }
+  .page-transition input,
+  .page-transition select,
+  .page-transition textarea { width: 100%; max-width: 100%; }
+  .page-transition .MuiFormControl-root { max-width: 100%; }
+  .page-transition .MuiButton-root { white-space: normal; }
+  .page-transition .MuiTypography-root { overflow-wrap: anywhere; }
+}
+
+@media (min-width: 1280px) and (max-width: 1599px) {
+  /* 1280–1599 : quelques colonnes/paddings sont réduits pour garder toutes
+     les informations visibles avec un zoom navigateur à 100 %. */
+  .page-transition .MuiTableCell-root { padding-left: 8px; padding-right: 8px; }
+  .page-transition .text-lg { font-size: 1rem !important; }
+}
+
+/* Empêche les éléments avec des largeurs/min-width inline de repousser toute
+   la page sur les écrans desktop plus étroits. */
+@media (min-width: 768px) and (max-width: 1599px) {
+  .page-transition [style*="min-width"] { min-width: 0 !important; }
+  .page-transition [style*="width: 1100px"],
+  .page-transition [style*="width: 1000px"],
+  .page-transition [style*="width: 900px"],
+  .page-transition [style*="width: 780px"],
+  .page-transition [style*="width: 720px"],
+  .page-transition [style*="width: 700px"],
+  .page-transition [style*="width: 640px"] {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+}
+
+/* Les écrans très larges utilisent davantage l'espace disponible. */
+@media (min-width: 1600px) {
+  .page-transition { width: 100%; }
+}

@@ -1392,7 +1392,7 @@ function MainLayoutContent() {
         }
       `}</style>
       <NavigationMenu />
-      <Box component="main" sx={{ flexGrow: 1, p: { xs: 1, sm: 2, md: 3 }, maxWidth: '100vw', overflowX: { xs: 'auto', md: 'hidden' }, minWidth: 0 }}>
+      <Box component="main" sx={{ flexGrow: 1, p: { xs: 1, sm: 2, md: 3 }, maxWidth: '100vw', overflowX: 'hidden', minWidth: 0 }}>
         <Toolbar sx={{ minHeight: { xs: 40, md: 40 } }} />
         {/* Contenu CENTRÉ sur grands écrans (desktop) : largeur maximale confortable
             et marges automatiques. Sur mobile/tablette la largeur reste à 100 %
