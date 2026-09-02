@@ -328,10 +328,23 @@ export function VisualisationPage() {
             .filter(v => dansIntervalle(v.date))
             .filter(v => magasinOk(v.magasin_id))
             .filter(v => Array.isArray(v.bons_assurance) && v.bons_assurance.length > 0);
-          const assRows = filteredAss.map(v => mkRow(`ass-${v.id}`, [
-            v.client || '', fmtMontant(montantVente(v)), fmtMontant(montantVente(v)),
-            numDoc(v), '', OPTION_BON_ASSURANCE, magU(v.magasin_id),
-          ]));
+          const assRows = filteredAss.map(v => {
+            // Nom de/des assurance(s) du/des bon(s) → affiché SOUS « Bon d'assurance »
+            // dans la case Mode de Paiement (ex. « Bon d'assurance\nASCOMA »).
+            const noms = Array.from(new Set(
+              (v.bons_assurance as any[])
+                .map(b => String(b?.assurance || '').trim())
+                .filter(Boolean)
+                .map(n => n.toUpperCase()),
+            ));
+            const modeCell = noms.length
+              ? `${OPTION_BON_ASSURANCE}\n${noms.join(', ')}`
+              : OPTION_BON_ASSURANCE;
+            return mkRow(`ass-${v.id}`, [
+              v.client || '', fmtMontant(montantVente(v)), fmtMontant(montantVente(v)),
+              numDoc(v), '', modeCell, magU(v.magasin_id),
+            ]);
+          });
           const totalAss = filteredAss.reduce((s, v) => s + montantVente(v), 0);
           return build(titre, nomFichier, headersReg, assRows,
             `Total factures avec assurance : ${fmtMontant(totalAss)}`,
@@ -513,6 +526,9 @@ export function VisualisationPage() {
       doc.setFontSize(11);
       doc.text(view.footer, marginX, y + 8);
     }
+    // `autoPrint` intègre au PDF une action d'ouverture de la boîte d'impression :
+    // renforce l'impression automatique une fois le PDF rendu dans l'iframe.
+    try { (doc as any).autoPrint(); } catch { /* certaines versions n'exposent pas autoPrint */ }
     // Impression DIRECTE dans l'application (pas de page/onglet externe, pas
     // d'aperçu intermédiaire) : la boîte d'impression s'ouvre immédiatement.
     afficherPdfBlob(doc.output('blob'), { titre: view.title });

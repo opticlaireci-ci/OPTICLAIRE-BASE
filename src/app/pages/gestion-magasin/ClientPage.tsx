@@ -213,15 +213,18 @@ export function ClientPage() {
     // Recharger au montage
     reloadMagasins();
 
-    // Recharger toutes les 2 secondes
-    const interval = setInterval(reloadMagasins, 2000);
+    // Rechargement périodique léger (la liste des magasins change rarement) +
+    // rechargement immédiat au focus et sur écriture 'storage' (autres onglets).
+    const interval = setInterval(reloadMagasins, 20000);
 
     // Recharger quand la fenêtre reprend le focus
     window.addEventListener('focus', reloadMagasins);
+    window.addEventListener('storage', reloadMagasins);
 
     return () => {
       clearInterval(interval);
       window.removeEventListener('focus', reloadMagasins);
+      window.removeEventListener('storage', reloadMagasins);
     };
   }, []);
 

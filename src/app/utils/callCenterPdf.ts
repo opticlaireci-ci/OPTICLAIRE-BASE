@@ -1,8 +1,19 @@
-import * as pdfjsLib from 'pdfjs-dist';
-// Worker pdf.js (résolu par Vite en URL statique).
-import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
-
-pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
+// pdf.js est une lib LOURDE (~400 kB). On ne la charge QU'AU MOMENT où un PDF
+// est réellement analysé (import dynamique), et non à l'ouverture de la page
+// Call Center : cela allège fortement le chunk de la page.
+type PdfjsModule = typeof import('pdfjs-dist');
+let pdfjsPromise: Promise<PdfjsModule> | null = null;
+async function getPdfjs(): Promise<PdfjsModule> {
+  if (!pdfjsPromise) {
+    pdfjsPromise = (async () => {
+      const pdfjsLib = await import('pdfjs-dist');
+      const workerUrl = (await import('pdfjs-dist/build/pdf.worker.min.mjs?url')).default;
+      pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
+      return pdfjsLib;
+    })();
+  }
+  return pdfjsPromise;
+}
 
 /**
  * Import automatique des « ÉTAT CLIENT » PDF LECLAIRE / BOBOPTIQUE dans le
@@ -95,6 +106,7 @@ function groupLines(items: TextItem[]): TextItem[][] {
  */
 export async function parseEtatClientPdf(file: File | ArrayBuffer): Promise<ParsedPdf> {
   const data = file instanceof ArrayBuffer ? file : await file.arrayBuffer();
+  const pdfjsLib = await getPdfjs();
   const pdf = await pdfjsLib.getDocument({ data }).promise;
 
   let month: string | null = null;

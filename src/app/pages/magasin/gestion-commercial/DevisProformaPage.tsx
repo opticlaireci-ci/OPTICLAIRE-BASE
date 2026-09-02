@@ -8,7 +8,7 @@ import { addCreateAudit, addUpdateAudit, formatDate, AuditInfo } from '../../../
 import { autoSaveOphtalmologue, autoSaveCabinet } from '../../../utils/autoActeur';
 import { autoSaveClient } from '../../../utils/autoClient';
 import { afficherPdfBlob } from '../../../utils/inAppViewer';
-import { useTypesVerre, useVerresList, findVerreByName, VerreRecord, useOphtalmologues, useCabinets, useProfessions, useClientRecordsMagasin, ClientRecord, useVenteProducts, findVenteProduct, VenteProduct } from '../../../utils/venteLookups';
+import { useTypesVerre, useVerresList, findVerreByName, VerreRecord, useOphtalmologues, useCabinets, useProfessions, useClientRecordsMagasin, ClientRecord, useVenteProducts, findVenteProduct, VenteProduct, useModesPaiement, autoSaveModePaiement } from '../../../utils/venteLookups';
 import { genCodeBarre, genNumFacture } from '../../../utils/autoNumbers';
 import { printHeaderHTML } from '../../../utils/documentHeader';
 import { useSupabaseSync } from '../../../hooks/useSupabaseSync';
@@ -1052,7 +1052,8 @@ function EtapeII({ propositions, onChange, magasinId, client }: { propositions: 
 }
 
 // ── Étape III ─────────────────────────────────────────────────────────────────
-function EtapeIII({ propositions, onChange, onEnregistrer }: { propositions: PropositionData[]; onChange: (p: PropositionData[]) => void; onEnregistrer: () => void }) {
+function EtapeIII({ propositions, onChange, onEnregistrer, modePaiement, onModePaiement }: { propositions: PropositionData[]; onChange: (p: PropositionData[]) => void; onEnregistrer: () => void; modePaiement: string; onModePaiement: (m: string) => void }) {
+  const modesPaiement = useModesPaiement();
   const updateRemise = (i: number, val: string) => {
     const p = propositions[i];
     const total = p.totalVerres + p.totalArticles;
@@ -1106,6 +1107,24 @@ function EtapeIII({ propositions, onChange, onEnregistrer }: { propositions: Pro
         })}
       </div>
 
+      {/* Mode de paiement — propose les modes enregistrés (Gestion des Acteurs)
+          et permet d'en saisir un nouveau (enregistré automatiquement). */}
+      <div className="grid grid-cols-3 gap-4 pt-2 border-t border-gray-200">
+        <div>
+          <Lbl>Mode de Paiement</Lbl>
+          <input
+            list="devis-modes-paiement"
+            className={iCls}
+            placeholder="Saisir ou choisir..."
+            value={modePaiement}
+            onChange={e => onModePaiement(e.target.value)}
+          />
+          <datalist id="devis-modes-paiement">
+            {modesPaiement.map(m => <option key={m} value={m} />)}
+          </datalist>
+        </div>
+      </div>
+
       <div className="flex justify-end pt-4 border-t border-gray-200">
         <button onClick={onEnregistrer} className="px-6 py-2.5 rounded text-white font-semibold text-sm shadow" style={{ backgroundColor: '#1a7a96' }}>
           Enregistrer
@@ -1131,6 +1150,7 @@ function FormulaireDevis({ magasinId, onRetour, onSaved, devisInitial }: { magas
     const props = devisInitial?.propositions;
     return props && props.length ? props : [emptyProp(), emptyProp(), emptyProp()];
   });
+  const [modePaiement, setModePaiement] = useState<string>(() => (devisInitial?._raw?.recap as any)?.modePaiement || '');
 
   const handleEnregistrer = () => {
     if (!client.nom) { alert('Veuillez renseigner le client (Étape I).'); return; }
@@ -1160,7 +1180,7 @@ function FormulaireDevis({ magasinId, onRetour, onSaved, devisInitial }: { magas
       verres: propositions as any,
       articles: [],
       bons_assurance: [],
-      recap: { numDevis: record.numDevis } as any,
+      recap: { numDevis: record.numDevis, modePaiement } as any,
       total_brut: 0,
       total_net: 0,
       edite_par: user?.nom || user?.prenom || user?.email || '',
@@ -1187,6 +1207,8 @@ function FormulaireDevis({ magasinId, onRetour, onSaved, devisInitial }: { magas
     // Auto-enregistrer ophtalmologue et cabinet dans Gestion des Acteurs
     if (client.ophtalmologue) autoSaveOphtalmologue(client.ophtalmologue, client.telOphtalmologue);
     if (client.cabinetOphtalmologue) autoSaveCabinet(client.cabinetOphtalmologue, client.telCabinet);
+    // Enregistrer un éventuel nouveau mode de paiement dans Gestion des Acteurs
+    if (modePaiement) autoSaveModePaiement(modePaiement);
 
     // Enregistrer automatiquement dans Demande de Devis (Firestore partagé)
     // — uniquement à la CRÉATION (pas en édition, pour éviter les doublons).
@@ -1258,7 +1280,7 @@ function FormulaireDevis({ magasinId, onRetour, onSaved, devisInitial }: { magas
         <div className="flex-1 bg-white m-2 md:m-4 rounded-lg shadow-sm overflow-y-auto">
           {step === 0 && <EtapeI data={client} onChange={setClient} magasinId={magasinId} />}
           {step === 1 && <EtapeII propositions={propositions} onChange={setPropositions} magasinId={magasinId} client={client} />}
-          {step === 2 && <EtapeIII propositions={propositions} onChange={setPropositions} onEnregistrer={handleEnregistrer} />}
+          {step === 2 && <EtapeIII propositions={propositions} onChange={setPropositions} onEnregistrer={handleEnregistrer} modePaiement={modePaiement} onModePaiement={setModePaiement} />}
 
           {step < 2 && (
             <div className="px-4 pb-4 flex justify-between border-t border-gray-100 pt-3">
@@ -1360,7 +1382,7 @@ function ListeDevis({ magasinId, onNouveau, onModifier }: { magasinId: string; o
         verres: (prop.verres || []) as any,
         articles: (prop.articles || []) as any,
         bons_assurance: [],
-        recap: { numFacture, numDevis: d.numDevis, remisePct: prop.remisePct || '0', acompte: '0', modePaiement: '', rdvRetrait: '' } as any,
+        recap: { numFacture, numDevis: d.numDevis, remisePct: prop.remisePct || '0', acompte: '0', modePaiement: (raw?.recap as any)?.modePaiement || '', rdvRetrait: '' } as any,
         total_brut: total,
         total_net: totalNet,
         edite_par: user?.nom || user?.prenom || user?.email || '',

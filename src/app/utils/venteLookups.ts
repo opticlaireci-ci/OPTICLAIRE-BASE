@@ -455,18 +455,57 @@ export function autoSaveModePaiement(mode: string): void {
   try {
     const existing: any[] = JSON.parse(localStorage.getItem(key) || '[]');
     const dejaConnu = existing.some(x => (x.modePaiement || x.nom || '').toLowerCase() === trimmed.toLowerCase());
-    if (dejaConnu) return;
-    existing.push({ id: Date.now().toString(), modePaiement: trimmed });
-    localStorage.setItem(key, JSON.stringify(existing));
-    window.dispatchEvent(new CustomEvent('leclaire-sync-update', { detail: { key } }));
+    if (!dejaConnu) {
+      existing.push({ id: Date.now().toString(), modePaiement: trimmed });
+      localStorage.setItem(key, JSON.stringify(existing));
+      window.dispatchEvent(new CustomEvent('leclaire-sync-update', { detail: { key } }));
+    }
   } catch { /* silencieux */ }
+  // Persistance PARTAGÉE : on enregistre aussi le mode dans « Gestion des Acteurs »
+  // (collection Firestore `modes-paiement`) pour qu'il soit disponible partout et
+  // sur tous les postes — et réciproquement les modes créés là-bas remontent ici.
+  (async () => {
+    try {
+      const rows = await api.getAll<any>('modes-paiement');
+      const connu = rows.some(x => (x.modePaiement || x.nom || '').toLowerCase() === trimmed.toLowerCase());
+      if (!connu) {
+        await api.create('modes-paiement', { modePaiement: trimmed });
+        window.dispatchEvent(new CustomEvent('leclaire-acteurs-update', { detail: { entityType: 'modes-paiement' } }));
+      }
+    } catch { /* hors-ligne : le cache localStorage prend le relais */ }
+  })();
 }
 
 // ── Modes de paiement ────────────────────────────────────────────────────────
+// Fusionne TROIS sources pour que TOUS les modes soient proposés partout
+// (Vente, Devis, Règlement, filtres) :
+//   1. les modes saisis à la volée (cache localStorage) ;
+//   2. les modes enregistrés dans « Gestion des Acteurs » (Firestore) ;
+//   3. les modes par défaut.
 export function useModesPaiement(): string[] {
   const items = useLS<any>('leclaire_db_modes-paiement');
+  const [remote, setRemote] = useState<string[]>([]);
+  useEffect(() => {
+    let annule = false;
+    const charger = () => {
+      api.getAll<any>('modes-paiement')
+        .then(rows => {
+          if (!annule) setRemote(rows.map(r => r.modePaiement || r.nom || '').filter(Boolean));
+        })
+        .catch(() => { /* hors-ligne : on garde les modes locaux */ });
+    };
+    charger();
+    const h = () => charger();
+    window.addEventListener('leclaire-acteurs-update', h);
+    window.addEventListener('leclaire-sync-update', h);
+    return () => {
+      annule = true;
+      window.removeEventListener('leclaire-acteurs-update', h);
+      window.removeEventListener('leclaire-sync-update', h);
+    };
+  }, []);
   const registered = items.map(x => x.modePaiement || x.nom || '').filter(Boolean);
   const defaults = ['Espèces', 'Mobile Money', 'Carte bancaire', 'Chèque', 'Virement'];
-  const all = [...new Set([...registered, ...defaults])];
+  const all = [...new Set([...registered, ...remote, ...defaults])];
   return all;
 }

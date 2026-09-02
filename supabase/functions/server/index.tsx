@@ -25,7 +25,7 @@ const app = new Hono();
 //                sert la fonction sous /functions/v1/<nom-de-la-fonction>. Le
 //                client le construit dans `src/app/utils/supabaseClient.ts`
 //                (SERVER_BASE) : les deux doivent concorder.
-// Projet Supabase courant `wfwvosdbikvvpcfipedi`. ⚠️ DEUX slugs DIFFÉRENTS :
+// Projet Supabase courant `xdadapdfhaisstzkjhkp`. ⚠️ DEUX slugs DIFFÉRENTS :
 //  • Make DÉPLOIE la fonction sous le nom `make-server-8ddbb853` (slug réel de
 //    l'app Make dans cet environnement). C'est l'URL servie par Supabase
 //    (/functions/v1/make-server-8ddbb853). ROUTE_PREFIX doit donc valoir

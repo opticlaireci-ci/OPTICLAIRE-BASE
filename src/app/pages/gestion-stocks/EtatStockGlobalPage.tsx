@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { Search, Printer, Download } from 'lucide-react';
 import { excelHeaderRows, printHeaderHTML } from '../../utils/documentHeader';
+import { afficherHtml } from '../../utils/inAppViewer';
 import { useLiveData } from '../../hooks/useLiveData';
 import { TENANT } from '../../config/tenant';
 
@@ -144,17 +145,10 @@ export function EtatStockGlobalPage() {
             <strong>Total articles:</strong> ${filteredStocks.length}<br>
             <strong>Valeur totale:</strong> ${filteredStocks.reduce((sum, item) => sum + item.stock * item.prix, 0).toLocaleString('fr-FR')} F CFA
           </div>
-          <script>
-            window.addEventListener('load', function() {
-              window.print();
-              window.onafterprint = function() { window.close(); };
-            });
-          </script>
         </body>
       </html>
     `;
-    const printWindow = window.open('', '_blank');
-    if (printWindow) { printWindow.document.write(printContent); printWindow.document.close(); }
+    afficherHtml(printContent, { titre: 'État de Stock' });
   };
 
   const handleExportExcel = async () => {

@@ -61,7 +61,7 @@ const readLS = <T,>(key: string): T[] => { try { return JSON.parse(localStorage.
 function useLiveShortcutsMagasin(magasinId: string | undefined) {
   const [, setTick] = useState(0);
   useEffect(() => {
-    const timer = setInterval(() => setTick(x => x + 1), 5000);
+    const timer = setInterval(() => setTick(x => x + 1), 30000);
     // Rafraîchissement IMMÉDIAT quand l'opticien consulte la liste des montages
     // (le badge se remet à zéro sans attendre le tick de 5 s).
     const onVus = () => setTick(x => x + 1);

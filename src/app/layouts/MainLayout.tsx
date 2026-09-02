@@ -76,6 +76,27 @@ import { SyncIndicator } from '../components/SyncIndicator';
 import { getMagasins } from '../constants/magasins';
 import { pathToButtonKey } from '../constants/appButtons';
 import { TENANT } from '../config/tenant';
+import { loadCreditsSms, etatCreditSms, SMS_CREDITS_EVENT } from '../services/smsService';
+import { afficherHtml } from '../utils/inAppViewer';
+
+// Suit en direct le crédit de SMS restant + son état (couleur).
+function useSmsCredits() {
+  const [credits, setCredits] = useState(loadCreditsSms());
+  useEffect(() => {
+    const maj = () => setCredits(loadCreditsSms());
+    window.addEventListener(SMS_CREDITS_EVENT, maj);
+    window.addEventListener('storage', maj);
+    // Le crédit se met déjà à jour via SMS_CREDITS_EVENT (même onglet) et 'storage'
+    // (autres onglets) : ce timer n'est qu'un filet de sécurité → cadence lente.
+    const t = setInterval(maj, 30000);
+    return () => {
+      window.removeEventListener(SMS_CREDITS_EVENT, maj);
+      window.removeEventListener('storage', maj);
+      clearInterval(t);
+    };
+  }, []);
+  return credits;
+}
 
 const drawerWidth = 280;
 
@@ -85,8 +106,14 @@ const readLS = <T,>(key: string): T[] => { try { return JSON.parse(localStorage.
 function useLiveShortcuts() {
   const [, setTick] = useState(0);
   useEffect(() => {
-    const t = setInterval(() => setTick(x => x + 1), 5000);
-    return () => clearInterval(t);
+    // Les badges de raccourcis (anniversaires, distributions en attente…) sont
+    // recalculés en relisant tout le localStorage : inutile de le refaire toutes
+    // les 5 s. Un rafraîchissement toutes les 30 s + à chaque écriture 'storage'
+    // (autres onglets) suffit largement et allège fortement le fil principal.
+    const maj = () => setTick(x => x + 1);
+    const t = setInterval(maj, 30000);
+    window.addEventListener('storage', maj);
+    return () => { clearInterval(t); window.removeEventListener('storage', maj); };
   }, []);
 
   const MAGASIN_IDS = getMagasins().map(m => m.id); // Charger dynamiquement
@@ -179,7 +206,7 @@ function ShortcutBar() {
   };
 
   const handleSmsClick = () => {
-    navigate('/parametrage/message-sms');
+    navigate('/parametrage/configuration-sms');
   };
 
   const handleBadgeClick = (path: string) => {
@@ -243,7 +270,16 @@ function ShortcutBar() {
     },
   ];
 
-  const [smsCount] = useState(500);
+  const smsCredits = useSmsCredits();
+  const smsEtat = etatCreditSms();
+  // Couleur du panneau SMS selon le crédit restant : vert (OK), jaune (bientôt
+  // épuisé), rouge (épuisé), violet (compteur non configuré).
+  const smsBg =
+    smsEtat === 'danger' ? '#ef4444'
+    : smsEtat === 'warn' ? '#eab308'
+    : smsEtat === 'ok' ? '#10b981'
+    : '#8b5cf6';
+  const smsAffiche = smsCredits.total > 0 ? smsCredits.restant : '—';
 
   return (
     <>
@@ -258,12 +294,12 @@ function ShortcutBar() {
           <span style={{ fontSize: 10, fontWeight: 700 }}>Emploi du temps</span>
         </div>
         <div
-          title={`${smsCount} SMS disponibles`}
+          title={smsCredits.total > 0 ? `${smsCredits.restant} / ${smsCredits.total} SMS restants` : 'Crédit SMS non configuré — cliquez pour le définir'}
           onClick={handleSmsClick}
-          style={{ display: 'flex', alignItems: 'center', gap: 3, padding: '3px 7px', borderRadius: 4, backgroundColor: '#8b5cf6', color: '#fff', cursor: 'pointer', boxShadow: '0 1px 3px rgba(0,0,0,0.3)' }}
+          style={{ display: 'flex', alignItems: 'center', gap: 3, padding: '3px 7px', borderRadius: 4, backgroundColor: smsBg, color: '#fff', cursor: 'pointer', boxShadow: '0 1px 3px rgba(0,0,0,0.3)' }}
         >
           <Sms sx={{ fontSize: 13 }} />
-          <span style={{ fontSize: 10, fontWeight: 700 }}>{smsCount} SMS</span>
+          <span style={{ fontSize: 10, fontWeight: 700 }}>{smsAffiche} SMS</span>
         </div>
       </div>
 
@@ -773,9 +809,6 @@ function NavigationMenu() {
         });
       });
 
-      const printWindow = window.open('', '_blank');
-      if (!printWindow) return;
-
       const content = `
         <!DOCTYPE html>
         <html>
@@ -783,8 +816,6 @@ function NavigationMenu() {
             <title>État de Stock - Montures</title>
             <style>
               @page { margin: 0; size: A4; }
-              @media screen { body { visibility: hidden; } }
-              @media print { body { visibility: visible; } }
               body { font-family: Arial, sans-serif; padding: 20px; }
               h1 { text-align: center; margin-bottom: 30px; }
               table { width: 100%; border-collapse: collapse; margin-top: 20px; }
@@ -822,19 +853,10 @@ function NavigationMenu() {
                 </tr>
               </tbody>
             </table>
-            <script>
-              window.onload = function() {
-                window.print();
-                window.onafterprint = function() {
-                  window.close();
-                };
-              };
-            </script>
           </body>
         </html>
       `;
-      printWindow.document.write(content);
-      printWindow.document.close();
+      afficherHtml(content, { titre: 'État de Stock - Montures' });
     };
 
     const handleExportMonturesExcel = () => {
@@ -890,9 +912,6 @@ function NavigationMenu() {
         });
       });
 
-      const printWindow = window.open('', '_blank');
-      if (!printWindow) return;
-
       const content = `
         <!DOCTYPE html>
         <html>
@@ -900,8 +919,6 @@ function NavigationMenu() {
             <title>État de Stock - Accessoires</title>
             <style>
               @page { margin: 0; size: A4; }
-              @media screen { body { visibility: hidden; } }
-              @media print { body { visibility: visible; } }
               body { font-family: Arial, sans-serif; padding: 20px; }
               h1 { text-align: center; margin-bottom: 30px; }
               table { width: 100%; border-collapse: collapse; margin-top: 20px; }
@@ -939,19 +956,10 @@ function NavigationMenu() {
                 </tr>
               </tbody>
             </table>
-            <script>
-              window.onload = function() {
-                window.print();
-                window.onafterprint = function() {
-                  window.close();
-                };
-              };
-            </script>
           </body>
         </html>
       `;
-      printWindow.document.write(content);
-      printWindow.document.close();
+      afficherHtml(content, { titre: 'État de Stock - Accessoires' });
     };
 
     const handleExportAccessoiresExcel = () => {

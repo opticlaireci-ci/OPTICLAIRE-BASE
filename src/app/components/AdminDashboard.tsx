@@ -232,11 +232,23 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
   const years = Array.from({ length: 5 }, (_, i) => now.getFullYear() - i);
 
   useEffect(() => {
-    const el = document.getElementById('stats-jour');
-    if (!el) return;
-    // AppBar fixe = 40px, on ajoute 8px de marge pour que le titre soit visible
-    const top = el.getBoundingClientRect().top + window.scrollY - 48;
-    window.scrollTo({ top, behavior: 'instant' });
+    // Atterrir DIRECTEMENT sur le bloc « STATISTIQUES … (chiffres du jour) ».
+    // Le layout remet la page en haut à chaque navigation (effet parent, qui se
+    // déclenche APRÈS les effets enfants) : on diffère donc notre défilement pour
+    // passer en dernier et gagner la course. Deux rAF + un léger délai couvrent le
+    // rendu asynchrone des panneaux au-dessus (personnalisation, mode festif).
+    let annule = false;
+    const aller = () => {
+      if (annule) return;
+      const el = document.getElementById('stats-jour');
+      if (!el) return;
+      // AppBar fixe = 40px, on ajoute 8px de marge pour que le titre soit visible
+      const top = el.getBoundingClientRect().top + window.scrollY - 48;
+      window.scrollTo({ top, behavior: 'instant' as ScrollBehavior });
+    };
+    requestAnimationFrame(() => requestAnimationFrame(aller));
+    const t = setTimeout(aller, 120);
+    return () => { annule = true; clearTimeout(t); };
   }, []);
 
   const magSel = (

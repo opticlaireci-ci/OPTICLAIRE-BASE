@@ -119,6 +119,16 @@ export function pdfHeader(doc: any, magasinId?: string, opts?: { date?: string; 
   // Décalage vertical optionnel : permet d'insérer un talon détachable AU-DESSUS
   // de l'en-tête (cas de la Fiche) sans dupliquer la logique de dessin/logo.
   const dy = opts?.offsetY || 0;
+  // Bord droit calculé d'après la LARGEUR RÉELLE de la page : indispensable pour
+  // que le logo et le filet soient bien placés aussi bien en portrait (A4 ≈ 210)
+  // qu'en PAYSAGE (A4 ≈ 297). Sinon le logo se retrouve au milieu de la page.
+  let rightX = 196;
+  try {
+    const pageW = doc.internal.pageSize.getWidth
+      ? doc.internal.pageSize.getWidth()
+      : doc.internal.pageSize.width;
+    if (pageW) rightX = pageW - 14;
+  } catch { /* repli sur portrait */ }
 
   // Nom du magasin/direction : gros, gras, noir
   doc.setFont('helvetica', 'bold');
@@ -135,19 +145,19 @@ export function pdfHeader(doc: any, magasinId?: string, opts?: { date?: string; 
   doc.text(`Email: ${e.email}`, 14, 37 + dy);
   doc.text(`${e.ville}, Le ${frLongDate(opts?.date)}`, 14, 45 + dy);
 
-  // Logo à droite
+  // Logo à droite (aligné sur le bord droit réel de la page)
   if (logoDataURL) {
     try {
       const h = 24;
       const w = h * logoRatio;
-      doc.addImage(logoDataURL, 'PNG', 196 - w, 8 + dy, w, h);
+      doc.addImage(logoDataURL, 'PNG', rightX - w, 8 + dy, w, h);
     } catch { /* logo non inséré */ }
   }
 
-  // Séparateur
+  // Séparateur (jusqu'au bord droit réel de la page)
   doc.setDrawColor(0, 0, 0);
   doc.setLineWidth(0.5);
-  doc.line(14, 50 + dy, 196, 50 + dy);
+  doc.line(14, 50 + dy, rightX, 50 + dy);
 
   doc.setTextColor(0, 0, 0);
   return 58 + dy;

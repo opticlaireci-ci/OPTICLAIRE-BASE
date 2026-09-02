@@ -1094,17 +1094,8 @@ function imprimerReglement(reglement: any, vente: any, magasinId?: string) {
       font-family:Arial,Helvetica,sans-serif; font-size:13px; color:#111;
       padding:18mm 16mm 14mm 16mm;
     }
-    /* Cache le contenu à l'écran — seule la boîte de dialogue d'impression s'ouvre */
-    @media screen { body { visibility:hidden; } }
-    @media print  { body { visibility:visible; } }
     table { border-collapse:collapse; }
   </style>
-  <script>
-    window.addEventListener('load', function() {
-      window.print();
-      window.onafterprint = function() { window.close(); };
-    });
-  </script>
 </head>
 <body>
   ${printHeaderHTML(magasinId || '', { date: dateReg })}
@@ -1164,12 +1155,12 @@ function imprimerReglement(reglement: any, vente: any, magasinId?: string) {
     </table>
     ${reste <= 0 ? `<div style="margin-top:8px;width:360px;margin-left:auto;text-align:right;"><span style="display:inline-block;padding:4px 14px;border-radius:14px;background:#43a047;color:#fff;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">✓ Soldée</span></div>` : ''}
 
-  <!-- Signature + footer juste après le contenu -->
-  <div style="margin-top:32px;">
-    <div style="text-align:center;margin-bottom:32px;color:#111;">Signature &amp; Cachet</div>
-    <div style="border-top:1px solid #111;padding-top:10px;text-align:center;font-size:11px;color:#111;">
-      ${e.adresse} Téléphone: ${e.telephone} Email: ${e.email}
-    </div>
+  <!-- Signature dans le flux, sous les totaux -->
+  <div style="margin-top:32px;text-align:center;color:#111;">Signature &amp; Cachet</div>
+
+  <!-- Pied de page ANCRÉ EN BAS DE LA PAGE (barre + coordonnées) -->
+  <div style="position:fixed;left:16mm;right:16mm;bottom:12mm;border-top:1px solid #111;padding-top:8px;text-align:center;font-size:11px;color:#111;">
+    ${e.adresse} Téléphone: ${e.telephone} Email: ${e.email}
   </div>
 </body>
 </html>`;
@@ -2445,12 +2436,6 @@ function imprimerFacture(f: FactureData, magasinId?: string) {
     .totaux-row.reste { font-size: 14px; font-weight: 700; color: ${reste > 0 ? '#c62828' : '#2e7d32'}; }
     .signature-box { border: 1px dashed #ccc; width: 180px; height: 60px; display: flex; align-items: center; justify-content: center; color: #bbb; font-size: 11px; border-radius: 4px; }
   </style>
-  <script>
-    window.addEventListener('load', function() {
-      window.print();
-      window.onafterprint = function() { window.close(); };
-    });
-  </script>
 </head>
 <body>
   ${printHeaderHTML(magasinId || '', { date: f.date })}
@@ -2510,13 +2495,13 @@ function imprimerFacture(f: FactureData, magasinId?: string) {
       Arrêté la présente facture à la somme de : ${montantEnLettres(f.totalNet)}
     </div>
 
-  <!-- Signature + footer juste après le contenu -->
-  <div style="margin-top:32px;">
-    <div style="text-align:center;margin-bottom:28px;color:#111;">Signature &amp; Cachet</div>
-    <div style="border-top:1px solid #ccc;padding-top:10px;font-size:11px;color:#888;display:flex;justify-content:space-between;">
-      <div>Merci de votre confiance.</div>
-      <div>${TENANT.nomComplet} — Abidjan, Côte d'Ivoire</div>
-    </div>
+  <!-- Signature dans le flux, sous les totaux -->
+  <div style="margin-top:32px;text-align:center;color:#111;">Signature &amp; Cachet</div>
+
+  <!-- Pied de page ANCRÉ EN BAS DE LA PAGE (barre + texte) -->
+  <div style="position:fixed;left:16mm;right:16mm;bottom:12mm;border-top:1px solid #ccc;padding-top:8px;font-size:11px;color:#888;display:flex;justify-content:space-between;">
+    <div>Merci de votre confiance.</div>
+    <div>${TENANT.nomComplet} — Abidjan, Côte d'Ivoire</div>
   </div>
 </body>
 </html>`;

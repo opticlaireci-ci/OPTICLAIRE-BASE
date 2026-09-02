@@ -313,11 +313,7 @@ function printCatalogueVerres(verres: Verre[]) {
     <table><thead><tr><th>#</th><th>Fournisseur</th><th>Type Verre</th><th>Verre</th><th>Traitement</th><th>Matière</th><th>Diamètre</th><th>Prix / Verre</th></tr></thead>
     <tbody>${verres.map((v, i) => `<tr><td>${i + 1}</td><td>${v.fournisseur}</td><td>${v.typeVerre}</td><td>${v.verre}</td><td>${v.traitement}</td><td>${v.matiere}</td><td>${v.diametre}</td><td>${v.prixVerre.toLocaleString('fr-FR')} F CFA</td></tr>`).join('')}
     </tbody></table></body></html>`;
-  // Impression intégrée (attend le chargement complet, y compris le logo,
-  // avant d'ouvrir la boîte d'impression — au lieu d'un window.open() +
-  // print() immédiat qui pouvait imprimer une page vide sur certains
-  // navigateurs).
-  afficherHtml(html, { titre: 'Catalogue Verres' });
+  afficherHtml(html, { titre: `Catalogue Verres — ${TENANT.nom}` });
 }
 
 export function VerrePage() {

@@ -21,6 +21,12 @@ const LS_RAPPORT = 'leclaire_rapport_sms';
 const LS_CONFIG_SMS = 'leclaire_config_sms';
 const LS_CREDITS_SMS = 'leclaire_credits_sms';
 
+// Événement émis à chaque écriture du rapport SMS. Permet aux écrans ouverts
+// (Rapport SMS, Configuration) de se rafraîchir IMMÉDIATEMENT dans le même
+// onglet — `localStorage.setItem` ne déclenche pas l'événement 'storage' pour
+// l'onglet qui écrit.
+export const SMS_RAPPORT_EVENT = 'sms-rapport-updated';
+
 // ── Compteur / crédit de SMS ─────────────────────────────────────────────────
 // Permet de saisir le NOMBRE RÉEL de SMS disponibles. Ce compteur diminue à
 // chaque SMS envoyé, passe en JAUNE quand il est presque épuisé, puis en ROUGE
@@ -169,12 +175,19 @@ function loadRapport(): SmsRapport[] {
   }
 }
 
+/** Charge le rapport SMS (exporté pour les écrans d'affichage). */
+export function loadRapportSms(): SmsRapport[] {
+  return loadRapport();
+}
+
 /**
  * Sauvegarder le rapport SMS
  */
 function saveRapport(data: SmsRapport[]): void {
   try {
     localStorage.setItem(LS_RAPPORT, JSON.stringify(data));
+    // Rafraîchissement instantané des écrans ouverts dans le même onglet.
+    if (typeof window !== 'undefined') window.dispatchEvent(new Event(SMS_RAPPORT_EVENT));
   } catch (error) {
     logger.error('Erreur sauvegarde rapport SMS:', error);
   }

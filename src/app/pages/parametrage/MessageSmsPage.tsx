@@ -1,7 +1,13 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router';
-import { useLiveData } from '../../hooks/useLiveData';
 import { TENANT } from '../../config/tenant';
+import {
+  envoyerSmsReel,
+  loadRapportSms,
+  loadConfigSms,
+  SMS_RAPPORT_EVENT,
+  type SmsRapport,
+} from '../../services/smsService';
 
 const MAGASIN_IDS = ['abobo', 'faya', 'koumassi', 'palmeraie', 'yopougon'];
 
@@ -15,15 +21,6 @@ interface Client {
   entreprise?: string;
   chiffreAffaires?: number;
   magasin?: string;
-}
-
-interface RapportSms {
-  id: string;
-  nature: string;
-  client: string;
-  resultat: string;
-  date: string;
-  message?: string;
 }
 
 function loadAllClients(): Client[] {
@@ -82,7 +79,9 @@ function formatDate(iso: string) {
 export function MessageSmsPage() {
   const navigate = useNavigate();
   const [allClients, setAllClients] = useState<Client[]>([]);
-  const [rapport, setRapport] = useLiveData<RapportSms>('leclaire_rapport_sms');
+  // Le rapport est lu depuis le service SMS (source unique) et se rafraîchit
+  // instantanément à chaque envoi grâce à SMS_RAPPORT_EVENT.
+  const [rapport, setRapport] = useState<SmsRapport[]>(() => loadRapportSms());
 
   // SMS Personnalisé
   const [selectedClientId, setSelectedClientId] = useState('');
@@ -106,6 +105,17 @@ export function MessageSmsPage() {
     setAllClients(loadAllClients());
   }, []);
 
+  // Rafraîchissement live du rapport : envoi réel (même onglet) ou autre onglet.
+  useEffect(() => {
+    const maj = () => setRapport(loadRapportSms());
+    window.addEventListener(SMS_RAPPORT_EVENT, maj);
+    window.addEventListener('storage', maj);
+    return () => {
+      window.removeEventListener(SMS_RAPPORT_EVENT, maj);
+      window.removeEventListener('storage', maj);
+    };
+  }, []);
+
   const anniversaireClients = useMemo(() => allClients.filter(c => isAnniversaireAujourdHui(c.dateNaissance)), [allClients]);
   const relanceClients = useMemo(() => allClients.filter(c => isRelanceVerre(c.dateDerniereVisite)), [allClients]);
 
@@ -125,39 +135,37 @@ export function MessageSmsPage() {
     });
   }, [allClients, filterEntreprise, filterCA, filterDateDebut, filterDateFin]);
 
-  const handleEnvoyerAnniversaire = () => {
+  const handleEnvoyerAnniversaire = async () => {
     if (anniversaireClients.length === 0) return;
-    const newEntries: RapportSms[] = anniversaireClients.map(c => ({
-      id: Date.now() + '_' + c.id,
-      nature: 'Anniversaire',
+    const message = loadConfigSms().messageAnniversaire;
+    // Envoi RÉEL : chaque envoi est enregistré + validé dans le rapport SMS et
+    // décrémente le crédit de SMS (via le service). Le rapport se met à jour
+    // automatiquement (SMS_RAPPORT_EVENT).
+    await Promise.all(anniversaireClients.map(c => envoyerSmsReel({
       client: `${c.prenom} ${c.nom}`.trim(),
-      resultat: 'Envoyé',
-      date: new Date().toISOString(),
-      message: `Bonjour, ${TENANT.nom} vous souhaite un heureux et joyeux anniversaire. Excellente journée, au plaisir de vous voir.`,
-    }));
-    const updated = [...newEntries, ...rapport];
-    setRapport(updated);
+      telephone: c.telephone || '',
+      message,
+      nature: 'Anniversaire',
+    })));
     setAnnivSent(true);
     setTimeout(() => setAnnivSent(false), 3000);
   };
 
-  const handleEnvoyerPerso = () => {
-    const client = selectedClientId
-      ? allClients.find(c => c.id === selectedClientId)
-      : filteredClients.length > 0 ? null : null;
-    const clientName = client ? `${client.prenom} ${client.nom}`.trim() : `${filteredClients.length} clients (filtre)`;
+  const handleEnvoyerPerso = async () => {
     if (!smsText.trim()) { alert('Veuillez saisir un message SMS'); return; }
 
-    const newEntry: RapportSms = {
-      id: Date.now().toString(),
-      nature: 'SMS Personnalisé',
-      client: clientName || 'N/A',
-      resultat: 'Envoyé',
-      date: new Date().toISOString(),
+    // Destinataires : le client sélectionné, sinon la liste filtrée.
+    const destinataires = selectedClientId
+      ? allClients.filter(c => c.id === selectedClientId)
+      : filteredClients;
+    if (destinataires.length === 0) { alert('Aucun client sélectionné'); return; }
+
+    await Promise.all(destinataires.map(c => envoyerSmsReel({
+      client: `${c.prenom} ${c.nom}`.trim() || 'Client',
+      telephone: c.telephone || '',
       message: smsText,
-    };
-    const updated = [newEntry, ...rapport];
-    setRapport(updated);
+      nature: 'SMS Personnalisé',
+    })));
     setPersoSent(true);
     setSmsText('');
     setTimeout(() => setPersoSent(false), 3000);
@@ -271,16 +279,14 @@ export function MessageSmsPage() {
                 </div>
                 <button
                   onClick={() => {
-                    const entries: RapportSms[] = relanceClients.map(c => ({
-                      id: Date.now() + '_' + c.id,
-                      nature: 'Relance Verre',
+                    const message = loadConfigSms().messageRenouvellement;
+                    relanceClients.forEach(c => void envoyerSmsReel({
                       client: `${c.prenom} ${c.nom}`.trim(),
-                      resultat: 'Envoyé',
-                      date: new Date().toISOString(),
+                      telephone: c.telephone || '',
+                      message,
+                      nature: 'Relance Verre',
                     }));
-                    const updated = [...entries, ...rapport];
-                    setRapport(updated);
-                                  }}
+                  }}
                   style={{ width: '100%', padding: '10px', border: 'none', borderRadius: 4, backgroundColor: '#f59e0b', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
                 >
                   Envoyer Relances ({relanceClients.length})
