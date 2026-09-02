@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { imprimerPageCourante } from '../../utils/inAppViewer';
 import { useParams } from 'react-router';
 import {
   Box,
@@ -288,7 +289,7 @@ export function MouvementsCaissePage() {
   };
 
   const handlePrint = () => {
-    window.print();
+    imprimerPageCourante();
   };
 
   const categoriesEntree = ['Vente', 'Règlement client', 'Remboursement', 'Autre'];

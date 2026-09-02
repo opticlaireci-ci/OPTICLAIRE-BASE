@@ -6,6 +6,7 @@ import { useLiveData } from '../../../hooks/useLiveData';
 import { useAuth } from '../../../contexts/AuthContext';
 import { addCreateAudit, addUpdateAudit, AuditInfo } from '../../../utils/auditUtils';
 import { TENANT } from '../../../config/tenant';
+import { imprimerPageCourante } from '../../../utils/inAppViewer';
 
 // Jours de la semaine (lundi → dimanche) tels qu'affichés dans le tableau.
 const JOURS = ['LUNDI', 'MARDI', 'MERCREDI', 'JEUDI', 'VENDREDI', 'SAMEDI', 'DIMANCHE'] as const;
@@ -270,7 +271,7 @@ export function RecapHebdomadairePage() {
 
   const libelleSemaine = `Semaine du ${new Date(semaine + 'T00:00:00').toLocaleDateString('fr-FR')} au ${new Date(decalerSemaine(semaine, 0) + 'T00:00:00').toLocaleDateString('fr-FR')}`;
 
-  const handleImprimer = () => window.print();
+  const handleImprimer = () => imprimerPageCourante();
 
   const handleExportExcel = async () => {
     const XLSX = await import('xlsx');

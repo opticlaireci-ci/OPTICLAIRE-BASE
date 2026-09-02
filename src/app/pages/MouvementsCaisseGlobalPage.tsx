@@ -19,6 +19,7 @@ import {
 } from '@mui/material';
 import { TrendingUp, TrendingDown, AccountBalance, Print, Download } from '@mui/icons-material';
 import { excelHeaderRows } from '../utils/documentHeader';
+import { imprimerPageCourante } from '../utils/inAppViewer';
 import { getMagasins } from '../constants/magasins';
 import { useLiveData } from '../hooks/useLiveData';
 import { chargerToutesLesVentes, VenteSupabase } from '../services/ventesService';
@@ -152,7 +153,7 @@ export function MouvementsCaisseGlobalPage() {
   };
 
   const handlePrint = () => {
-    window.print();
+    imprimerPageCourante();
   };
 
   return (

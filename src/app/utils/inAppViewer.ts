@@ -1,110 +1,141 @@
 /**
- * Impression de documents INTÉGRÉE À L'APPLICATION.
+ * Aperçu d'impression intégré à l'application.
  *
- * Objectif : ne plus JAMAIS ouvrir une page/onglet extérieur (window.open) et ne
- * plus afficher d'aperçu intermédiaire. On imprime DIRECTEMENT via un <iframe>
- * caché ajouté au document courant : seule la boîte de dialogue d'impression du
- * navigateur apparaît. Dès qu'elle est fermée (ou l'impression terminée),
- * l'iframe est retiré et l'utilisateur revient exactement à sa page de départ.
- *
- * IMPORTANT (fiabilité en production) :
- *  - Un iframe de taille NULLE (0×0) n'est pas rendu de façon fiable par tous les
- *    navigateurs : le PDF n'est alors jamais « prêt » et `print()` ne fait rien
- *    (cas constaté après déploiement, alors que ça marchait dans l'aperçu Figma).
- *    On lui donne donc une vraie taille, mais on le place HORS ÉCRAN.
- *  - Le rendu d'un PDF dans l'iframe est asynchrone : on attend l'événement
- *    `load`, puis on laisse un délai au lecteur PDF avant d'appeler `print()`.
- *  - Filet de sécurité : si l'impression échoue (bloqueur, lecteur PDF absent),
- *    on ouvre le document dans un nouvel onglet en dernier recours.
+ * Aucun nouvel onglet/fenêtre n'est ouvert. Le document est affiché dans une
+ * fenêtre modale au-dessus de l'application, puis le bouton « Imprimer » ouvre
+ * uniquement la boîte de dialogue d'impression native du navigateur.
  */
 
 interface ViewerOptions {
-  /** Titre du document (repris comme titre du document imprimé si fourni). */
   titre?: string;
-  /** Conservé pour compatibilité ; l'impression est désormais toujours automatique. */
   imprimerAuto?: boolean;
-  /** Nom de fichier (conservé pour compatibilité, non utilisé). */
   nomFichier?: string;
 }
 
-/**
- * Crée un iframe caché (hors écran mais de taille réelle), y charge le document,
- * ouvre la boîte d'impression puis nettoie tout. `assign` renseigne la source de
- * l'iframe (src pour un blob PDF, srcdoc pour du HTML).
- */
-function imprimerViaIframeCache(
-  assign: (iframe: HTMLIFrameElement) => void,
-  opts: { objectUrl?: string; fallbackUrl?: string } = {},
-): void {
-  const iframe = document.createElement('iframe');
-  // Hors écran mais AVEC une taille réelle : invisible pour l'utilisateur tout
-  // en étant réellement rendu (indispensable pour imprimer un PDF de façon fiable).
-  Object.assign(iframe.style, {
-    position: 'fixed',
-    left: '-10000px',
-    top: '0',
-    width: '794px',   // ~ A4 à 96 dpi
-    height: '1123px',
-    border: '0',
-    opacity: '0',
-    pointerEvents: 'none',
-  } as CSSStyleDeclaration);
-  iframe.setAttribute('aria-hidden', 'true');
+let activeOverlay: HTMLDivElement | null = null;
 
-  let nettoye = false;
-  const nettoyer = () => {
-    if (nettoye) return;
-    nettoye = true;
-    if (opts.objectUrl) { try { URL.revokeObjectURL(opts.objectUrl); } catch { /* ignore */ } }
-    // Léger différé : laisse le navigateur terminer l'impression avant de retirer l'iframe.
-    setTimeout(() => { try { iframe.remove(); } catch { /* ignore */ } }, 1000);
+function fermerApercu() {
+  if (activeOverlay) {
+    activeOverlay.remove();
+    activeOverlay = null;
+  }
+}
+
+function creerApercu(
+  assign: (iframe: HTMLIFrameElement) => void,
+  opts: ViewerOptions = {},
+  objectUrl?: string,
+) {
+  fermerApercu();
+
+  const overlay = document.createElement('div');
+  overlay.style.cssText = [
+    'position:fixed', 'inset:0', 'z-index:2147483647',
+    'background:rgba(15,23,42,.72)', 'display:flex',
+    'flex-direction:column', 'font-family:Arial,sans-serif',
+  ].join(';');
+
+  const toolbar = document.createElement('div');
+  toolbar.style.cssText = [
+    'height:58px', 'min-height:58px', 'background:#fff',
+    'display:flex', 'align-items:center', 'justify-content:space-between',
+    'padding:0 16px', 'box-sizing:border-box',
+    'box-shadow:0 1px 8px rgba(0,0,0,.2)',
+  ].join(';');
+
+  const title = document.createElement('div');
+  title.textContent = opts.titre || 'Aperçu avant impression';
+  title.style.cssText = 'font-size:16px;font-weight:600;color:#111827;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-right:16px;';
+
+  const actions = document.createElement('div');
+  actions.style.cssText = 'display:flex;gap:8px;align-items:center;flex-shrink:0;';
+
+  const button = (label: string, primary = false) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = label;
+    b.style.cssText = primary
+      ? 'border:0;border-radius:7px;padding:9px 15px;background:#2563eb;color:#fff;font-weight:600;cursor:pointer;'
+      : 'border:1px solid #d1d5db;border-radius:7px;padding:9px 15px;background:#fff;color:#374151;font-weight:600;cursor:pointer;';
+    return b;
   };
 
-  let aImprime = false;
-  const lancerImpression = () => {
-    if (aImprime) return;
-    try {
-      const win = iframe.contentWindow;
-      if (!win) throw new Error('contentWindow indisponible');
-      win.focus();
-      win.onafterprint = nettoyer;
-      win.print();
-      aImprime = true;
-    } catch {
-      // Dernier recours : ouvrir le document (nouvel onglet) pour que l'utilisateur
-      // puisse imprimer manuellement, plutôt que de ne rien afficher du tout.
-      if (opts.fallbackUrl) { try { window.open(opts.fallbackUrl, '_blank'); } catch { /* ignore */ } }
-      nettoyer();
+  const fermer = button('Fermer');
+  const imprimer = button('Imprimer', true);
+  actions.append(fermer, imprimer);
+  toolbar.append(title, actions);
+
+  const zone = document.createElement('div');
+  zone.style.cssText = 'flex:1;min-height:0;padding:12px;box-sizing:border-box;display:flex;justify-content:center;';
+
+  const iframe = document.createElement('iframe');
+  iframe.title = opts.titre || 'Aperçu avant impression';
+  iframe.style.cssText = 'width:min(100%,900px);height:100%;border:0;background:#fff;border-radius:4px;box-shadow:0 2px 16px rgba(0,0,0,.25);';
+  zone.appendChild(iframe);
+  overlay.append(toolbar, zone);
+  document.body.appendChild(overlay);
+  activeOverlay = overlay;
+
+  const cleanup = () => {
+    if (objectUrl) {
+      try { URL.revokeObjectURL(objectUrl); } catch { /* ignore */ }
     }
   };
 
-  iframe.onload = () => {
-    // Laisse le lecteur PDF/HTML finir son rendu avant d'ouvrir l'impression.
-    // Délai plus généreux qu'en préversion : les lecteurs PDF natifs sont lents.
-    setTimeout(lancerImpression, 600);
+  fermer.onclick = () => { cleanup(); fermerApercu(); };
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) { cleanup(); fermerApercu(); }
+  });
+
+  imprimer.onclick = () => {
+    try {
+      const win = iframe.contentWindow;
+      if (!win) throw new Error('Fenêtre d’aperçu indisponible');
+      win.focus();
+      win.print();
+    } catch (e) {
+      console.error('Impression impossible:', e);
+    }
   };
 
-  document.body.appendChild(iframe);
+  document.addEventListener('keydown', function onKey(e) {
+    if (e.key === 'Escape' && activeOverlay === overlay) {
+      document.removeEventListener('keydown', onKey);
+      cleanup();
+      fermerApercu();
+    }
+  });
+
   assign(iframe);
-
-  // Filet de sécurité : si `load` n'est jamais émis (certains lecteurs PDF ne le
-  // déclenchent pas), on tente quand même l'impression après un délai plus long.
-  setTimeout(lancerImpression, 1800);
 }
 
-/**
- * Imprime un PDF (Blob) directement, sans aperçu ni fenêtre externe.
- * Remplace `window.open(objectURL, '_blank')`.
- */
-export function afficherPdfBlob(blob: Blob, _opts: ViewerOptions = {}): void {
+/** Affiche un PDF dans l'aperçu intégré à l'application. */
+export function afficherPdfBlob(blob: Blob, opts: ViewerOptions = {}): void {
   const url = URL.createObjectURL(blob);
-  imprimerViaIframeCache((iframe) => { iframe.src = url; }, { objectUrl: url, fallbackUrl: url });
+  creerApercu((iframe) => { iframe.src = url; }, opts, url);
+}
+
+/** Affiche un document HTML dans l'aperçu intégré à l'application. */
+export function afficherHtml(html: string, opts: ViewerOptions = {}): void {
+  creerApercu((iframe) => {
+    iframe.srcdoc = `<!doctype html><html><head><meta charset="utf-8"><base href="${document.baseURI}"></head><body style="margin:0">${html}</body></html>`;
+  }, opts);
 }
 
 /**
- * Imprime un document HTML directement, sans aperçu ni fenêtre externe.
- * Remplace `const w = window.open('', '_blank'); w.document.write(html)`.
+ * Capture la page courante dans l'aperçu intégré. Les règles @media print
+ * existantes de l'application restent disponibles dans la copie de la page.
  */
-export function afficherHtml(html: string, _opts: ViewerOptions = {}): void {
-  imprimerViaIframeCache((iframe) => { iframe.srcdoc = html; });
+export function imprimerPageCourante(titre = 'Aperçu avant impression'): void {
+  const doc = document.documentElement.cloneNode(true) as HTMLElement;
+  doc.querySelectorAll('script').forEach((s) => s.remove());
+  doc.querySelectorAll('[data-print-preview-ignore="true"]').forEach((e) => e.remove());
+
+  const html = doc.outerHTML.replace('</head>', `
+    <style>
+      @media screen { body { background:#fff !important; } }
+      @media print { body { background:#fff !important; } }
+    </style></head>`);
+
+  afficherHtml(html, { titre });
 }

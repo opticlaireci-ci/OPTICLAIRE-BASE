@@ -31,6 +31,7 @@ import { canAdd } from '../../utils/actionRights';
 import { ImportCatalogueCsvDialog } from '../../components/ImportCatalogueCsvDialog';
 import { MODELE_SERVICES } from '../../utils/catalogueCsv';
 import { TENANT } from '../../config/tenant';
+import { imprimerPageCourante } from '../../utils/inAppViewer';
 
 interface Service extends AuditInfo {
   id: string;
@@ -125,7 +126,7 @@ export function ServicePage() {
   };
 
   const handlePrintCatalogue = () => {
-    window.print();
+    imprimerPageCourante();
   };
 
   const handleEditService = (service: Service) => {
