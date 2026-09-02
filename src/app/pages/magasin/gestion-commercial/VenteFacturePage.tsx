@@ -4977,10 +4977,10 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
               (v.verres?.reduce((s: number, vr: any) => s + (parseFloat(vr.totalVerres) || 0), 0) || 0);
             const rowBgColor = reste > 0 ? '#fee2e2' : '#dcfce7';
             const actions = (
-              <div className="flex items-center gap-1">
-                <button onClick={() => setDetail(v)} title="Voir / Détails" className="flex items-center justify-center rounded border border-gray-300 bg-white text-gray-600 hover:bg-gray-100" style={{ width: 32, height: 32 }}><MoreHorizontal size={15} /></button>
-                {peutModifier && onModifier && <button onClick={() => onModifier(v)} title="Modifier" className="flex items-center justify-center rounded text-white" style={{ width: 32, height: 32, backgroundColor: '#f59e0b' }}><Pencil size={14} /></button>}
-                {peutSupprimer && onSupprimer && <button onClick={() => onSupprimer(v)} title="Supprimer" className="flex items-center justify-center rounded text-white" style={{ width: 32, height: 32, backgroundColor: '#dc2626' }}><Trash2 size={14} /></button>}
+              <div className="flex items-center gap-0.5">
+                <button onClick={() => setDetail(v)} title="Voir / Détails" aria-label="Voir / Détails" className="flex items-center justify-center rounded border border-gray-300 bg-white text-gray-600 hover:bg-gray-100" style={{ width: 25, height: 25 }}><MoreHorizontal size={13} /></button>
+                {peutModifier && onModifier && <button onClick={() => onModifier(v)} title="Modifier" aria-label="Modifier" className="flex items-center justify-center rounded text-white" style={{ width: 25, height: 25, backgroundColor: '#f59e0b' }}><Pencil size={12} /></button>}
+                {peutSupprimer && onSupprimer && <button onClick={() => onSupprimer(v)} title="Supprimer" aria-label="Supprimer" className="flex items-center justify-center rounded text-white" style={{ width: 25, height: 25, backgroundColor: '#dc2626' }}><Trash2 size={12} /></button>}
               </div>
             );
             return { v, i, acompte, totalAssurance, totalReglements, reste, remisePct, totalBrut, rowBgColor, actions };
@@ -5060,7 +5060,7 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
                       <th className="px-3 py-3 text-white font-semibold text-xs uppercase border border-gray-300 text-right whitespace-nowrap">Total Net</th>
                       <th className="px-3 py-3 text-white font-semibold text-xs uppercase border border-gray-300 whitespace-nowrap">Acompte</th>
                       <th className="px-3 py-3 text-white font-semibold text-xs uppercase border border-gray-300 text-right whitespace-nowrap">Total Reste</th>
-                      <th className="px-3 py-3 text-white font-semibold text-xs uppercase border border-gray-300 whitespace-nowrap">Edition</th>
+                      <th className="px-2 py-2 text-white font-semibold text-xs uppercase border border-gray-300 whitespace-nowrap" style={{ width: 175 }}>Edition</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -5095,8 +5095,8 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
                         <td className="px-3 py-2 text-right text-sm border border-gray-300">
                           <span className={`font-bold ${reste > 0 ? 'text-red-700' : 'text-green-700'}`}>{reste.toLocaleString('fr-FR')}</span>
                         </td>
-                        <td className="px-3 py-2 text-sm border border-gray-300 align-top">
-                          <div className="flex items-start gap-2">
+                        <td className="px-2 py-2 text-sm border border-gray-300 align-top">
+                          <div className="flex items-start gap-1">
                             <div className="flex-1 min-w-0 flex flex-col gap-1">
                               <div className="px-2 py-1 rounded text-xs" style={{ backgroundColor: '#eef2ff', color: '#3730a3' }}>
                                 <div className="opacity-80">{formatDate((v as any).createdAt || (v as any).date)}</div>
