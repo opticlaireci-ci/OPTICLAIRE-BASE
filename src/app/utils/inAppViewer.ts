@@ -117,119 +117,101 @@ function creerApercu(
  * PDF original, sans perte d'information.
  */
 export async function afficherPdfBlob(blob: Blob, opts: ViewerOptions = {}): Promise<void> {
-  const safeBlob = blob.type === 'application/pdf' ? blob : new Blob([blob], { type: 'application/pdf' });
+  // Comportement volontairement direct : un clic sur « PDF » ou « Imprimer »
+  // doit conduire immédiatement à l'impression, sans passer par une page
+  // d'aperçu/visionnage intermédiaire.
+  const safeBlob = blob.type === 'application/pdf'
+    ? blob
+    : new Blob([blob], { type: 'application/pdf' });
   const url = URL.createObjectURL(safeBlob);
-  fermerApercu();
-
-  const overlay = document.createElement('div');
-  overlay.style.cssText = [
-    'position:fixed','inset:0','z-index:2147483647','background:rgba(15,23,42,.72)',
-    'display:flex','flex-direction:column','font-family:Arial,sans-serif'
-  ].join(';');
-
-  const toolbar = document.createElement('div');
-  toolbar.style.cssText = 'height:58px;min-height:58px;background:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 16px;box-sizing:border-box;box-shadow:0 1px 8px rgba(0,0,0,.2);';
-
-  const title = document.createElement('div');
-  title.textContent = opts.titre || 'Aperçu PDF avant impression';
-  title.style.cssText = 'font-size:16px;font-weight:600;color:#111827;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-right:16px;';
-
-  const actions = document.createElement('div');
-  actions.style.cssText = 'display:flex;gap:8px;align-items:center;flex-shrink:0;';
-  const makeButton = (label: string, primary = false) => {
-    const b = document.createElement('button'); b.type='button'; b.textContent=label;
-    b.style.cssText = primary
-      ? 'border:0;border-radius:7px;padding:9px 15px;background:#2563eb;color:#fff;font-weight:600;cursor:pointer;'
-      : 'border:1px solid #d1d5db;border-radius:7px;padding:9px 15px;background:#fff;color:#374151;font-weight:600;cursor:pointer;';
-    return b;
-  };
-  const fermer = makeButton('Fermer');
-  const imprimer = makeButton('Imprimer', true);
-  actions.append(fermer, imprimer); toolbar.append(title, actions);
-
-  const zone = document.createElement('div');
-  zone.style.cssText = 'flex:1;min-height:0;overflow:auto;padding:20px;box-sizing:border-box;background:#e5e7eb;';
-  const pages = document.createElement('div');
-  pages.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:20px;min-height:100%;';
-  zone.appendChild(pages); overlay.append(toolbar, zone); document.body.appendChild(overlay); activeOverlay=overlay;
-
-  const cleanup = () => { try { URL.revokeObjectURL(url); } catch {} };
-  const close = () => { cleanup(); if (activeOverlay===overlay) { overlay.remove(); activeOverlay=null; } };
-  fermer.onclick=close;
-  overlay.addEventListener('click', e => { if(e.target===overlay) close(); });
-
-  // Impression du PDF original via un iframe caché : aucune nouvelle fenêtre.
-  imprimer.onclick = () => {
-    const frame=document.createElement('iframe');
-    frame.style.cssText='position:fixed;width:1px;height:1px;right:0;bottom:0;border:0;opacity:0;';
-    frame.src=url; document.body.appendChild(frame);
-    frame.onload=()=>setTimeout(()=>{ try { frame.contentWindow?.focus(); frame.contentWindow?.print(); } finally { setTimeout(()=>frame.remove(),1500); } },300);
-  };
-
-  const onKey=(e:KeyboardEvent)=>{ if(e.key==='Escape' && activeOverlay===overlay){ document.removeEventListener('keydown',onKey); close(); } };
-  document.addEventListener('keydown',onKey);
 
   try {
-    // pdfjs-dist est déjà présent dans le projet. Le worker est désactivé pour
-    // rendre le composant fiable avec Vite et éviter toute URL de worker externe.
-    const pdfjs = await import('pdfjs-dist');
-    const data = new Uint8Array(await blob.arrayBuffer());
-    const pdf = await pdfjs.getDocument({ data, disableWorker: true }).promise;
+    const frame = document.createElement('iframe');
+    frame.title = opts.titre || 'Document à imprimer';
+    frame.setAttribute('aria-hidden', 'true');
+    frame.style.cssText = [
+      'position:fixed', 'left:-10000px', 'top:0',
+      'width:1px', 'height:1px', 'border:0',
+      'opacity:0', 'pointer-events:none'
+    ].join(';');
+    document.body.appendChild(frame);
 
-    const info = document.createElement('div');
-    info.textContent = `${pdf.numPages} page${pdf.numPages > 1 ? 's' : ''} — aperçu complet`;
-    info.style.cssText='width:min(900px,100%);font-size:13px;color:#4b5563;text-align:center;';
-    pages.appendChild(info);
+    let printed = false;
+    const print = () => {
+      if (printed) return;
+      printed = true;
+      try {
+        frame.contentWindow?.focus();
+        frame.contentWindow?.print();
+      } catch (e) {
+        console.error('Impression PDF impossible:', e);
+      } finally {
+        // Laisser au navigateur le temps d'ouvrir sa page/dialogue
+        // d'impression avant de nettoyer l'iframe et l'ObjectURL.
+        setTimeout(() => {
+          try { frame.remove(); } catch { /* ignore */ }
+          try { URL.revokeObjectURL(url); } catch { /* ignore */ }
+        }, 5000);
+      }
+    };
 
-    for (let pageNo=1; pageNo<=pdf.numPages; pageNo++) {
-      const page=await pdf.getPage(pageNo);
-      const base=page.getViewport({scale:1});
-      const maxWidth=Math.min(900, Math.max(320, zone.clientWidth-40));
-      const scale=maxWidth/base.width;
-      const viewport=page.getViewport({scale});
-      const canvas=document.createElement('canvas');
-      const context = canvas.getContext('2d', { alpha: false });
-      if (!context) throw new Error('Canvas 2D indisponible dans ce navigateur');
-      canvas.width=Math.ceil(viewport.width); canvas.height=Math.ceil(viewport.height);
-      canvas.style.cssText='display:block;background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.22);max-width:100%;height:auto;';
-      pages.appendChild(canvas);
-      await page.render({ canvasContext: context, viewport }).promise;
-    }
+    frame.onload = () => setTimeout(print, 350);
+    frame.src = url;
+
+    // Filet de sécurité pour certains lecteurs PDF qui ne déclenchent pas
+    // correctement l'événement load.
+    setTimeout(() => {
+      if (!printed) print();
+    }, 1800);
   } catch (e) {
-    // Fallback de dernier recours : on n'affiche JAMAIS le message d'erreur PDF.
-    // Certains navigateurs/extensions peuvent empêcher PDF.js de charger ou de
-    // rasteriser un PDF (PDF très lourd, API canvas indisponible, etc.). Dans ce
-    // cas, le lecteur PDF natif du navigateur prend automatiquement le relais
-    // dans la même modale, sans nouvel onglet.
-    console.error('PDF.js preview failed, fallback to native PDF viewer:', e);
-    pages.innerHTML = '';
-    const fallback = document.createElement('iframe');
-    fallback.title = opts.titre || 'Aperçu PDF';
-    fallback.src = url;
-    fallback.style.cssText = 'width:min(900px,100%);height:calc(100vh - 110px);min-height:500px;border:0;background:#fff;border-radius:6px;box-shadow:0 2px 16px rgba(0,0,0,.25);';
-    pages.style.cssText = 'display:flex;justify-content:center;align-items:flex-start;gap:0;min-height:100%;';
-    pages.appendChild(fallback);
-    fallback.addEventListener('error', () => {
-      const msg = document.createElement('div');
-      msg.style.cssText = 'padding:24px;background:#fff;border-radius:8px;color:#374151;max-width:700px;text-align:center;font-family:Arial,sans-serif;';
-      msg.innerHTML = '<strong>Aperçu PDF indisponible dans ce navigateur.</strong><br><br>Utilisez le bouton Imprimer pour ouvrir le document PDF avec le lecteur système.';
-      fallback.replaceWith(msg);
-    });
+    try { URL.revokeObjectURL(url); } catch { /* ignore */ }
+    console.error('Création de l'impression PDF impossible:', e);
   }
 }
 
-/** Affiche un document HTML dans l'aperçu intégré à l'application. */
+/**
+ * Imprime directement un document HTML, sans écran d'aperçu intermédiaire.
+ * Le document est chargé dans un iframe hors écran puis le navigateur ouvre
+ * immédiatement sa page/boîte de dialogue d'impression.
+ */
 export function afficherHtml(html: string, opts: ViewerOptions = {}): void {
-  creerApercu((iframe) => {
-    iframe.srcdoc = `<!doctype html><html><head><meta charset="utf-8"><base href="${document.baseURI}"></head><body style="margin:0">${html}</body></html>`;
-  }, opts);
+  const frame = document.createElement('iframe');
+  frame.title = opts.titre || 'Document à imprimer';
+  frame.setAttribute('aria-hidden', 'true');
+  frame.style.cssText = [
+    'position:fixed', 'left:-10000px', 'top:0',
+    'width:1px', 'height:1px', 'border:0',
+    'opacity:0', 'pointer-events:none'
+  ].join(';');
+
+  document.body.appendChild(frame);
+
+  const print = () => {
+    try {
+      const win = frame.contentWindow;
+      if (!win) throw new Error('Fenêtre d’impression indisponible');
+      win.focus();
+      win.print();
+    } catch (e) {
+      console.error('Impression HTML impossible:', e);
+    } finally {
+      setTimeout(() => { try { frame.remove(); } catch { /* ignore */ } }, 5000);
+    }
+  };
+
+  frame.onload = () => setTimeout(print, 150);
+  frame.srcdoc = `<!doctype html><html><head><meta charset="utf-8"><base href="${document.baseURI}"><title>${opts.titre || 'Document'}</title></head><body style="margin:0">${html}</body></html>`;
+
+  setTimeout(() => {
+    if (document.body.contains(frame)) print();
+  }, 1200);
 }
 
 /**
- * Capture la page courante dans l'aperçu intégré. Les règles @media print
- * existantes de l'application restent disponibles dans la copie de la page.
+ * Imprime directement la page courante. Il n'y a volontairement aucun écran
+ * de visionnage : le clic arrive directement dans le flux d'impression.
  */
-export function imprimerPageCourante(titre = 'Aperçu avant impression'): void {
+export function imprimerPageCourante(titre = 'Document à imprimer'): void {
   const doc = document.documentElement.cloneNode(true) as HTMLElement;
   doc.querySelectorAll('script').forEach((s) => s.remove());
   doc.querySelectorAll('[data-print-preview-ignore="true"]').forEach((e) => e.remove());
@@ -240,5 +222,5 @@ export function imprimerPageCourante(titre = 'Aperçu avant impression'): void {
       @media print { body { background:#fff !important; } }
     </style></head>`);
 
-  afficherHtml(html, { titre });
+  afficherHtml(html, { titre, imprimerAuto: true });
 }
