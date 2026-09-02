@@ -20,6 +20,7 @@ import { TENANT } from '../config/tenant';
 // Option spéciale du filtre « mode de paiement » : sélectionne toutes les
 // factures réglées (partiellement ou totalement) par bon d'assurance.
 const OPTION_BON_ASSURANCE = "Bon d'assurance";
+const OPTION_TOUS_MODES = 'Tous les modes de paiement';
 
 type ReportType =
   | 'bons-monture' | 'bons-verre' | 'stock' | 'inventaires'
@@ -49,7 +50,7 @@ export function VisualisationPage() {
   const [dateDebut, setDateDebut] = useState('');
   const [dateFin, setDateFin] = useState('');
   const [magasin, setMagasin] = useState('Tous les Magasins');
-  const [modePaiement, setModePaiement] = useState('Tous Règlements');
+  const [modePaiement, setModePaiement] = useState(OPTION_TOUS_MODES);
   const [recherche, setRecherche] = useState('');
 
   // Données brutes chargées selon le rapport actif
@@ -354,7 +355,7 @@ export function VisualisationPage() {
         const filteredR = reglements
           .filter(r => dansIntervalle(r.date))
           .filter(r => magasinOk(r.magasin_id))
-          .filter(r => modePaiement === 'Tous Règlements' ? true : (r.mode_paiement || '').toLowerCase() === modePaiement.toLowerCase());
+          .filter(r => modePaiement === OPTION_TOUS_MODES ? true : (r.mode_paiement || '').toLowerCase() === modePaiement.toLowerCase());
         const regRows = filteredR.map(r => {
           const v = vById.get(r.vente_id);
           const totalNet = v ? montantVente(v) : 0;
@@ -371,13 +372,40 @@ export function VisualisationPage() {
           .filter(v => dansIntervalle(v.date))
           .filter(v => magasinOk(v.magasin_id))
           .filter(v => num((v.recap as any)?.acompte) > 0)
-          .filter(v => modePaiement === 'Tous Règlements' ? true : ((v.recap as any)?.modePaiement || '').toLowerCase() === modePaiement.toLowerCase());
+          .filter(v => modePaiement === OPTION_TOUS_MODES ? true : ((v.recap as any)?.modePaiement || '').toLowerCase() === modePaiement.toLowerCase());
         const acompteRows = filteredV.map(v => mkRow(`acompte-${v.id}`, [
           v.client || '', fmtMontant(montantVente(v)), fmtMontant(num((v.recap as any)?.acompte)),
           numDoc(v), '', (v.recap as any)?.modePaiement || '',
           `Acompte · ${magU(v.magasin_id)}`,
         ]));
 
+        // Les bons d'assurance sont eux aussi des règlements. Ils ne sont pas
+        // toujours enregistrés dans la collection `reglements`, donc ils doivent
+        // être ajoutés explicitement lorsque « Tous les modes de paiement » est
+        // sélectionné. Le montant encaissé correspond à la prise en charge du bon.
+        const filteredAssVentes = ventes
+          .filter(v => v.type !== 'devis')
+          .filter(v => dansIntervalle(v.date))
+          .filter(v => magasinOk(v.magasin_id))
+          .filter(v => Array.isArray(v.bons_assurance) && v.bons_assurance.length > 0);
+        const assuranceRows = modePaiement === OPTION_TOUS_MODES
+          ? filteredAssVentes.flatMap(v => (v.bons_assurance as any[]).map((b, bi) => {
+              const montantAss = num(b?.montantPrisEnCharge ?? b?.montant ?? b?.total ?? b?.montantAssurance);
+              const assurance = String(b?.assurance || '').trim();
+              const numeroBon = String(b?.numeroBon || '').trim();
+              const detail = [assurance, numeroBon ? `Bon ${numeroBon}` : ''].filter(Boolean).join(' · ');
+              return mkRow(`assurance-${v.id}-${bi}`, [
+                v.client || '', fmtMontant(montantVente(v)), fmtMontant(montantAss),
+                numDoc(v), '', assurance ? `${OPTION_BON_ASSURANCE} · ${assurance}` : OPTION_BON_ASSURANCE,
+                detail || `Bon d'assurance · ${magU(v.magasin_id)}`,
+              ]);
+            }))
+          : [];
+
+        const totalAssurance = filteredAssVentes.reduce((s, v) => s +
+          (v.bons_assurance as any[]).reduce((ss, b) => ss + num(
+            b?.montantPrisEnCharge ?? b?.montant ?? b?.total ?? b?.montantAssurance
+          ), 0), 0);
         const totalR = filteredR.reduce((s, r) => s + num(r.montant), 0);
         const totalV = filteredV.reduce((s, v) => s + num((v.recap as any)?.acompte), 0);
         // Total Net distinct par facture (évite de compter deux fois une facture
@@ -385,9 +413,10 @@ export function VisualisationPage() {
         const facturesUniques = new Map<string, number>();
         filteredR.forEach(r => { const v = vById.get(r.vente_id); if (v) facturesUniques.set(v.id, montantVente(v)); });
         filteredV.forEach(v => facturesUniques.set(v.id, montantVente(v)));
+        filteredAssVentes.forEach(v => facturesUniques.set(v.id, montantVente(v)));
         const totalNetDistinct = Array.from(facturesUniques.values()).reduce((s, n) => s + n, 0);
-        const totalEncaisse = totalR + totalV;
-        const allRows = [...regRows, ...acompteRows];
+        const totalEncaisse = totalR + totalV + totalAssurance;
+        const allRows = [...regRows, ...acompteRows, ...assuranceRows];
         return build(titre, nomFichier, headersReg, allRows,
           `Total encaissé : ${fmtMontant(totalEncaisse)}`,
           { foot: ['T O T A L', fmtMontant(totalNetDistinct), fmtMontant(totalEncaisse), '', '', '', ''] });
@@ -660,7 +689,7 @@ export function VisualisationPage() {
             <div>
               <label style={labelStyle}>Mode de Paiement</label>
               <select style={fieldStyle} value={modePaiement} onChange={e => setModePaiement(e.target.value)}>
-                <option>Tous Règlements</option>
+                <option value={OPTION_TOUS_MODES}>{OPTION_TOUS_MODES}</option>
                 {modesDisponibles.map(m => <option key={m} value={m}>{m}</option>)}
                 <option value={OPTION_BON_ASSURANCE}>{OPTION_BON_ASSURANCE}</option>
               </select>

@@ -94,9 +94,9 @@ const VERRE_COLS: { key: keyof OeilData; label: string }[] = [
   { key: 'evLoin', label: 'E V Loin' }, { key: 'evPres', label: 'E V Près' }, { key: 'quantite', label: 'Quantité' },
   { key: 'prix', label: 'Prix' }, { key: 'remise', label: 'Remise' },
 ];
-const purpleHdr = 'text-xs font-semibold text-white text-center px-1 py-1 whitespace-nowrap';
-const purpleCell = 'border border-purple-400 bg-white px-0.5 py-0.5';
-const vInput = 'w-full text-xs text-center border-none outline-none bg-transparent py-1';
+const purpleHdr = 'text-[10px] sm:text-xs font-semibold text-white text-center px-0.5 py-1 leading-tight break-words';
+const purpleCell = 'border border-purple-400 bg-white px-0 py-0.5 min-w-0';
+const vInput = 'w-full min-w-0 max-w-full text-[11px] sm:text-xs text-center border-none outline-none bg-transparent py-1 px-0';
 
 // ── Téléchargement PDF du devis (jsPDF, modèle DEVIS | PROFORMA) ─────────────
 async function telechargerDevisPDF(d: DevisRecord, magasinId: string) {
@@ -622,10 +622,14 @@ function VerreBlock({ data, index, total, onChange, onRemove }: { data: VerreInf
         </div>
         <div style={{ minWidth: 80 }}><div className={purpleHdr}>Diamètre</div><input className="w-full text-xs border border-purple-300 rounded px-2 py-1 bg-white" value={data.diametre} onChange={set('diametre')} /></div>
       </div>
-      <div className="overflow-x-auto">
-        <table className="border-collapse text-xs" style={{ minWidth: 700 }}>
+      <div className="w-full min-w-0 overflow-hidden rounded">
+        <table className="w-full table-fixed border-collapse text-xs" style={{ width: '100%', tableLayout: 'fixed' }}>
+          <colgroup>
+            <col style={{ width: '9%' }} />
+            {VERRE_COLS.map(c => <col key={c.key} style={{ width: '8.27%' }} />)}
+          </colgroup>
           <thead><tr style={{ backgroundColor: '#b050d0' }}>
-            <th className="w-20 px-2 text-white text-xs py-1"></th>
+            <th className="px-0.5 text-white text-[10px] sm:text-xs py-1 leading-tight break-words">Œil</th>
             {VERRE_COLS.map(c => <th key={c.key} className={purpleHdr}>{c.label}</th>)}
           </tr></thead>
           <tbody>
@@ -640,8 +644,8 @@ function VerreBlock({ data, index, total, onChange, onRemove }: { data: VerreInf
           </tbody>
         </table>
       </div>
-      <div className="flex items-center gap-6 px-2 flex-wrap">
-        <span className="text-white text-sm tracking-widest font-medium">E c a r t &nbsp; P u p i l l a i r e</span>
+      <div className="flex items-center gap-3 sm:gap-6 px-2 flex-wrap">
+        <span className="text-white text-xs sm:text-sm tracking-widest font-medium">E c a r t &nbsp; P u p i l l a i r e</span>
         <label className="flex items-center gap-1 text-white text-sm cursor-pointer">
           <input type="radio" name={`ecart-${index}`} value="loin" checked={data.ecartPupillaire === 'loin'} onChange={set('ecartPupillaire')} /> Loin
         </label>
