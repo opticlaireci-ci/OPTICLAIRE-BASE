@@ -927,13 +927,6 @@ app.post(`/${ROUTE_PREFIX}/sms/dr`, async (c) => {
     const address = String(deliveryInfo?.address || '').trim();
     if (!callbackData || !deliveryStatus) return c.json({ success: false, error: 'Delivery receipt incomplet' }, 400);
 
-    // Protection optionnelle : si ORANGE_SMS_DR_TOKEN est défini, Orange doit
-    // fournir ce token dans ?token=. L'URL doit ensuite être déclarée chez Orange.
-    const expectedToken = (Deno.env.get('ORANGE_SMS_DR_TOKEN') || '').trim();
-    if (expectedToken && c.req.query('token') !== expectedToken) {
-      return c.json({ success: false, error: 'Non autorisé' }, 401);
-    }
-
     await kv.set(`sms_dr:${callbackData}`, {
       resourceId: callbackData,
       deliveryStatus,
@@ -941,7 +934,8 @@ app.post(`/${ROUTE_PREFIX}/sms/dr`, async (c) => {
       receivedAt: new Date().toISOString(),
     });
     console.log('sms/dr reçu:', callbackData, deliveryStatus, address);
-    return c.json({ success: true }, 200);
+    // Orange attend uniquement un accusé HTTP 200 pour confirmer la réception du DLR.
+    return c.body(null, 200);
   } catch (e) {
     console.log('sms/dr error:', e);
     return c.json({ success: false, error: String((e as Error)?.message || e) }, 500);
@@ -1024,8 +1018,9 @@ app.post(`/${ROUTE_PREFIX}/sms/send`, async (c) => {
       console.log('sms/send Orange error:', res.status, JSON.stringify(data));
       return c.json({ success: false, error: msg }, 502);
     }
-    const ref = data?.outboundSMSMessageRequest?.resourceURL || '';
-    return c.json({ success: true, data: { messageId: ref, status: 'SUBMITTED' } });
+    const ref = String(data?.outboundSMSMessageRequest?.resourceURL || '');
+    const resourceId = ref.split('/requests/').pop() || '';
+    return c.json({ success: true, data: { messageId: ref, resourceId, status: 'SUBMITTED' } });
   } catch (e) {
     console.log('sms/send error:', e);
     return c.json({ success: false, error: String((e as Error)?.message || e) }, 500);

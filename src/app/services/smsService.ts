@@ -191,7 +191,7 @@ export function supprimerRapportSms(id: string): void {
 
 /** Rafraîchit le statut réel d'un SMS depuis les Delivery Receipts Orange. */
 export async function actualiserStatutSms(r: SmsRapport): Promise<SmsRapport | null> {
-  if (!r.resourceId || r.resultat === 'Livré' || r.resultat === 'Échec') return r;
+  if (!r.resourceId || r.resultat === 'Livré') return r;
   try {
     const res = await serverFetch(`/sms/dr-status?resourceId=${encodeURIComponent(r.resourceId)}`);
     if (!res.ok) return r;
@@ -292,7 +292,7 @@ export async function envoyerSmsReel(params: {
       // pas encore sa livraison au téléphone. On conserve l'identifiant pour
       // recevoir ensuite le Delivery Receipt et passer à « Livré ».
       const resourceUrl = String(json?.data?.messageId || '');
-      const resourceId = resourceUrl.split('/requests/').pop() || undefined;
+      const resourceId = String(json?.data?.resourceId || resourceUrl.split('/requests/').pop() || '');
       upsertRapport({ ...base, resultat: 'Envoyé', resourceId });
       decrementerCreditSms(); // le SMS est accepté par Orange
       logger.log(`📤 SMS accepté par Orange pour ${params.client} (${params.telephone})`);
