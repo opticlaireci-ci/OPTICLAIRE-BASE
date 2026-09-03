@@ -22,7 +22,6 @@ import { ajouterReglement, chargerReglements, chargerTousLesReglements, readRegl
 import { ajouterVente, chargerVentes as chargerVentesSupabase, subscriberVentesMagasin, readVentesCache, supprimerVente, mettreAJourVente, VenteSupabase } from '../../../services/ventesService';
 import { enregistrerVente } from '../../../services/inventaireService';
 import { verifierStockVente, messageRuptures } from '../../../utils/stockVente';
-import { StockParMagasin } from '../../../components/StockParMagasin';
 import { useLentillesOpticStock } from '../../../hooks/useLentillesOpticStock';
 import { collection, onSnapshot } from '../../../utils/firestoreCompat';
 import { db } from '../../../utils/firebaseClient';
@@ -2177,11 +2176,6 @@ function StepIII({
           </tbody>
         </table>
       </div>
-
-      {/* Stock réel de CHAQUE magasin pour les articles saisis : si le magasin
-          vendeur est en rupture, le vendeur voit où l'article est disponible et
-          peut demander un transfert plutôt que de perdre la vente. */}
-      <StockParMagasin lignes={articles} products={products} magasinId={magasinId} />
 
       <datalist id="produits-datalist">
         {allOptions.map((opt, i) => <option key={i} value={opt} />)}

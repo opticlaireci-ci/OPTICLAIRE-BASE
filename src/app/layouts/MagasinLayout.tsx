@@ -35,7 +35,6 @@ import {
   Undo,
   EventAvailable,
   RequestQuote,
-  CalendarMonth,
   Sms,
   Phone,
   Visibility,
@@ -52,6 +51,7 @@ import { SessionIndicator } from '../components/SessionIndicator';
 import { SeasonLogo } from '../components/SeasonLogo';
 import { pathToButtonKey } from '../constants/appButtons';
 import { TENANT } from '../config/tenant';
+import { loadCreditsSms, etatCreditSms, SMS_CREDITS_EVENT } from '../services/smsService';
 
 const drawerWidth = 280;
 
@@ -171,6 +171,19 @@ function ShortcutBadge({ count, icon, label, onClick, blink }: { count: number; 
 function ShortcutBarMagasin({ magasinId }: { magasinId: string | undefined }) {
   const compteurs = useLiveShortcutsMagasin(magasinId);
   const navigate = useNavigate();
+  const [smsCredits, setSmsCredits] = useState(loadCreditsSms());
+
+  useEffect(() => {
+    const maj = () => setSmsCredits(loadCreditsSms());
+    window.addEventListener(SMS_CREDITS_EVENT, maj);
+    window.addEventListener('storage', maj);
+    const timer = window.setInterval(maj, 30000);
+    return () => {
+      window.removeEventListener(SMS_CREDITS_EVENT, maj);
+      window.removeEventListener('storage', maj);
+      window.clearInterval(timer);
+    };
+  }, []);
 
   const handleSmsClick = () => {
     navigate('/parametrage/message-sms');
@@ -241,7 +254,13 @@ function ShortcutBarMagasin({ magasinId }: { magasinId: string | undefined }) {
     },
   ];
 
-  const [smsCount] = useState(500);
+  const smsEtat = etatCreditSms();
+  const smsCount = smsCredits.total > 0 ? smsCredits.restant : '—';
+  const smsBg =
+    smsEtat === 'danger' ? '#ef4444'
+    : smsEtat === 'warn' ? '#eab308'
+    : smsEtat === 'ok' ? '#10b981'
+    : '#8b5cf6';
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginRight: 12, marginLeft: 6, flexShrink: 0 }}>
@@ -250,25 +269,7 @@ function ShortcutBarMagasin({ magasinId }: { magasinId: string | undefined }) {
         .montage-blink { animation: montageBlink 0.8s ease-in-out infinite; }
       `}</style>
       <div
-        title="Emploi du temps"
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 4,
-          padding: '4px 10px',
-          borderRadius: 5,
-          backgroundColor: '#10b981',
-          color: '#fff',
-          cursor: 'pointer',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
-        }}
-      >
-        <CalendarMonth sx={{ fontSize: 16 }} />
-        <span style={{ fontSize: 11, fontWeight: 700 }}>Emploi du temps</span>
-      </div>
-
-      <div
-        title={`${smsCount} SMS disponibles`}
+        title={smsCredits.total > 0 ? `${smsCredits.restant} / ${smsCredits.total} SMS restants` : 'Crédit SMS non configuré — cliquez pour le définir'}
         onClick={handleSmsClick}
         style={{
           display: 'flex',
@@ -276,7 +277,7 @@ function ShortcutBarMagasin({ magasinId }: { magasinId: string | undefined }) {
           gap: 4,
           padding: '4px 10px',
           borderRadius: 5,
-          backgroundColor: '#8b5cf6',
+          backgroundColor: smsBg,
           color: '#fff',
           cursor: 'pointer',
           boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
