@@ -15,6 +15,16 @@ const MODES_PAIEMENT = ['Virement bancaire', 'Chèque', 'Espèces', 'Mobile Mone
 const COMPTES_BANQUE = ['SGCI - Compte Principal', 'BNI - Compte Courant', 'BIAO - Épargne', 'SIB - Opérations'];
 const ANNEES = ['2024', '2025', '2026'];
 
+// Affichage du mode de paiement : pour un bon d'assurance, conserver uniquement
+// le nom de l'assurance (ex. NSIA), sans répéter « Bon Assurance ».
+const modePaiementAffiche = (mode: string, assurance?: string): string => {
+  const m = String(mode || '').trim();
+  if (/bon\s*(d[’']?assurance|assurance)/i.test(m)) {
+    return String(assurance || m.replace(/^bon\s*(d[’']?assurance|assurance)\s*/i, '').trim() || 'BON D’ASSURANCE').toUpperCase();
+  }
+  return m;
+};
+
 interface Reglement extends AuditInfo {
   id: string;
   numReglement: string;
@@ -352,52 +362,26 @@ export function ReglementAssurancePage() {
           <table className="w-full text-sm border-collapse" style={{ minWidth: 1000 }}>
             <thead>
               <tr className="bg-gray-100 border-b border-gray-200 text-gray-700 font-semibold text-xs">
-                <th className="px-3 py-2 w-8"><input type="checkbox" /></th>
-                <th className="text-left px-3 py-2">N° Relevé</th>
-                <th className="text-left px-3 py-2">N° Règlement</th>
-                <th className="text-left px-3 py-2">Officine</th>
-                <th className="text-left px-3 py-2">Assurance</th>
-                <th className="text-left px-3 py-2">Entreprise | Garant</th>
-                <th className="text-left px-3 py-2">Compte Banque</th>
+                <th className="text-left px-3 py-2">Client</th>
+                <th className="text-right px-3 py-2">Total Net</th>
+                <th className="text-right px-3 py-2">Règlement</th>
+                <th className="text-left px-3 py-2">N° Facture</th>
+                <th className="text-left px-3 py-2">N° Reçu</th>
                 <th className="text-left px-3 py-2">Mode de Paiement</th>
-                <th className="text-right px-3 py-2">Montant</th>
-                <th className="text-left px-3 py-2">Détails</th>
-                <th className="text-left px-3 py-2">Créé par</th>
-                <th className="text-left px-3 py-2">Modifié par</th>
                 <th className="text-center px-3 py-2">Édition</th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
-                <tr><td colSpan={13} className="text-center py-10 text-gray-400">Aucun règlement assurance</td></tr>
+                <tr><td colSpan={7} className="text-center py-10 text-gray-400">Aucun règlement assurance</td></tr>
               ) : filtered.map(r => (
                 <tr key={r.id} className="border-b border-gray-100 hover:bg-gray-50">
-                  <td className="px-3 py-2 text-center"><input type="checkbox" /></td>
-                  <td className="px-3 py-2 font-mono text-blue-700">{r.numReleve}</td>
-                  <td className="px-3 py-2 font-mono text-blue-700">{r.numReglement}</td>
-                  <td className="px-3 py-2 text-gray-700">{r.officine}</td>
-                  <td className="px-3 py-2 font-semibold">{r.assurance}</td>
-                  <td className="px-3 py-2 text-gray-600">{r.entreprise || '—'}</td>
-                  <td className="px-3 py-2 text-gray-600">{r.compteBanque}</td>
-                  <td className="px-3 py-2 text-gray-600">{r.modePaiement}</td>
+                  <td className="px-3 py-2 text-gray-700 font-semibold">{r.entreprise || r.assurance || '—'}</td>
+                  <td className="px-3 py-2 text-right font-semibold">{r.totalNet.toLocaleString('fr-FR')}</td>
                   <td className="px-3 py-2 text-right font-semibold">{r.montant.toLocaleString('fr-FR')}</td>
-                  <td className="px-3 py-2 text-gray-500 max-w-xs truncate">{r.details || '—'}</td>
-                  <td className="px-3 py-2 text-xs text-gray-600">
-                    {r.createdBy ? (
-                      <div>
-                        <div className="font-medium">{r.createdBy}</div>
-                        <div className="text-gray-400">{formatDate(r.createdAt)}</div>
-                      </div>
-                    ) : '-'}
-                  </td>
-                  <td className="px-3 py-2 text-xs text-gray-600">
-                    {r.updatedBy ? (
-                      <div>
-                        <div className="font-medium">{r.updatedBy}</div>
-                        <div className="text-gray-400">{formatDate(r.updatedAt)}</div>
-                      </div>
-                    ) : '-'}
-                  </td>
+                  <td className="px-3 py-2 font-mono text-blue-700">{r.numReglement}</td>
+                  <td className="px-3 py-2 font-mono text-blue-700">{r.numReleve}</td>
+                  <td className="px-3 py-2 text-gray-600">{modePaiementAffiche(r.modePaiement, r.assurance)}</td>
                   <td className="px-3 py-2 text-center">
                     <div className="flex items-center justify-center gap-1">
                       <button onClick={() => setModal({ mode: 'edit', item: r })} className="text-blue-500 hover:text-blue-700 p-1"><Edit size={13} /></button>
@@ -430,7 +414,7 @@ export function ReglementAssurancePage() {
               </div>
               {/* Date + mode paiement */}
               <div style={{ fontSize: '0.8125rem', color: '#6b7280', marginBottom: '0.25rem' }}>
-                {r.date || '—'} · {r.modePaiement}
+                {r.date || '—'} · {modePaiementAffiche(r.modePaiement, r.assurance)}
               </div>
               {/* Compte banque */}
               <div style={{ fontSize: '0.8125rem', color: '#9ca3af' }}>{r.compteBanque}</div>

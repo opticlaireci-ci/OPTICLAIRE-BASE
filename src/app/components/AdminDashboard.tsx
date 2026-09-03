@@ -281,6 +281,23 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
     const realSales = ventesA.filter(v => (v.type || 'vente') === 'vente');
     const devisAll = ventesA.filter(v => v.type === 'devis');
 
+    // Montant réellement encore à solder : somme des restes positifs de chaque
+    // facture. On ne compense pas une facture impayée par un éventuel excédent
+    // de paiement sur une autre facture. Le solde est calculé sur tout
+    // l'historique, car il représente ce qui reste à recouvrer maintenant.
+    const reglementsParVente: Record<string, number> = {};
+    for (const r of reglements) {
+      reglementsParVente[r.vente_id] = (reglementsParVente[r.vente_id] || 0) + (Number(r.montant) || 0);
+    }
+    const restantVente = (v: any) => {
+      const totalNet = venteNet(v);
+      const assurance = bonsAmount(v);
+      const acompteInitial = Number(v?.recap?.acompte ?? 0) || 0;
+      const paiements = reglementsParVente[v.id] || 0;
+      return Math.max(totalNet - assurance - acompteInitial - paiements, 0);
+    };
+    const montantRestantTotal = realSales.reduce((sum, v) => sum + restantVente(v), 0);
+
     const today = now;
     const isToday = (x: Date | null) => !!x && x.getFullYear() === today.getFullYear() && x.getMonth() === today.getMonth() && x.getDate() === today.getDate();
     const inYear = (x: Date | null, y: number) => !!x && x.getFullYear() === y;
@@ -362,24 +379,37 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
     const margeTable = MOIS_LONG
       .map((m, i) => ({ mois: m, ca: caM[i], marge: Math.round(caM[i] * tauxMarge) }))
       .sort((a, b) => b.ca - a.ca);
+    const margeClassement = [...margeTable].sort((a, b) => b.marge - a.marge);
     const objCA = MOIS_SHORT.map((m, i) => ({ mois: m, objectif: objectif / 12, ca: caM[i] }));
 
     // ── ACTIVITÉ ANNUELLE | Magasin (année) ───────────────────────────────────
     const byMag: Record<string, { ca: number; paiements: number; bons: number; restant: number }> = {};
     for (const m of magasins) byMag[m.id] = { ca: 0, paiements: 0, bons: 0, restant: 0 };
+
+    // CA/paiements/bons suivent l'année sélectionnée. Le champ `restant`, lui,
+    // est le cumul de toutes les factures encore non soldées du magasin.
     for (const v of ventes.filter(v => (v.type || 'vente') === 'vente')) {
-      const x = dateOf(v.date); if (!inYear(x, annee)) continue;
       const b = byMag[v.magasin_id]; if (!b) continue;
+      b.restant += restantVente(v);
+      const x = dateOf(v.date); if (!inYear(x, annee)) continue;
       b.ca += venteNet(v); b.bons += bonsAmount(v); b.paiements += venteAcompte(v);
     }
-    for (const r of reglements) { const x = dateOf(r.date); if (!inYear(x, annee)) continue; const b = byMag[r.magasin_id]; if (b) b.paiements += Number(r.montant) || 0; }
-    const magData = magasins
-      .map(m => ({ mag: m.label.replace(new RegExp(`^${TENANT.nom}\\s*`, 'i'), `${TENANT.nom} `), ...byMag[m.id], restant: Math.max(byMag[m.id].ca - byMag[m.id].paiements - byMag[m.id].bons, 0) }))
-      .filter(m => m.ca > 0 || m.paiements > 0)
+    for (const r of reglements) {
+      const x = dateOf(r.date);
+      if (!inYear(x, annee)) continue;
+      const b = byMag[r.magasin_id];
+      if (b) b.paiements += Number(r.montant) || 0;
+    }
+
+    const magasinsPrisEnCompte = magasin === '__TOUS__' ? magasins : magasins.filter(m => m.id === magasin);
+    const magData = magasinsPrisEnCompte
+      .map(m => ({ mag: m.label.replace(new RegExp(`^${TENANT.nom}\\s*`, 'i'), `${TENANT.nom} `), ...byMag[m.id] }))
+      .filter(m => m.ca > 0 || m.paiements > 0 || m.bons > 0 || m.restant > 0)
       .sort((a, b) => b.ca - a.ca);
-    const caGlobalYear = magasins.reduce((s, m) => s + byMag[m.id].ca, 0);
-    const payGlobalYear = magasins.reduce((s, m) => s + byMag[m.id].paiements, 0);
-    const bonsGlobalYear = magasins.reduce((s, m) => s + byMag[m.id].bons, 0);
+    const caGlobalYear = magasinsPrisEnCompte.reduce((s, m) => s + byMag[m.id].ca, 0);
+    const payGlobalYear = magasinsPrisEnCompte.reduce((s, m) => s + byMag[m.id].paiements, 0);
+    const bonsGlobalYear = magasinsPrisEnCompte.reduce((s, m) => s + byMag[m.id].bons, 0);
+    const restantGlobalMagasins = magasinsPrisEnCompte.reduce((s, m) => s + byMag[m.id].restant, 0);
 
     // ── Produit pie (mois) ────────────────────────────────────────────────────
     const prodPie = [
@@ -431,7 +461,7 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
       caYear, payYear, bonsYear, restantYear,
       brutMonth, netMonth, remiseMonth, margeMonth, prod, totalProduits, coutMonth, margePct, qteVente, qteCmd, coutCmd,
       margeTable, objCA,
-      magData, caGlobalYear, payGlobalYear, bonsGlobalYear,
+      magData, caGlobalYear, payGlobalYear, bonsGlobalYear, montantRestantTotal, restantGlobalMagasins,
       prodPie,
       evolData, evMin, evMax, evMoy,
       entTable, userTable,
@@ -441,7 +471,7 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
 
   const todayStr = `${String(now.getDate()).padStart(2, '0')}-${String(now.getMonth() + 1).padStart(2, '0')}-${now.getFullYear()}`;
   const pctRealiseToday = pct(d.caToday, d.objectif).toFixed(0);
-  const restantGlobal = Math.max(d.caYear - d.payYear - d.bonsYear, 0);
+  const restantGlobal = d.montantRestantTotal;
   const gaugeData = [
     { name: 'Objectif', value: d.objectif, fill: C_OBJECTIF },
     { name: "Chiffre d'Affaires", value: d.caYear, fill: C_CA },
@@ -471,54 +501,68 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
       </div>
 
       {/* 2 ── ACTIVITÉ MENSUELLE ───────────────────────────────────────────── */}
-      <Panel title="ACTIVITÉ MENSUELLE">
-
-        {/* ── Tuiles : même layout 5 colonnes desktop ET mobile ──────────────── */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr) 1fr', borderRadius: 6, overflow: 'hidden', marginBottom: 12 }}>
+      <Panel
+        title="ACTIVITÉ MENSUELLE"
+        controls={<div className="flex flex-wrap items-center gap-3">{magSel}{moisSel}{anneeSel}</div>}
+      >
+        {/* Reproduction du bandeau desktop de la référence :
+            4 cartes normales + une colonne AVOIR +/- + Montant Restant. */}
+        <div
+          className="grid w-full overflow-hidden rounded-none md:rounded-sm"
+          style={{ gridTemplateColumns: 'repeat(4, minmax(0, 1fr)) minmax(0, 1fr) minmax(0, 1fr)' }}
+        >
           {[
             { value: fmtInt(d.objectif),  label: 'Objectif',           bg: C_OBJECTIF, fg: '#fff' },
             { value: fmtInt(d.caMonth),   label: "Chiffre d'Affaires", bg: C_CA,       fg: '#fff' },
             { value: fmtInt(d.payMonth),  label: 'Paiements Clients',  bg: C_PAY,      fg: '#fff' },
             { value: fmtInt(d.bonsMonth), label: 'Bons Assurance',     bg: C_BONS,     fg: '#fff' },
           ].map((c, i) => (
-            <div key={i} style={{
-              backgroundColor: c.bg, color: c.fg,
-              display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
-              padding: 'clamp(8px,2vw,16px) clamp(6px,1.5vw,14px)',
-              minHeight: 'clamp(80px,12vw,120px)',
-            }}>
-              <div style={{ fontWeight: 700, fontSize: 'clamp(0.75rem,2.5vw,1.2rem)', lineHeight: 1.2 }}>{c.value}</div>
-              <div style={{ fontWeight: 700, fontSize: 'clamp(0.6rem,1.5vw,0.82rem)', lineHeight: 1.3, marginTop: 4, wordBreak: 'break-word' }}>{c.label}</div>
+            <div
+              key={i}
+              className="flex flex-col justify-between"
+              style={{
+                backgroundColor: c.bg,
+                color: c.fg,
+                minHeight: 135,
+                padding: '10px 12px 12px',
+              }}
+            >
+              <div style={{ fontWeight: 700, fontSize: 20, lineHeight: 1.1, textAlign: 'center' }}>{c.value}</div>
+              <div style={{ fontWeight: 700, fontSize: 16, lineHeight: 1.25, textAlign: 'left' }}>{c.label}</div>
             </div>
           ))}
-          {/* 5e colonne : AVOIR+ haut / AVOIR- bas */}
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <div style={{ backgroundColor: C_AVOIR_P, color: '#1e3a52', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', padding: 'clamp(8px,2vw,14px) clamp(6px,1.5vw,12px)', flex: 1 }}>
-              <div style={{ fontWeight: 700, fontSize: 'clamp(0.75rem,2.5vw,1rem)' }}>{fmtInt(Math.max(0, d.payMonth + d.bonsMonth - d.caMonth))}</div>
-              <div style={{ fontWeight: 700, fontSize: 'clamp(0.55rem,1.4vw,0.75rem)', lineHeight: 1.3, marginTop: 4, wordBreak: 'break-word' }}>AVOIR-<br />CLIENT +</div>
+
+          {/* Colonne AVOIR : exactement une colonne verticale avec + puis -. */}
+          <div className="flex flex-col" style={{ minHeight: 135 }}>
+            <div
+              className="flex flex-1 flex-col justify-between"
+              style={{ backgroundColor: C_AVOIR_P, color: '#111827', padding: '8px 10px' }}
+            >
+              <div style={{ fontWeight: 700, fontSize: 18, lineHeight: 1.1 }}>{fmtInt(Math.max(0, d.payMonth + d.bonsMonth - d.caMonth))}</div>
+              <div style={{ fontWeight: 700, fontSize: 15, lineHeight: 1.15 }}>AVOIR-CLIENT<br />+</div>
             </div>
-            <div style={{ backgroundColor: C_AVOIR_M, color: '#fff', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', padding: 'clamp(8px,2vw,14px) clamp(6px,1.5vw,12px)', flex: 1 }}>
-              <div style={{ fontWeight: 700, fontSize: 'clamp(0.75rem,2.5vw,1rem)' }}>{fmtInt(Math.max(0, d.caMonth - d.payMonth - d.bonsMonth))}</div>
-              <div style={{ fontWeight: 700, fontSize: 'clamp(0.55rem,1.4vw,0.75rem)', lineHeight: 1.3, marginTop: 4, wordBreak: 'break-word' }}>AVOIR-<br />CLIENT -</div>
+            <div
+              className="flex flex-1 flex-col justify-between"
+              style={{ backgroundColor: C_AVOIR_M, color: '#111827', padding: '8px 10px' }}
+            >
+              <div style={{ fontWeight: 700, fontSize: 18, lineHeight: 1.1 }}>{fmtInt(Math.max(0, d.caMonth - d.payMonth - d.bonsMonth))}</div>
+              <div style={{ fontWeight: 700, fontSize: 15, lineHeight: 1.15 }}>AVOIR-CLIENT<br />-</div>
             </div>
+          </div>
+
+          {/* Montant Restant : même hauteur et même colonne que la référence. */}
+          <div
+            className="flex flex-col justify-between"
+            style={{ backgroundColor: C_RESTANT, color: '#fff', minHeight: 135, padding: '10px 12px 12px' }}
+          >
+            <div style={{ fontWeight: 700, fontSize: 20, lineHeight: 1.1, textAlign: 'center' }}>{fmtInt(d.montantRestantTotal)}</div>
+            <div style={{ fontWeight: 700, fontSize: 16, lineHeight: 1.25 }}>Montant<br />Restant</div>
           </div>
         </div>
 
-        {/* ── Grande tuile Montant Restant (pleine largeur) ───────────────────── */}
-        <div style={{
-          backgroundColor: C_RESTANT, color: '#fff', borderRadius: 6,
-          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          padding: '36px 16px', marginBottom: 16, minHeight: 130,
-        }}>
-          <div style={{ fontWeight: 700, fontSize: '2rem', lineHeight: 1 }}>{fmtInt(d.restantMonth)}</div>
-          <div style={{ fontWeight: 700, fontSize: '1.05rem', marginTop: 14, opacity: 0.95, letterSpacing: '0.04em' }}>Montant Restant</div>
-        </div>
-
-        {/* ── Sélecteurs magasin / mois / année ──────────────────────────────── */}
-        <div className="flex flex-wrap gap-3 items-center mb-4">
-          {magSel}
-          {moisSel}
-          {anneeSel}
+        {/* Sur petit écran, on garde la lisibilité sans changer le rendu desktop. */}
+        <div className="md:hidden mt-3 text-xs text-gray-500">
+          Utilisez les sélecteurs en haut de la section pour changer de magasin, de mois ou d'année.
         </div>
 
         <ResponsiveContainer width="100%" height={360}>
@@ -586,45 +630,69 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
         </div>
       </Panel>
 
-      {/* 4 ── OBJECTIF | CHIFFRE D'AFFAIRES ─────────────────────────────────── */}
-      <Panel title="Objectif | Chiffre d'Affaires" controls={<div className="flex gap-2">{magSel}{anneeSel}</div>}>
-        <div className="flex rounded overflow-hidden mb-4">
-          <div className="flex-1 px-4 py-4 text-white" style={{ backgroundColor: C_OBJECTIF }}>
-            <div className="font-bold">{fmtInt(d.objectif)}</div><div className="text-sm font-semibold">Objectif</div>
+      {/* 4 ── OBJECTIF | CHIFFRE D'AFFAIRES — reproduction desktop sgoptic.net */}
+      <Panel title="Objectif | Chiffre d'Affaires">
+        {/* En-tête : les deux cartes occupent la même largeur que le graphique,
+            tandis que les filtres restent alignés à droite. */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 mb-4">
+          <div className="lg:col-span-8 flex rounded overflow-hidden min-h-[103px]">
+            <div className="flex-1 px-5 py-4 text-white flex flex-col justify-between" style={{ backgroundColor: C_OBJECTIF }}>
+              <div className="font-bold text-lg leading-tight">{fmtInt(d.objectif)}</div>
+              <div className="font-bold text-lg leading-tight">Objectif</div>
+            </div>
+            <div className="flex-1 px-5 py-4 text-white flex flex-col justify-between" style={{ backgroundColor: C_CA }}>
+              <div className="font-bold text-lg leading-tight">{fmtInt(d.caYear)}</div>
+              <div className="font-bold text-lg leading-tight">Chiffre d'Affaires</div>
+            </div>
           </div>
-          <div className="flex-1 px-4 py-4 text-white" style={{ backgroundColor: C_CA }}>
-            <div className="font-bold">{fmtInt(d.caYear)}</div><div className="text-sm font-semibold">Chiffre d'Affaires</div>
+          <div className="lg:col-span-4 flex items-start gap-4">
+            <div className="flex-1">{magSel}</div>
+            <div className="w-[165px]">{anneeSel}</div>
           </div>
         </div>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <div className="lg:col-span-2">
-            <ResponsiveContainer width="100%" height={340}>
-              <AreaChart data={d.objCA}>
+
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+          {/* Graphique annuel */}
+          <div className="lg:col-span-8 min-w-0">
+            <ResponsiveContainer width="100%" height={410}>
+              <AreaChart data={d.objCA} margin={{ top: 10, right: 8, left: 0, bottom: 8 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="mois" tick={{ fontSize: 11 }} />
-                <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtAxis} />
+                <XAxis dataKey="mois" tick={{ fontSize: 12 }} />
+                <YAxis tick={{ fontSize: 11 }} tickFormatter={fmtAxis} />
                 <Tooltip formatter={(v: number) => fmtInt(v) + ' F CFA'} />
-                <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Area key="objectif" type="monotone" dataKey="objectif" name="Objectif" stroke={C_OBJECTIF} fill={C_OBJECTIF} fillOpacity={0.15} />
-                <Area key="ca" type="monotone" dataKey="ca" name="Chiffre d'Affaires" stroke={C_CA} fill={C_CA} fillOpacity={0.35} />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                <Area key="objectif" type="monotone" dataKey="objectif" name="Objectif" stroke={C_OBJECTIF} fill={C_OBJECTIF} fillOpacity={0.08} />
+                <Area key="ca" type="monotone" dataKey="ca" name="Chiffre d'Affaires" stroke={C_CA} fill={C_CA} fillOpacity={0.24} />
               </AreaChart>
             </ResponsiveContainer>
           </div>
-          <div className="overflow-auto max-h-[360px]">
-            <table className="w-full text-sm border-collapse">
-              <thead><tr style={{ backgroundColor: '#e9eef2' }}>
-                <th className="text-left px-3 py-2 text-gray-600">Mois</th>
-                <th className="text-right px-3 py-2 text-gray-600">Chiffre d'Affaires</th>
-                <th className="text-right px-3 py-2 text-gray-600">Marge est.</th>
-              </tr></thead>
+
+          {/* Classements CA / Marge : même présentation que la capture */}
+          <div className="lg:col-span-4 border border-gray-200 overflow-hidden max-h-[470px] overflow-y-auto">
+            <table className="w-full text-sm border-collapse table-fixed">
+              <thead className="sticky top-0 z-10">
+                <tr style={{ backgroundColor: '#f4f5f6' }}>
+                  <th colSpan={2} className="text-left px-3 py-3 font-bold text-gray-800 border-r border-gray-200">
+                    <span className="mr-2 text-base">▥</span> Chiffre d'Affaires
+                  </th>
+                  <th colSpan={2} className="text-left px-3 py-3 font-bold text-gray-800">
+                    <span className="mr-2 text-base">⚖</span> Marge
+                  </th>
+                </tr>
+              </thead>
               <tbody>
-                {d.margeTable.map((r, i) => (
-                  <tr key={r.mois} style={{ backgroundColor: i < 7 ? '#5b9bd5' : '#fff', color: i < 7 ? '#fff' : '#374151' }}>
-                    <td className="px-3 py-2 font-semibold">{r.mois}</td>
-                    <td className="px-3 py-2 text-right">{fmtInt(r.ca)}</td>
-                    <td className="px-3 py-2 text-right">{fmtInt(r.marge)}</td>
-                  </tr>
-                ))}
+                {d.margeTable.map((r, i) => {
+                  const m = d.margeClassement[i];
+                  const bg = i % 2 === 0 ? '#3f94b5' : '#75b5cd';
+                  return (
+                    <tr key={r.mois} style={{ backgroundColor: bg, color: '#111827' }}>
+                      <td className="px-3 py-2.5 font-bold border-t border-white/40 w-[25%]">{r.mois}</td>
+                      <td className="px-2 py-2.5 text-right font-bold border-t border-white/40 border-r border-white/50 w-[25%]">{fmtInt(r.ca)}</td>
+                      <td className="px-2 py-2.5 text-right font-bold border-t border-white/40 w-[25%]">{fmtInt(m?.marge || 0)} <span className="text-lime-300 text-base">↑</span></td>
+                      <td className="px-2 py-2.5 font-bold border-t border-white/40 w-[25%]">{m?.mois || ''}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -640,7 +708,7 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
           { value: fmtInt(d.bonsGlobalYear), label: 'Bons Assurance', bg: C_BONS },
           { value: fmtInt(Math.max(0, d.payGlobalYear + d.bonsGlobalYear - d.caGlobalYear)), label: 'AVOIR-CLIENT +', bg: C_AVOIR_P, fg: '#1e3a52' },
           { value: fmtInt(Math.max(0, d.caGlobalYear - d.payGlobalYear - d.bonsGlobalYear)), label: 'AVOIR-CLIENT -', bg: C_AVOIR_M },
-          { value: fmtInt(Math.max(d.caGlobalYear - d.payGlobalYear - d.bonsGlobalYear, 0)), label: 'Montant Restant', bg: C_RESTANT },
+          { value: fmtInt(d.restantGlobalMagasins), label: 'Montant Restant', bg: C_RESTANT },
         ]} />
         <ResponsiveContainer width="100%" height={420}>
           <BarChart data={d.magData} margin={{ bottom: 60 }}>
@@ -658,31 +726,87 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
       </Panel>
 
       {/* 6 ── OPÉRATIONS PÉRIODIQUES DES VENTES ─────────────────────────────── */}
-      <Panel title="Opérations Périodique des Ventes" controls={<div className="flex gap-2">{magSel}{moisSel}{anneeSel}</div>}>
-        <Band cells={[
-          { value: fmtInt(d.prod.verres), label: 'Verres', bg: C_VERRE },
-          { value: fmtInt(d.prod.traitements), label: 'Traitements', bg: C_TRAIT },
-          { value: fmtInt(d.prod.montures), label: 'Montures', bg: C_MONT },
-          { value: fmtInt(d.prod.accessoires), label: 'Accessoires', bg: C_ACC },
-          { value: fmtInt(d.prod.services), label: 'Services', bg: C_SERV },
-        ]} />
-        <Band cells={[
-          { value: fmtInt(d.brutMonth), label: 'Total', bg: C_NAVY },
-          { value: fmtInt(d.remiseMonth), label: 'Remise', bg: C_NAVY },
-          { value: fmtInt(d.netMonth), label: "Chiffre d'Affaires", bg: C_CA },
-        ]} />
-        <ResponsiveContainer width="100%" height={320}>
-          <PieChart>
-            <Pie data={d.prodPie.length ? d.prodPie : [{ name: 'Aucune donnée', value: 1, color: '#cbd5e1' }]}
-              cx="50%" cy="50%" outerRadius={120} dataKey="value" isAnimationActive={false}
-              label={({ name, percent }) => `${name} ${(percent * 100).toFixed(1)}%`} labelLine={false}>
-              {(d.prodPie.length ? d.prodPie : [{ name: 'Aucune donnée', value: 1, color: '#cbd5e1' }]).map((e, i) => <Cell key={i} fill={(e as any).color} />)}
-            </Pie>
-            <Tooltip formatter={(v: number) => fmtInt(v) + ' F CFA'} />
-            <Legend wrapperStyle={{ fontSize: 11 }} />
-          </PieChart>
-        </ResponsiveContainer>
-      </Panel>
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-5">
+        {/* En-tête : titre à gauche, Objectif Personnel + filtres à droite */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-3 items-start">
+          <div className="lg:col-span-2">
+            <h2 className="font-bold text-gray-900 text-sm md:text-base mb-1">Opérations périodique des ventes</h2>
+            <div className="w-full max-w-[913px]">
+              <div className="grid mb-4 overflow-hidden" style={{ gridTemplateColumns: '1.5fr 1fr 1.5fr 1fr 1fr' }}>
+                {[
+                  { value: fmtInt(d.prod.verres), label: 'Verres', bg: C_VERRE },
+                  { value: fmtInt(d.prod.traitements), label: 'Traitements', bg: C_TRAIT },
+                  { value: fmtInt(d.prod.montures), label: 'Montures', bg: C_MONT },
+                  { value: fmtInt(d.prod.accessoires), label: 'Accessoires', bg: C_ACC },
+                  { value: fmtInt(d.prod.services), label: 'Services', bg: C_SERV },
+                ].map((c, i) => (
+                  <div key={i} className="px-3 py-4 min-h-[102px]" style={{ backgroundColor: c.bg, color: '#fff' }}>
+                    <div className="font-bold text-base leading-tight break-all">{c.value}</div>
+                    <div className="font-semibold text-sm mt-1 whitespace-nowrap">{c.label}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="grid overflow-hidden" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
+                {[
+                  { value: fmtInt(d.brutMonth), label: 'Total', bg: C_NAVY },
+                  { value: fmtInt(d.remiseMonth), label: 'Remise', bg: C_NAVY },
+                  { value: fmtInt(d.netMonth), label: "Chiffre d'Affaires", bg: C_CA },
+                ].map((c, i) => (
+                  <div key={i} className="px-4 py-5 min-h-[104px]" style={{ backgroundColor: c.bg, color: '#fff' }}>
+                    <div className="font-bold text-base leading-tight">{c.value}</div>
+                    <div className="font-semibold text-sm mt-1 whitespace-nowrap">{c.label}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="lg:col-span-1">
+            <h3 className="font-bold text-gray-900 text-base mb-2">Objectif Personnel</h3>
+            <div className="grid grid-cols-2 gap-4">
+              <label className="block">
+                <span className="block text-sm text-gray-800 mb-1">Mois</span>
+                {moisSel}
+              </label>
+              <label className="block">
+                <span className="block text-sm text-gray-800 mb-1">Année</span>
+                {anneeSel}
+              </label>
+            </div>
+          </div>
+        </div>
+
+        {/* Filtres de l'analyse périodique */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-[875px] mt-7 mb-3 px-1">
+          <label className="block">
+            <span className="block text-sm text-gray-900 mb-1">Mois</span>
+            {moisSel}
+          </label>
+          <label className="block">
+            <span className="block text-sm text-gray-900 mb-1">Année</span>
+            {anneeSel}
+          </label>
+          <label className="block">
+            <span className="block text-sm text-gray-900 mb-1">Magasin</span>
+            {magSel}
+          </label>
+        </div>
+
+        {/* Répartition des ventes par catégorie */}
+        <div className="w-full max-w-[913px]">
+          <ResponsiveContainer width="100%" height={420}>
+            <PieChart>
+              <Pie data={d.prodPie.length ? d.prodPie : [{ name: 'Aucune donnée', value: 1, color: '#cbd5e1' }]}
+                cx="50%" cy="47%" outerRadius={185} dataKey="value" isAnimationActive={false}
+                label={({ name, percent }) => `${name} ${(percent * 100).toFixed(1)}%`} labelLine={false}>
+                {(d.prodPie.length ? d.prodPie : [{ name: 'Aucune donnée', value: 1, color: '#cbd5e1' }]).map((e, i) => <Cell key={i} fill={(e as any).color} />)}
+              </Pie>
+              <Tooltip formatter={(v: number) => fmtInt(v) + ' F CFA'} />
+              <Legend wrapperStyle={{ fontSize: 12 }} />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
 
       {/* 7 ── RAPPORT UTILISATEUR ───────────────────────────────────────────── */}
       <Panel title="Rapport Utilisateur" controls={<div className="flex gap-2">{magSel}{moisSel}{anneeSel}</div>}>

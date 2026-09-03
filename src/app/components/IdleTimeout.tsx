@@ -1,7 +1,8 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 
-const IDLE_TIMEOUT_MS = 20 * 60 * 1000;
+const IDLE_TIMEOUT_MS = 10 * 60 * 1000;
+// Déconnexion automatique après 10 minutes sans activité.
 // Fréquence de vérification du temps réellement écoulé. Un simple setTimeout ne
 // suffit PAS sur mobile : dès que l'onglet passe en arrière-plan ou que l'écran
 // se verrouille, les navigateurs (iOS/Android) SUSPENDENT les minuteurs. Au
