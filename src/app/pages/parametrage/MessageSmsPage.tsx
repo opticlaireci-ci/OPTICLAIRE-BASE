@@ -6,6 +6,8 @@ import {
   loadRapportSms,
   loadConfigSms,
   SMS_RAPPORT_EVENT,
+  actualiserStatutSms,
+  supprimerRapportSms,
   type SmsRapport,
 } from '../../services/smsService';
 
@@ -114,6 +116,22 @@ export function MessageSmsPage() {
       window.removeEventListener(SMS_RAPPORT_EVENT, maj);
       window.removeEventListener('storage', maj);
     };
+  }, []);
+
+  // Synchronise les accusés de livraison Orange. Un SMS accepté passe à
+  // « Livré » uniquement lorsque Orange confirme DeliveredToTerminal.
+  useEffect(() => {
+    let stopped = false;
+    const sync = async () => {
+      const current = loadRapportSms();
+      const tracked = current.filter(r => r.resourceId && r.resultat !== 'Livré' && r.resultat !== 'Échec');
+      if (!tracked.length) return;
+      await Promise.all(tracked.map(r => actualiserStatutSms(r)));
+      if (!stopped) setRapport(loadRapportSms());
+    };
+    void sync();
+    const timer = window.setInterval(() => void sync(), 10000);
+    return () => { stopped = true; window.clearInterval(timer); };
   }, []);
 
   const anniversaireClients = useMemo(() => allClients.filter(c => isAnniversaireAujourdHui(c.dateNaissance)), [allClients]);
@@ -425,7 +443,7 @@ export function MessageSmsPage() {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
               <tr style={{ backgroundColor: '#f9fafb' }}>
-                {['#', 'Nature', 'Message', 'Date', 'Résultat', 'Client'].map(h => (
+                {['#', 'Nature', 'Message', 'Date', 'Résultat', 'Client', 'Action'].map(h => (
                   <th key={h} style={{ border: '1px solid #e5e7eb', padding: '8px 10px', textAlign: 'left', fontWeight: 700, fontSize: 12, color: '#374151' }}>{h}</th>
                 ))}
               </tr>
@@ -433,7 +451,7 @@ export function MessageSmsPage() {
             <tbody>
               {pageRapport.length === 0 ? (
                 <tr>
-                  <td colSpan={6} style={{ padding: 24, textAlign: 'center', color: '#9ca3af', border: '1px solid #e5e7eb' }}>Aucun SMS enregistré</td>
+                  <td colSpan={7} style={{ padding: 24, textAlign: 'center', color: '#9ca3af', border: '1px solid #e5e7eb' }}>Aucun SMS enregistré</td>
                 </tr>
               ) : (
                 pageRapport.map((r, idx) => (
@@ -443,11 +461,25 @@ export function MessageSmsPage() {
                     <td style={{ border: '1px solid #e5e7eb', padding: '7px 10px', color: '#6b7280', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.message || '—'}</td>
                     <td style={{ border: '1px solid #e5e7eb', padding: '7px 10px', color: '#6b7280' }}>{formatDate(r.date)}</td>
                     <td style={{ border: '1px solid #e5e7eb', padding: '7px 10px' }}>
-                      <span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 700, backgroundColor: r.resultat === 'Envoyé' ? '#dcfce7' : '#fef3c7', color: r.resultat === 'Envoyé' ? '#16a34a' : '#d97706' }}>
+                      <span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 700, backgroundColor: r.resultat === 'Livré' ? '#dcfce7' : r.resultat === 'Échec' ? '#fee2e2' : r.resultat === 'Envoyé' ? '#dbeafe' : '#fef3c7', color: r.resultat === 'Livré' ? '#16a34a' : r.resultat === 'Échec' ? '#dc2626' : r.resultat === 'Envoyé' ? '#2563eb' : '#d97706' }}>
                         {r.resultat}
                       </span>
                     </td>
                     <td style={{ border: '1px solid #e5e7eb', padding: '7px 10px' }}>{r.client}</td>
+                    <td style={{ border: '1px solid #e5e7eb', padding: '7px 6px', textAlign: 'center' }}>
+                      <button
+                        title="Supprimer ce message du rapport"
+                        onClick={() => {
+                          if (window.confirm('Supprimer ce message du rapport SMS ? Le SMS déjà reçu sur le téléphone ne sera pas supprimé.')) {
+                            supprimerRapportSms(r.id);
+                            setRapport(loadRapportSms());
+                          }
+                        }}
+                        style={{ padding: '4px 8px', border: '1px solid #fecaca', borderRadius: 4, background: '#fff', color: '#dc2626', cursor: 'pointer', fontSize: 12, fontWeight: 700 }}
+                      >
+                        🗑️ Supprimer
+                      </button>
+                    </td>
                   </tr>
                 ))
               )}

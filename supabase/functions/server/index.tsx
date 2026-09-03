@@ -914,6 +914,51 @@ function smsRateExceeded(userId: string): boolean {
 }
 
 // POST /sms/send — envoie un SMS via Orange. body: { to, message }
+// ── Delivery Receipts Orange ────────────────────────────────────────────────
+// Orange appelle cette route publiquement après l'envoi. Le resource_id est
+// celui renvoyé par /sms/send et permet de corréler le reçu au SMS du rapport.
+app.post(`/${ROUTE_PREFIX}/sms/dr`, async (c) => {
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const n = body?.deliveryInfoNotification;
+    const callbackData = String(n?.callbackData || '').trim();
+    const deliveryInfo = n?.deliveryInfo || {};
+    const deliveryStatus = String(deliveryInfo?.deliveryStatus || '').trim();
+    const address = String(deliveryInfo?.address || '').trim();
+    if (!callbackData || !deliveryStatus) return c.json({ success: false, error: 'Delivery receipt incomplet' }, 400);
+
+    // Protection optionnelle : si ORANGE_SMS_DR_TOKEN est défini, Orange doit
+    // fournir ce token dans ?token=. L'URL doit ensuite être déclarée chez Orange.
+    const expectedToken = (Deno.env.get('ORANGE_SMS_DR_TOKEN') || '').trim();
+    if (expectedToken && c.req.query('token') !== expectedToken) {
+      return c.json({ success: false, error: 'Non autorisé' }, 401);
+    }
+
+    await kv.set(`sms_dr:${callbackData}`, {
+      resourceId: callbackData,
+      deliveryStatus,
+      address,
+      receivedAt: new Date().toISOString(),
+    });
+    console.log('sms/dr reçu:', callbackData, deliveryStatus, address);
+    return c.json({ success: true }, 200);
+  } catch (e) {
+    console.log('sms/dr error:', e);
+    return c.json({ success: false, error: String((e as Error)?.message || e) }, 500);
+  }
+});
+
+// Le frontend interroge périodiquement ce statut pour mettre à jour son
+// rapport local sans exposer les secrets Orange.
+app.get(`/${ROUTE_PREFIX}/sms/dr-status`, async (c) => {
+  const guard = await requireUser(c);
+  if (!guard.ok) return guard.res;
+  const resourceId = String(c.req.query('resourceId') || '').trim();
+  if (!resourceId) return c.json({ success: false, error: 'resourceId requis' }, 400);
+  const data = await kv.get(`sms_dr:${resourceId}`);
+  return c.json({ success: true, data: data || null });
+});
+
 app.post(`/${ROUTE_PREFIX}/sms/send`, async (c) => {
   const guard = await requireUser(c);
   if (!guard.ok) return guard.res;

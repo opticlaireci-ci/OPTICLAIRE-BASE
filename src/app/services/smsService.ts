@@ -15,6 +15,8 @@ export interface SmsRapport {
   resultat: string;
   date: string;
   message: string;
+  /** Identifiant Orange permettant de corréler l'accusé de livraison. */
+  resourceId?: string;
 }
 
 const LS_RAPPORT = 'leclaire_rapport_sms';
@@ -180,6 +182,39 @@ export function loadRapportSms(): SmsRapport[] {
   return loadRapport();
 }
 
+/** Supprime définitivement un SMS de l'historique local du rapport.
+ * Cela ne peut pas retirer le SMS déjà reçu du téléphone du client.
+ */
+export function supprimerRapportSms(id: string): void {
+  saveRapport(loadRapport().filter(r => r.id !== id));
+}
+
+/** Rafraîchit le statut réel d'un SMS depuis les Delivery Receipts Orange. */
+export async function actualiserStatutSms(r: SmsRapport): Promise<SmsRapport | null> {
+  if (!r.resourceId || r.resultat === 'Livré' || r.resultat === 'Échec') return r;
+  try {
+    const res = await serverFetch(`/sms/dr-status?resourceId=${encodeURIComponent(r.resourceId)}`);
+    if (!res.ok) return r;
+    const json = await res.json().catch(() => ({}));
+    const dr = json?.data;
+    if (!dr?.deliveryStatus) return r;
+    const map: Record<string, string> = {
+      DeliveredToTerminal: 'Livré',
+      DeliveredToNetwork: 'Envoyé',
+      MessageWaiting: 'En cours',
+      DeliveryImpossible: 'Échec',
+      DeliveryUncertain: 'Incertain',
+    };
+    const statut = map[dr.deliveryStatus] || r.resultat;
+    if (statut !== r.resultat) {
+      const updated = { ...r, resultat: statut };
+      upsertRapport(updated);
+      return updated;
+    }
+    return r;
+  } catch { return r; }
+}
+
 /**
  * Sauvegarder le rapport SMS
  */
@@ -253,9 +288,14 @@ export async function envoyerSmsReel(params: {
     });
     const json = await res.json().catch(() => ({}));
     if (res.ok && json?.success) {
-      upsertRapport({ ...base, resultat: 'Envoyé' });
-      decrementerCreditSms(); // le compteur de SMS diminue à chaque envoi réussi
-      logger.log(`📤 SMS envoyé à ${params.client} (${params.telephone})`);
+      // Orange confirme ici l'acceptation du SMS (HTTP 201 / resourceURL),
+      // pas encore sa livraison au téléphone. On conserve l'identifiant pour
+      // recevoir ensuite le Delivery Receipt et passer à « Livré ».
+      const resourceUrl = String(json?.data?.messageId || '');
+      const resourceId = resourceUrl.split('/requests/').pop() || undefined;
+      upsertRapport({ ...base, resultat: 'Envoyé', resourceId });
+      decrementerCreditSms(); // le SMS est accepté par Orange
+      logger.log(`📤 SMS accepté par Orange pour ${params.client} (${params.telephone})`);
       return { success: true };
     }
     const error = json?.error || `Erreur serveur (HTTP ${res.status})`;
@@ -583,7 +623,7 @@ export function getStatistiquesSms(): {
 
   return {
     total: rapports.length,
-    envoyes: rapports.filter(r => r.resultat === 'Envoyé').length,
+    envoyes: rapports.filter(r => r.resultat === 'Envoyé' || r.resultat === 'Livré').length,
     echecs: rapports.filter(r => r.resultat === 'Échec').length,
     dernierEnvoi: rapports[0],
   };
