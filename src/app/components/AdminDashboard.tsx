@@ -460,7 +460,7 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
       dayData, annualMonths, caMonth, payMonth, bonsMonth, restantMonth,
       caYear, payYear, bonsYear, restantYear,
       brutMonth, netMonth, remiseMonth, margeMonth, prod, totalProduits, coutMonth, margePct, qteVente, qteCmd, coutCmd,
-      margeTable, objCA,
+      margeTable, margeClassement, objCA,
       magData, caGlobalYear, payGlobalYear, bonsGlobalYear, montantRestantTotal, restantGlobalMagasins,
       prodPie,
       evolData, evMin, evMax, evMoy,
@@ -682,7 +682,7 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
               </thead>
               <tbody>
                 {d.margeTable.map((r, i) => {
-                  const m = d.margeClassement[i];
+                  const m = d.margeClassement?.[i];
                   const bg = i % 2 === 0 ? '#3f94b5' : '#75b5cd';
                   return (
                     <tr key={r.mois} style={{ backgroundColor: bg, color: '#111827' }}>
