@@ -500,85 +500,124 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
       </Panel>
       </div>
 
-      {/* 2 ── ACTIVITÉ MENSUELLE ───────────────────────────────────────────── */}
-      <Panel
-        title="ACTIVITÉ MENSUELLE"
-        controls={<div className="flex flex-wrap items-center gap-3">{magSel}{moisSel}{anneeSel}</div>}
-      >
-        {/* Reproduction du bandeau desktop de la référence :
-            4 cartes normales + une colonne AVOIR +/- + Montant Restant. */}
-        <div
-          className="grid w-full lg:w-2/3 overflow-hidden rounded-none md:rounded-sm"
-          style={{ gridTemplateColumns: 'repeat(4, minmax(0, 1fr)) minmax(0, 1fr) minmax(0, 1fr)' }}
+      {/* 2 ── ACTIVITÉ MENSUELLE — MOBILE : rendu historique inchangé */}
+      <div className="lg:hidden">
+        <Panel
+          title="ACTIVITÉ MENSUELLE"
+          controls={<div className="flex flex-wrap items-center gap-3">{magSel}{moisSel}{anneeSel}</div>}
         >
-          {[
-            { value: fmtInt(d.objectif),  label: 'Objectif',           bg: C_OBJECTIF, fg: '#fff' },
-            { value: fmtInt(d.caMonth),   label: "Chiffre d'Affaires", bg: C_CA,       fg: '#fff' },
-            { value: fmtInt(d.payMonth),  label: 'Paiements Clients',  bg: C_PAY,      fg: '#fff' },
-            { value: fmtInt(d.bonsMonth), label: 'Bons Assurance',     bg: C_BONS,     fg: '#fff' },
-          ].map((c, i) => (
-            <div
-              key={i}
-              className="flex flex-col justify-between"
-              style={{
-                backgroundColor: c.bg,
-                color: c.fg,
-                minHeight: 135,
-                padding: '10px 12px 12px',
-              }}
-            >
-              <div style={{ fontWeight: 700, fontSize: 20, lineHeight: 1.1, textAlign: 'center' }}>{c.value}</div>
-              <div style={{ fontWeight: 700, fontSize: 16, lineHeight: 1.25, textAlign: 'left' }}>{c.label}</div>
-            </div>
-          ))}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-0 overflow-hidden rounded">
+            {[
+              { value: fmtInt(d.objectif), label: 'Objectif', bg: C_OBJECTIF },
+              { value: fmtInt(d.caMonth), label: "Chiffre d'Affaires", bg: C_CA },
+              { value: fmtInt(d.payMonth), label: 'Paiements Clients', bg: C_PAY },
+              { value: fmtInt(d.bonsMonth), label: 'Bons Assurance', bg: C_BONS },
+              { value: fmtInt(Math.max(0, d.payMonth + d.bonsMonth - d.caMonth)), label: 'AVOIR-CLIENT +', bg: C_AVOIR_P, fg: '#111827' },
+              { value: fmtInt(Math.max(0, d.caMonth - d.payMonth - d.bonsMonth)), label: 'AVOIR-CLIENT -', bg: C_AVOIR_M, fg: '#111827' },
+              { value: fmtInt(d.montantRestantTotal), label: 'Montant Restant', bg: C_RESTANT },
+            ].map((c, i) => (
+              <div key={i} className="px-3 py-4 min-h-[95px] flex flex-col justify-between" style={{ backgroundColor: c.bg, color: c.fg || '#fff' }}>
+                <div className="font-bold text-sm">{c.value}</div>
+                <div className="font-semibold text-sm">{c.label}</div>
+              </div>
+            ))}
+          </div>
+          <ResponsiveContainer width="100%" height={360}>
+            <BarChart data={d.dayData}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} />
+              <XAxis dataKey="jour" tick={{ fontSize: 10 }} interval={0} />
+              <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtAxis} />
+              <Tooltip formatter={(v: number) => fmtInt(v) + ' F CFA'} />
+              <Legend wrapperStyle={{ fontSize: 11 }} />
+              <Bar key="ca" dataKey="ca" name="Chiffre d'Affaires" fill={C_CA} />
+              <Bar key="paiements" dataKey="paiements" name="Paiements Clients" fill={C_PAY} />
+              <Bar key="bons" dataKey="bons" name="Bons Assurance" fill={C_BONS} />
+              <Bar key="restant" dataKey="restant" name="Montant Restant" fill={C_RESTANT} />
+            </BarChart>
+          </ResponsiveContainer>
+        </Panel>
+      </div>
 
-          {/* Colonne AVOIR : exactement une colonne verticale avec + puis -. */}
-          <div className="flex flex-col" style={{ minHeight: 135 }}>
-            <div
-              className="flex flex-1 flex-col justify-between"
-              style={{ backgroundColor: C_AVOIR_P, color: '#111827', padding: '8px 10px' }}
-            >
-              <div style={{ fontWeight: 700, fontSize: 18, lineHeight: 1.1 }}>{fmtInt(Math.max(0, d.payMonth + d.bonsMonth - d.caMonth))}</div>
-              <div style={{ fontWeight: 700, fontSize: 15, lineHeight: 1.15 }}>AVOIR-CLIENT<br />+</div>
-            </div>
-            <div
-              className="flex flex-1 flex-col justify-between"
-              style={{ backgroundColor: C_AVOIR_M, color: '#111827', padding: '8px 10px' }}
-            >
-              <div style={{ fontWeight: 700, fontSize: 18, lineHeight: 1.1 }}>{fmtInt(Math.max(0, d.caMonth - d.payMonth - d.bonsMonth))}</div>
-              <div style={{ fontWeight: 700, fontSize: 15, lineHeight: 1.15 }}>AVOIR-CLIENT<br />-</div>
+      {/* 2bis ── ACTIVITÉ MENSUELLE — DESKTOP : reproduction stricte de la référence */}
+      <section className="hidden lg:block bg-white border border-gray-200" style={{ minHeight: 620 }}>
+        <div className="relative px-[10px] pt-[12px]">
+          <h2 className="font-bold text-[18px] leading-[22px] text-gray-900 mb-[2px]">ACTIVITÉ MENSUELLE</h2>
+
+          {/* Contrôles : exactement à droite du bandeau, comme sur l'image. */}
+          <div className="absolute right-[10px] top-[38px] flex items-center gap-[40px]">
+            <select value={magasin} onChange={e => setMagasin(e.target.value)}
+              aria-label="Magasin"
+              className="w-[201px] h-[38px] border border-gray-300 rounded-[6px] px-3 text-[16px] font-medium text-gray-700 bg-white outline-none">
+              <option value="__TOUS__">Tous les Magasins</option>
+              {magasins.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+            </select>
+            <div className="w-[203px]">
+              <div className="h-[38px] border border-gray-300 rounded-[6px] bg-white flex items-center overflow-hidden">
+                <select value={mois} onChange={e => setMois(Number(e.target.value))}
+                  aria-label="Mois" className="h-full flex-1 px-3 text-[16px] text-gray-600 bg-white outline-none appearance-none">
+                  {MOIS_LONG.map((m, i) => <option key={m} value={i}>{m}</option>)}
+                </select>
+                <span className="px-2 text-gray-500 text-[16px] select-none">📅</span>
+                <select value={annee} onChange={e => setAnnee(Number(e.target.value))}
+                  aria-label="Année" className="h-full w-[76px] px-1 text-[16px] text-gray-600 bg-white outline-none border-l border-gray-200 appearance-none">
+                  {years.map(y => <option key={y} value={y}>{y}</option>)}
+                </select>
+              </div>
             </div>
           </div>
 
-          {/* Montant Restant : même hauteur et même colonne que la référence. */}
-          <div
-            className="flex flex-col justify-between"
-            style={{ backgroundColor: C_RESTANT, color: '#fff', minHeight: 135, padding: '10px 12px 12px' }}
-          >
-            <div style={{ fontWeight: 700, fontSize: 20, lineHeight: 1.1, textAlign: 'center' }}>{fmtInt(d.montantRestantTotal)}</div>
-            <div style={{ fontWeight: 700, fontSize: 16, lineHeight: 1.25 }}>Montant<br />Restant</div>
+          {/* Bandeau : 4 cartes + AVOIR (+/-) + Montant Restant. */}
+          <div className="flex w-[calc(100%_-_540px)] max-w-[968px] min-w-[900px] h-[136px] overflow-hidden">
+            {[
+              { value: fmtInt(d.objectif), label: 'Objectif', bg: C_OBJECTIF },
+              { value: fmtInt(d.caMonth), label: "Chiffre\nd'Affaires", bg: C_CA },
+              { value: fmtInt(d.payMonth), label: 'Paiements\nClients', bg: C_PAY },
+              { value: fmtInt(d.bonsMonth), label: 'Bons\nAssurance', bg: C_BONS },
+            ].map((c, i) => (
+              <div key={i} className="flex-1 px-[10px] py-[8px] flex flex-col justify-between" style={{ backgroundColor: c.bg, color: '#fff' }}>
+                <div className="font-bold text-[18px] leading-[20px] text-center">{c.value}</div>
+                <div className="font-bold text-[18px] leading-[23px] whitespace-pre-line">{c.label}</div>
+              </div>
+            ))}
+
+            <div className="w-[149px] flex flex-col">
+              <div className="flex-1 px-[8px] py-[6px] flex flex-col justify-between" style={{ backgroundColor: C_AVOIR_P, color: '#111827' }}>
+                <div className="font-bold text-[18px] leading-[20px]">{fmtInt(Math.max(0, d.payMonth + d.bonsMonth - d.caMonth))}</div>
+                <div className="font-bold text-[17px] leading-[20px]">AVOIR-CLIENT<br/>+</div>
+              </div>
+              <div className="flex-1 px-[8px] py-[6px] flex flex-col justify-between" style={{ backgroundColor: C_AVOIR_M, color: '#111827' }}>
+                <div className="font-bold text-[18px] leading-[20px]">{fmtInt(Math.max(0, d.caMonth - d.payMonth - d.bonsMonth))}</div>
+                <div className="font-bold text-[17px] leading-[20px]">AVOIR-CLIENT<br/>-</div>
+              </div>
+            </div>
+
+            <div className="w-[167px] px-[10px] py-[8px] flex flex-col justify-between" style={{ backgroundColor: C_RESTANT, color: '#fff' }}>
+              <div className="font-bold text-[18px] leading-[20px] text-center">{fmtInt(d.montantRestantTotal)}</div>
+              <div className="font-bold text-[18px] leading-[23px]">Montant<br/>Restant</div>
+            </div>
+          </div>
+
+          {/* Graphique : même zone, même marge gauche et même hauteur que la référence. */}
+          <div className="mt-[6px] w-full h-[430px] pr-[24px] pl-[72px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={d.dayData} margin={{ top: 0, right: 0, left: 0, bottom: 20 }}>
+                <CartesianGrid strokeDasharray="0" vertical={false} stroke="#eeeeee" />
+                <XAxis dataKey="jour" tick={{ fontSize: 12, fill: '#111827' }} interval={0} axisLine={{ stroke: '#111827' }} tickLine={{ stroke: '#111827' }} />
+                <YAxis tick={{ fontSize: 12, fill: '#111827' }} tickFormatter={v => String(v)} axisLine={{ stroke: '#111827' }} tickLine={{ stroke: '#111827' }} />
+                <Tooltip formatter={(v: number) => fmtInt(v) + ' F CFA'} />
+                <Legend wrapperStyle={{ fontSize: 13, bottom: 0 }} />
+                <Bar key="ca" dataKey="ca" name="Chiffre d'Affaires" fill={C_CA} />
+                <Bar key="paiements" dataKey="paiements" name="Paiements Clients" fill={C_PAY} />
+                <Bar key="bons" dataKey="bons" name="Bons Assurance" fill={C_BONS} />
+                <Bar key="avoirP" dataKey={() => 0} name="AVOIR-CLIENT +" fill={C_AVOIR_P} />
+                <Bar key="avoirM" dataKey={() => 0} name="AVOIR-CLIENT -" fill={C_AVOIR_M} />
+                <Bar key="restant" dataKey="restant" name="Montant Restant" fill={C_RESTANT} />
+                <Bar key="objectif" dataKey={() => d.objectif} name="Objectif" fill={C_OBJECTIF} />
+              </BarChart>
+            </ResponsiveContainer>
           </div>
         </div>
-
-        {/* Sur petit écran, on garde la lisibilité sans changer le rendu desktop. */}
-        <div className="md:hidden mt-3 text-xs text-gray-500">
-          Utilisez les sélecteurs en haut de la section pour changer de magasin, de mois ou d'année.
-        </div>
-
-        <ResponsiveContainer width="100%" height={360}>
-          <BarChart data={d.dayData}>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} />
-            <XAxis dataKey="jour" tick={{ fontSize: 10 }} interval={0} />
-            <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtAxis} />
-            <Tooltip formatter={(v: number) => fmtInt(v) + ' F CFA'} />
-            <Legend wrapperStyle={{ fontSize: 11 }} />
-            <Bar key="ca" dataKey="ca" name="Chiffre d'Affaires" fill={C_CA} />
-            <Bar key="paiements" dataKey="paiements" name="Paiements Clients" fill={C_PAY} />
-            <Bar key="bons" dataKey="bons" name="Bons Assurance" fill={C_BONS} />
-            <Bar key="restant" dataKey="restant" name="Montant Restant" fill={C_RESTANT} />
-          </BarChart>
-        </ResponsiveContainer>
-      </Panel>
+      </section>
 
       {/* 3 ── RAPPORT MARGE ────────────────────────────────────────────────── */}
       <Panel title="Rapport Marge" controls={<div className="flex gap-2">{magSel}{moisSel}{anneeSel}</div>}>
