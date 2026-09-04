@@ -508,7 +508,7 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
         {/* Reproduction du bandeau desktop de la référence :
             4 cartes normales + une colonne AVOIR +/- + Montant Restant. */}
         <div
-          className="grid w-full overflow-hidden rounded-none md:rounded-sm"
+          className="grid w-full lg:w-2/3 overflow-hidden rounded-none md:rounded-sm"
           style={{ gridTemplateColumns: 'repeat(4, minmax(0, 1fr)) minmax(0, 1fr) minmax(0, 1fr)' }}
         >
           {[
