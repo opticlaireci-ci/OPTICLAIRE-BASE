@@ -545,6 +545,7 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
           .monthly-mobile-cards {
             display: grid !important;
             grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+            grid-auto-rows: minmax(96px, auto) !important;
             gap: 1px !important;
             background: #fff;
             overflow: hidden !important;

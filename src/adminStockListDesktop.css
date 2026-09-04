@@ -538,33 +538,27 @@
     gap: 10px !important;
   }
 
+  /* Activité mensuelle : les 6 cartes restent toutes visibles dans le viewport.
+     Aucun défilement horizontal pour cette zone. */
   .admin-general-dashboard .monthly-mobile-cards {
-    display: flex !important;
-    flex-wrap: nowrap !important;
-    overflow-x: auto !important;
-    overflow-y: hidden !important;
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    grid-auto-rows: minmax(96px, auto) !important;
+    gap: 1px !important;
+    overflow: hidden !important;
     width: 100% !important;
-    -webkit-overflow-scrolling: touch !important;
-    scrollbar-width: thin;
-  }
-
-  .admin-general-dashboard .monthly-mobile-cards > div {
-    flex: 0 0 145px !important;
-    width: 145px !important;
-    min-width: 145px !important;
-    min-height: 100px !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
     box-sizing: border-box !important;
   }
 
-  .admin-general-dashboard .monthly-mobile-cards > div:nth-child(5),
-  .admin-general-dashboard .monthly-mobile-cards > div:nth-child(6) {
-    flex-basis: 145px !important;
-    min-width: 145px !important;
-  }
-
-  .admin-general-dashboard .monthly-mobile-cards > div:nth-child(7) {
-    flex-basis: 155px !important;
-    min-width: 155px !important;
+  .admin-general-dashboard .monthly-mobile-cards > div {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    min-height: 96px !important;
+    box-sizing: border-box !important;
+    overflow: hidden !important;
   }
 
   .admin-general-dashboard .bg-white {
