@@ -620,7 +620,7 @@ export function InventairePage() {
           </div>
 
           {/* Cartes articles — mobile */}
-          <div className="md:hidden" style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '20px' }}>
+          <div className="stock-mobile-legacy-hidden" style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '20px' }}>
             {filteredItems.length === 0 ? (
               <div style={{ padding: '24px', textAlign: 'center', color: '#9ca3af', fontSize: '13px', border: '1px solid #e5e7eb', borderRadius: '6px' }}>
                 Aucun article ajouté
@@ -809,7 +809,7 @@ export function InventairePage() {
       </div>
 
       {/* Tableau inventaires — desktop */}
-      <div className="hidden md:block" style={{ backgroundColor: '#fff', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
+      <div className="admin-stock-table-wrap" style={{ backgroundColor: '#fff', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ backgroundColor: '#f9fafb', borderBottom: '2px solid #e5e7eb' }}>
@@ -879,7 +879,7 @@ export function InventairePage() {
       </div>
 
       {/* Cartes inventaires — mobile */}
-      <div className="md:hidden" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+      <div className="stock-mobile-legacy-hidden" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
         {filteredInventaires.length === 0 ? (
           <div style={{ padding: '32px', textAlign: 'center', color: '#9ca3af', fontSize: '14px', backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
             Aucun inventaire trouvé

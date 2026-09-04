@@ -435,10 +435,7 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
 
       {/* 2 ── ACTIVITÉ MENSUELLE — MOBILE : rendu historique inchangé */}
       <div className="lg:hidden">
-        <Panel
-          title="ACTIVITÉ MENSUELLE"
-          controls={<div className="flex flex-wrap items-center gap-2 w-full">{magSel}{moisSel}{anneeSel}</div>}
-        >
+        <Panel title="ACTIVITÉ MENSUELLE">
           <div className="monthly-mobile-cards">
             <div className="monthly-mobile-kpi" style={{ backgroundColor: C_OBJECTIF, color: '#fff' }}>
               <div className="monthly-mobile-value">{fmtInt(d.objectif)}</div>
@@ -471,6 +468,7 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
               <div className="monthly-mobile-label">Montant Restant</div>
             </div>
           </div>
+          <div className="monthly-mobile-controls">{magSel}{moisSel}{anneeSel}</div>
           <ResponsiveContainer width="100%" height={360}>
             <BarChart data={d.dayData}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} />
@@ -495,12 +493,14 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
             grid-template-rows: 170px 170px !important;
             gap: 1px !important;
             width: 100% !important;
+            min-width: 0 !important;
             overflow: hidden !important;
             border-radius: 2px !important;
             box-sizing: border-box !important;
           }
           .monthly-mobile-kpi, .monthly-mobile-avoir, .monthly-mobile-restant {
             min-width: 0 !important;
+            width: auto !important;
             box-sizing: border-box !important;
             overflow: hidden !important;
           }
@@ -541,15 +541,35 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
             line-height: 1.15 !important;
             font-weight: 700 !important;
             overflow-wrap: anywhere !important;
+            word-break: break-word !important;
           }
           .monthly-mobile-label {
             font-size: clamp(12px, 3.5vw, 18px) !important;
             line-height: 1.15 !important;
             font-weight: 700 !important;
             overflow-wrap: anywhere !important;
+            word-break: break-word !important;
           }
           .monthly-mobile-restant .monthly-mobile-value { font-size: clamp(18px, 5vw, 24px) !important; }
           .monthly-mobile-restant .monthly-mobile-label { font-size: clamp(16px, 4.5vw, 22px) !important; }
+          .monthly-mobile-controls {
+            display: grid !important;
+            grid-template-columns: 1fr !important;
+            gap: 4px !important;
+            width: 100% !important;
+            margin: 0 0 10px !important;
+            padding: 0 !important;
+          }
+          .monthly-mobile-controls > * {
+            width: 100% !important;
+            min-width: 0 !important;
+            box-sizing: border-box !important;
+          }
+          .monthly-mobile-controls select, .monthly-mobile-controls input {
+            width: 100% !important;
+            min-height: 48px !important;
+            box-sizing: border-box !important;
+          }
         }
         /* La largeur du dashboard est celle qui reste réellement après le menu latéral.
            Les container queries rendent le rendu identique quelle que soit la largeur

@@ -318,7 +318,7 @@ export function BonRetourMagasinPage() {
       </Box>
 
       {/* Mobile cards — visible uniquement sur petits écrans */}
-      <div className="md:hidden" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+      <div className="stock-mobile-legacy-hidden" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
         {bons.length === 0 ? (
           <div
             style={{
@@ -480,7 +480,7 @@ export function BonRetourMagasinPage() {
       </div>
 
       {/* Tableau desktop — masqué sur petits écrans */}
-      <div className="hidden md:block">
+      <div className="admin-stock-table-wrap">
         <TableContainer component={Paper}>
           <Table>
             <TableHead>

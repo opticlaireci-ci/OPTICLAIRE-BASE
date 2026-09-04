@@ -38,54 +38,81 @@ const escapePrintHtml = (value: unknown) => String(value ?? '')
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
 
-/** Imprime le contenu du bon de distribution sélectionné, et non la page courante. */
+/** Imprime directement le bon de distribution sélectionné, dans une mise en page
+ * proche du PDF de référence : en-tête LECLAIRE, métadonnées, magasin/client,
+ * tableau des montures/accessoires et quantité reçue. */
 export function imprimerBonDistribution(bon: BonDistributionPrintData, format: 'A4' | 'A5' | 'B5' = 'A4') {
   const reference = bon.reference || bon.numero || '-';
-  const date = bon.dateCreation || bon.createdAt || new Date().toISOString();
+  const dateValue = bon.dateCreation || bon.createdAt || new Date().toISOString();
+  const dateObj = new Date(dateValue);
+  const dateText = Number.isNaN(dateObj.getTime()) ? String(dateValue) : dateObj.toLocaleString('fr-FR');
+  const dayText = Number.isNaN(dateObj.getTime()) ? '' : dateObj.toLocaleDateString('fr-FR', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' });
   const items = Array.isArray(bon.items) ? bon.items : [];
   const totalQte = items.reduce((sum, item) => sum + (Number(item.quantite) || 0), 0);
-  const totalValeur = items.reduce((sum, item) => sum + (Number(item.quantite) || 0) * (Number(item.prixUnit ?? item.prixVente) || 0), 0);
   const rows = items.length ? items.map((item, i) => `
     <tr>
-      <td>${i + 1}</td>
+      <td class="center">${i + 1}</td>
       <td>${escapePrintHtml(item.designation || '-')}</td>
-      <td>${escapePrintHtml(item.type || 'Monture / Accessoire')}</td>
-      <td class="num">${Number(item.quantite) || 0}</td>
-      <td class="num">${(Number(item.prixUnit ?? item.prixVente) || 0).toLocaleString('fr-FR')}</td>
-      <td class="num">${((Number(item.quantite) || 0) * (Number(item.prixUnit ?? item.prixVente) || 0)).toLocaleString('fr-FR')}</td>
+      <td class="center">${escapePrintHtml(item.type === 'accessoire' ? 'Accessoire' : 'Monture')}</td>
+      <td class="center">${Number(item.quantite) || 0}</td>
     </tr>`).join('') : `
-    <tr><td colspan="6" class="empty">Aucune monture ou accessoire distribué.</td></tr>`;
+    <tr><td colspan="4" class="empty">Aucune monture ou accessoire distribué.</td></tr>`;
 
   const win = window.open('', '_blank', 'width=1000,height=800');
   if (!win) {
     alert("L'impression a été bloquée par le navigateur. Autorisez les fenêtres contextuelles puis réessayez.");
     return;
   }
+
   win.document.open();
-  win.document.write(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Bon de Distribution ${escapePrintHtml(reference)}</title>
+  win.document.write(`<!doctype html><html lang="fr"><head><meta charset="utf-8">
+    <title>Bon de Distribution N° ${escapePrintHtml(reference)}</title>
     <style>
-      @page { size: ${format}; margin: 10mm; }
+      @page { size: ${format}; margin: 9mm; }
       * { box-sizing: border-box; }
-      body { font-family: Arial, Helvetica, sans-serif; color: #111; margin: 0; font-size: 12px; }
-      .header { display:flex; justify-content:space-between; align-items:flex-start; border-bottom:2px solid #111; padding-bottom:10px; margin-bottom:14px; }
-      h1 { font-size: 20px; margin:0 0 5px; } .meta { line-height:1.55; }
-      .box { border:1px solid #aaa; padding:10px; margin-bottom:14px; }
-      .grid { display:grid; grid-template-columns:1fr 1fr; gap:6px 20px; }
-      table { width:100%; border-collapse:collapse; margin-top:8px; }
-      th { background:#eeeeee; font-weight:700; text-align:left; }
-      th, td { border:1px solid #999; padding:7px; }
-      td.num, th.num { text-align:right; } .empty { text-align:center; padding:20px; }
-      .totals { margin-top:12px; display:flex; justify-content:flex-end; gap:24px; font-weight:700; }
-      .signatures { margin-top:45px; display:grid; grid-template-columns:1fr 1fr; gap:50px; }
-      .signature { border-top:1px solid #777; padding-top:6px; text-align:center; }
+      body { margin:0; font-family: Arial, Helvetica, sans-serif; color:#111; font-size:12px; }
+      .header { text-align:left; margin-bottom:12px; }
+      .brand { font-size:20px; font-weight:700; margin-bottom:2px; }
+      .company { line-height:1.35; }
+      .date { text-align:right; margin-top:5px; }
+      .meta { border:1px solid #222; padding:8px; margin:10px 0 12px; line-height:1.55; }
+      .meta-grid { display:grid; grid-template-columns:1fr 1fr; column-gap:18px; }
+      .title { font-size:16px; font-weight:700; text-align:center; margin:8px 0 10px; }
+      table { width:100%; border-collapse:collapse; }
+      th, td { border:1px solid #555; padding:7px 6px; vertical-align:top; }
+      th { font-weight:700; text-align:left; background:#f1f1f1; }
+      .center { text-align:center; }
+      .total { font-weight:700; margin-top:10px; border-top:1px solid #222; padding-top:8px; }
+      .signatures { display:grid; grid-template-columns:1fr 1fr; gap:40px; margin-top:55px; }
+      .signature { text-align:center; padding-top:7px; border-top:1px solid #777; }
+      .footer { margin-top:35px; padding-top:8px; border-top:1px solid #999; text-align:center; font-size:9px; }
+      .empty { text-align:center; padding:18px; }
       @media print { body { -webkit-print-color-adjust:exact; print-color-adjust:exact; } }
     </style></head><body>
-    <div class="header"><div><h1>BON DE DISTRIBUTION N° ${escapePrintHtml(reference)}</h1><div class="meta">Date : ${escapePrintHtml(new Date(date).toLocaleString('fr-FR'))}</div></div><div class="meta"><strong>Statut :</strong> ${escapePrintHtml(bon.statut || 'En attente')}<br><strong>Enregistré par :</strong> ${escapePrintHtml(bon.createdBy || bon.responsable || '-')}</div></div>
-    <div class="box"><div class="grid"><div><strong>Magasin récepteur :</strong> ${escapePrintHtml(bon.magasinRecepteur || bon.magasinDest || '-')}</div><div><strong>Responsable :</strong> ${escapePrintHtml(bon.responsable || '-')}</div></div></div>
-    <table><thead><tr><th>#</th><th>Monture / Accessoire</th><th>Type</th><th class="num">Quantité</th><th class="num">Prix unitaire</th><th class="num">Total</th></tr></thead><tbody>${rows}</tbody></table>
-    <div class="totals"><span>Quantité totale : ${totalQte}</span><span>Valeur totale : ${totalValeur.toLocaleString('fr-FR')} F CFA</span></div>
-    <div class="signatures"><div class="signature">Émetteur</div><div class="signature">Réception magasin</div></div>
-    <script>window.addEventListener('load',function(){setTimeout(function(){window.print();},250);});</script>
+      <div class="header">
+        <div class="brand">LECLAIRE</div>
+        <div class="company">8 Pool, Rond-point de la Rivera Palmeraie<br>WhatsApp : +225 07 15 15 25 25<br>Email : Leclaire.optic@gmail.com</div>
+        <div class="date">Abidjan, Le ${escapePrintHtml(dayText || dateText)}</div>
+      </div>
+      <div class="meta">
+        <div class="meta-grid">
+          <div><strong>MAGASIN:</strong> ${escapePrintHtml(bon.magasinRecepteur || bon.magasinDest || '-')}</div>
+          <div><strong>Récepteur:</strong> ${escapePrintHtml(bon.responsable || '-')}</div>
+          <div><strong>Statut:</strong> ${escapePrintHtml(bon.statut || 'En cours')}</div>
+          <div><strong>Édité par:</strong> ${escapePrintHtml(bon.createdBy || bon.responsable || '-')}</div>
+          <div><strong>Édité le:</strong> ${escapePrintHtml(dateText)}</div>
+        </div>
+      </div>
+      <div class="title">BON DE DISTRIBUTION N° ${escapePrintHtml(reference)}</div>
+      <table>
+        <thead><tr><th>#</th><th>Monture | Accessoire</th><th>Type</th><th class="center">QUANTITÉ<br>REÇUE</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <div class="total">Bon de Distribution Total Quantité ${totalQte}</div>
+      <div class="signatures"><div class="signature">Émetteur</div><div class="signature">Réception magasin</div></div>
+      <div class="footer">+225 07 15 15 25 25 | Leclaire.optic@gmail.com | 8 Pool, R.point de la rivera Palmeraie</div>
+      <script>window.addEventListener('load',function(){setTimeout(function(){window.focus();window.print();},100);});</script>
     </body></html>`);
   win.document.close();
 }
+

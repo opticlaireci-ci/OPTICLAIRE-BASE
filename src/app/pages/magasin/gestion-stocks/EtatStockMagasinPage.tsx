@@ -357,7 +357,7 @@ export function EtatStockMagasinPage() {
       </Paper>
 
       {/* Mobile cards — visible uniquement sur petits écrans */}
-      <div className="md:hidden" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+      <div className="stock-mobile-legacy-hidden" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
         {filteredMontures.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '32px', color: '#666', backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e0e0e0' }}>
             Aucune monture/accessoire en stock distribué ou transféré dans ce magasin
@@ -490,7 +490,7 @@ export function EtatStockMagasinPage() {
       </div>
 
       {/* Tableau desktop — masqué sur petits écrans */}
-      <div className="hidden md:block">
+      <div className="admin-stock-table-wrap">
         <TableContainer component={Paper}>
           <Table size="small">
             <TableHead>

@@ -529,7 +529,7 @@ export function BonDistributionGlobalPage() {
       </div>
 
       {/* Desktop Table */}
-      <div className="hidden md:block admin-stock-table-wrap" style={{ backgroundColor: '#fff', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+      <div className="admin-stock-table-wrap" style={{ backgroundColor: '#fff', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
@@ -597,7 +597,7 @@ export function BonDistributionGlobalPage() {
       </div>
 
       {/* Mobile Cards */}
-      <div className="md:hidden" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+      <div className="stock-mobile-legacy-hidden" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
         {filteredBons.length === 0 ? (
           <div style={{ padding: '40px', textAlign: 'center', color: '#9ca3af', backgroundColor: '#fff', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
             Aucun bon de distribution trouvé

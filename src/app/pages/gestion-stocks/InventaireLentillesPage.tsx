@@ -575,7 +575,7 @@ export function InventaireLentillesPage() {
           </div>
 
           {/* Cartes lignes — mobile */}
-          <div className="md:hidden" style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: 20 }}>
+          <div className="stock-mobile-legacy-hidden" style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: 20 }}>
             {filteredItems.length === 0 ? (
               <div style={{ padding: '24px', textAlign: 'center', color: '#9ca3af', fontSize: 13, border: '1px solid #e5e7eb', borderRadius: 6 }}>
                 Aucune ligne ajoutée — sélectionnez un SPH et un CYL puis cliquez sur le bouton d'ajout.
@@ -668,7 +668,7 @@ export function InventaireLentillesPage() {
         </div>
 
         {/* Tableau détail — desktop */}
-        <div className="hidden md:block" style={{ backgroundColor: '#fff', borderRadius: 8, border: '1px solid #e5e7eb', overflow: 'hidden' }}>
+        <div className="admin-stock-table-wrap" style={{ backgroundColor: '#fff', borderRadius: 8, border: '1px solid #e5e7eb', overflow: 'hidden' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ backgroundColor: '#f9fafb', borderBottom: '2px solid #e5e7eb' }}>
@@ -703,7 +703,7 @@ export function InventaireLentillesPage() {
         </div>
 
         {/* Cartes détail — mobile */}
-        <div className="md:hidden" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        <div className="stock-mobile-legacy-hidden" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {detailInv.items.map((item) => {
             const n = item.marge < 0;
             return (
@@ -782,7 +782,7 @@ export function InventaireLentillesPage() {
       </div>
 
       {/* Tableau — desktop */}
-      <div className="hidden md:block" style={{ backgroundColor: '#fff', borderRadius: 8, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
+      <div className="admin-stock-table-wrap" style={{ backgroundColor: '#fff', borderRadius: 8, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ backgroundColor: '#f9fafb', borderBottom: '2px solid #e5e7eb' }}>
@@ -858,7 +858,7 @@ export function InventaireLentillesPage() {
       </div>
 
       {/* Cartes lentilles — mobile */}
-      <div className="md:hidden" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+      <div className="stock-mobile-legacy-hidden" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
         {filteredListe.length === 0 ? (
           <div style={{ padding: '32px', textAlign: 'center', color: '#9ca3af', fontSize: '14px', backgroundColor: '#fff', borderRadius: 8, border: '1px solid #e5e7eb' }}>
             Aucun inventaire de lentilles trouvé

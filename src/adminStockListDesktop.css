@@ -588,3 +588,88 @@
     max-width: 100% !important;
   }
 }
+
+
+/* V19: sur mobile, conserver le vrai tableau de gestion des stocks.
+   Les anciennes cartes mobiles sont masquées afin d'avoir exactement les mêmes
+   colonnes que sur Desktop, avec défilement horizontal. */
+@media (max-width: 767px) {
+  .admin-stock-list-page {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    padding: 10px !important;
+    box-sizing: border-box !important;
+    overflow-x: hidden !important;
+  }
+  .admin-stock-table-wrap {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow-x: auto !important;
+    overflow-y: visible !important;
+    -webkit-overflow-scrolling: touch !important;
+    background: #fff !important;
+    border: 1px solid #ddd !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+  }
+  .admin-stock-table-wrap table {
+    width: max-content !important;
+    min-width: 980px !important;
+    table-layout: auto !important;
+    border-collapse: collapse !important;
+  }
+  .admin-stock-table-wrap th {
+    height: 58px !important;
+    padding: 10px !important;
+    font-size: 14px !important;
+    white-space: nowrap !important;
+    background: #fafafa !important;
+    border: 1px solid #ddd !important;
+    color: #111 !important;
+  }
+  .admin-stock-table-wrap td {
+    min-height: 56px !important;
+    padding: 9px 10px !important;
+    font-size: 14px !important;
+    white-space: nowrap !important;
+    vertical-align: middle !important;
+    border-bottom: 1px solid #ddd !important;
+    border-left: 1px solid #eee !important;
+  }
+  .admin-stock-table-wrap td:last-child, .admin-stock-table-wrap th:last-child {
+    min-width: 275px !important;
+  }
+  .admin-stock-table-wrap button {
+    min-height: 42px !important;
+    min-width: 52px !important;
+  }
+  .stock-mobile-legacy-hidden {
+    display: none !important;
+  }
+  .admin-stock-search-filters {
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+  .admin-stock-search-filters > div {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
+    width: 100% !important;
+  }
+  .admin-stock-search-filters input,
+  .admin-stock-search-filters select,
+  .admin-stock-search-filters button {
+    width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+  }
+}
+
+@media (max-width: 767px) {
+  .admin-stock-table-wrap .MuiTableContainer-root,
+  .admin-stock-table-wrap { overflow-x: auto !important; -webkit-overflow-scrolling: touch !important; }
+  .admin-stock-table-wrap .MuiTable-root { min-width: 900px !important; width: max-content !important; }
+  .admin-stock-table-wrap .MuiTableCell-root { white-space: nowrap !important; font-size: 14px !important; padding: 9px 10px !important; }
+}

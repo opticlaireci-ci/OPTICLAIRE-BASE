@@ -262,7 +262,7 @@ export function BonPeremptionPage() {
           </div>
 
           {/* Cartes articles — mobile */}
-          <div className="md:hidden" style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '24px' }}>
+          <div className="stock-mobile-legacy-hidden" style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '24px' }}>
             {items.length === 0 ? (
               <div style={{ padding: '20px', textAlign: 'center', color: '#9ca3af', border: '1px solid #e5e7eb', borderRadius: '6px' }}>
                 Aucun article ajouté
@@ -442,7 +442,7 @@ export function BonPeremptionPage() {
       </div>
 
       {/* Table — desktop */}
-      <div className="hidden md:block admin-stock-table-wrap" style={{ backgroundColor: '#fff', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+      <div className="admin-stock-table-wrap" style={{ backgroundColor: '#fff', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
@@ -502,7 +502,7 @@ export function BonPeremptionPage() {
       </div>
 
       {/* Cartes bons péremption — mobile */}
-      <div className="md:hidden" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+      <div className="stock-mobile-legacy-hidden" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
         {filteredBons.length === 0 ? (
           <div style={{ padding: '32px', textAlign: 'center', color: '#9ca3af', fontSize: '14px', backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
             Aucun bon de péremption-casse trouvé

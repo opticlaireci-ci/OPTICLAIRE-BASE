@@ -255,7 +255,7 @@ export function EtatStockGlobalPage() {
       </div>
 
       {/* Mobile Cards */}
-      <div className="md:hidden" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+      <div className="stock-mobile-legacy-hidden" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
         {filteredStocks.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '40px', color: '#9ca3af', backgroundColor: '#fff', borderRadius: '8px' }}>Aucun article trouvé</div>
         ) : filteredStocks.map((item, index) => {
@@ -300,7 +300,7 @@ export function EtatStockGlobalPage() {
       </div>
 
       {/* Desktop Table */}
-      <div className="hidden md:block" style={{ backgroundColor: '#fff', borderRadius: '8px', overflowX: 'auto', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+      <div className="admin-stock-table-wrap" style={{ backgroundColor: '#fff', borderRadius: '8px', overflowX: 'auto', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '800px' }}>
           <thead>
             <tr style={{ backgroundColor: '#f9fafb', borderBottom: '2px solid #e5e7eb' }}>
