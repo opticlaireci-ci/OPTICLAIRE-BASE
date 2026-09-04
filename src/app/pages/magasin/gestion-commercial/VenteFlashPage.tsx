@@ -614,7 +614,7 @@ function ListeVentesFlash({ magasinId, onNouvelle }: { magasinId: string; onNouv
             <div className="p-5 flex flex-col gap-4 text-sm">
               <div className="grid grid-cols-2 gap-3">
                 <div><span className="text-gray-500">N° Client</span><div className="font-mono font-bold text-blue-700">{detail.numeroClient}</div></div>
-                <div><span className="text-gray-500">Client</span><div className="font-semibold">{detail.client}</div></div>
+                <div><span className="text-gray-500">Client</span><div className="font-semibold" style={{ overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{detail.client}</div></div>
                 <div><span className="text-gray-500">Total Net</span><div className="font-bold">{fmtN(detail.totalNet)} F CFA</div></div>
                 <div><span className="text-gray-500">Total Reste</span><div className="font-bold" style={{ color: detail.totalReste > 0 ? '#e53e3e' : '#38a169' }}>{fmtN(detail.totalReste)} F CFA</div></div>
               </div>

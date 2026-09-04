@@ -109,28 +109,36 @@ async function telechargerFacturePDF(factureData: {
   let y = pdfHeader(doc, magasinId, { date: factureData.date });
 
   // ── Bloc client (bandeau gris) + N° facture / rendez-vous ──────────────────
+  // Le nom du client est limité à la colonne de gauche et revient à la ligne
+  // afin de ne jamais empiéter sur les informations de facture à droite.
   doc.setFillColor(233, 233, 233);
-  doc.rect(14, y, 182, 26, 'F');
+  doc.rect(14, y, 182, 34, 'F');
   doc.setTextColor(0);
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11);
-  doc.text(`(N° ${factureData.numeroClient || '—'}) ${nomClient}`, 18, y + 8);
+  doc.setFontSize(10);
+  const nomClientLignes = doc.splitTextToSize(
+    `(N° ${factureData.numeroClient || '—'}) ${nomClient}`,
+    88
+  ).slice(0, 2);
+  doc.text(nomClientLignes, 18, y + 7, { maxWidth: 88 });
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
-  doc.text(`Téléphone: ${factureData.telephone || ''}`, 18, y + 15);
-  doc.text(`Email: ${factureData.email || ''}`, 18, y + 20);
+  doc.setFontSize(8);
+  doc.text(`Téléphone: ${factureData.telephone || ''}`, 18, y + 19);
+  doc.text(`Email: ${factureData.email || ''}`, 18, y + 25);
+
+  // Colonne droite indépendante : aucune donnée ne peut être recouverte par le nom.
   doc.setFont('helvetica', 'bold');
-  doc.text(`Édité par: ${factureData.editePar || '—'}`, 192, y + 8, { align: 'right' });
+  doc.text(`Édité par: ${factureData.editePar || '—'}`, 192, y + 7, { align: 'right', maxWidth: 78 });
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
-  doc.text(`Édité le, ${fmtDateHeure(factureData.dateEdition || factureData.date)}`, 192, y + 14, { align: 'right' });
+  doc.setFontSize(8);
+  doc.text(`Édité le, ${fmtDateHeure(factureData.dateEdition || factureData.date)}`, 192, y + 14, { align: 'right', maxWidth: 78 });
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11);
-  doc.text(`FACTURE N° ${factureData.numFacture || 'N/A'}`, 192, y + 20, { align: 'right' });
+  doc.setFontSize(10);
+  doc.text(`FACTURE N° ${factureData.numFacture || 'N/A'}`, 192, y + 21, { align: 'right', maxWidth: 78 });
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
-  doc.text(`Rendez-vous: ${fmt(factureData.rdvRetrait)}`, 192, y + 25, { align: 'right' });
-  y += 32;
+  doc.setFontSize(8);
+  doc.text(`Rendez-vous: ${fmt(factureData.rdvRetrait)}`, 192, y + 28, { align: 'right', maxWidth: 78 });
+  y += 40;
 
   const heading = (label: string, yy: number) => {
     doc.setFont('helvetica', 'bold');
@@ -3698,7 +3706,7 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
                   {/* Informations Client */}
                   <div className="rounded-lg p-4 text-white text-sm" style={{ backgroundColor: '#1a7a96' }}>
                     <div className="text-xs font-semibold uppercase mb-2 opacity-90">📋 Informations Client | {fmt(detail.date)}</div>
-                    <div className="font-bold text-base mb-1">{detail.numeroClient} | {detail.client}</div>
+                    <div className="font-bold text-base mb-1" style={{ overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{detail.numeroClient} | {detail.client}</div>
                     <div className="text-sm">{detail.telephone || '—'}</div>
                     {(() => {
                       const venteData = detail as any;
@@ -4244,7 +4252,7 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
                       {/* Informations Client */}
                       <div className="rounded-lg p-4 text-white text-sm" style={{ backgroundColor: '#1a7a96' }}>
                         <div className="text-xs font-semibold uppercase mb-2 opacity-90">📋 Informations Client | {fmt(detail.date)}</div>
-                        <div className="font-bold text-base mb-1">{detail.numeroClient} | {detail.client}</div>
+                        <div className="font-bold text-base mb-1" style={{ overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{detail.numeroClient} | {detail.client}</div>
                         <div className="text-sm">{detail.telephone || '—'}</div>
                         {(() => {
                           const venteData = detail as any;
@@ -4995,7 +5003,7 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
                   <div className="px-3 py-2 flex flex-col gap-2">
                     {/* Client */}
                     <div>
-                      <div className="font-semibold text-gray-800 text-sm">{v.client || '—'}</div>
+                      <div className="font-semibold text-gray-800 text-sm" style={{ overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{v.client || '—'}</div>
                       {v.telephone && <div className="text-xs text-gray-500">{v.telephone}</div>}
                     </div>
                     {/* Montants */}
@@ -5043,7 +5051,18 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
             {/* ── Tableau desktop (≥ md) ── */}
             <div className="hidden md:block bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
               <div className="overflow-x-auto">
-                <table className="text-sm border-collapse" style={{ minWidth: 780 }}>
+                <table className="w-full text-sm border-collapse table-fixed" style={{ minWidth: 1050, tableLayout: 'fixed' }}>
+                  <colgroup>
+                    <col style={{ width: '4%' }} />
+                    <col style={{ width: '12%' }} />
+                    <col style={{ width: '20%' }} />
+                    <col style={{ width: '10%' }} />
+                    <col style={{ width: '7%' }} />
+                    <col style={{ width: '11%' }} />
+                    <col style={{ width: '14%' }} />
+                    <col style={{ width: '9%' }} />
+                    <col style={{ width: '13%' }} />
+                  </colgroup>
                   <thead>
                     <tr style={{ backgroundColor: '#1a7a96' }}>
                       <th className="px-3 py-3 text-white font-semibold text-xs uppercase border border-gray-300 whitespace-nowrap">#</th>
