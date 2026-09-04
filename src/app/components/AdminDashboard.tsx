@@ -540,34 +540,19 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
 
       {/* 2bis ── ACTIVITÉ MENSUELLE — DESKTOP : reproduction stricte de la référence */}
       <section className="hidden lg:block bg-white border border-gray-200" style={{ minHeight: 620 }}>
-        <div className="relative px-[10px] pt-[12px]">
-          <h2 className="font-bold text-[18px] leading-[22px] text-gray-900 mb-[2px]">ACTIVITÉ MENSUELLE</h2>
+        <div className="px-[10px] pt-[12px]">
+          {/* Desktop uniquement : la zone de titre, les cartes et les filtres
+              sont organisés dans deux colonnes. Cela évite tout écrasement
+              lorsque le menu latéral est ouvert, quelle que soit la largeur
+              disponible dans le navigateur. */}
+          <div className="grid grid-cols-1 xl:grid-cols-[minmax(520px,1fr)_minmax(420px,520px)] gap-x-8 gap-y-3 items-start">
+            <div className="min-w-0">
+              <h2 className="font-bold text-[18px] leading-[22px] text-gray-900 mb-[2px]">ACTIVITÉ MENSUELLE</h2>
 
-          {/* Contrôles : exactement à droite du bandeau, comme sur l'image. */}
-          <div className="absolute right-[10px] top-[38px] flex items-center gap-[40px]">
-            <select value={magasin} onChange={e => setMagasin(e.target.value)}
-              aria-label="Magasin"
-              className="w-[201px] h-[38px] border border-gray-300 rounded-[6px] px-3 text-[16px] font-medium text-gray-700 bg-white outline-none">
-              <option value="__TOUS__">Tous les Magasins</option>
-              {magasins.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
-            </select>
-            <div className="w-[203px]">
-              <div className="h-[38px] border border-gray-300 rounded-[6px] bg-white flex items-center overflow-hidden">
-                <select value={mois} onChange={e => setMois(Number(e.target.value))}
-                  aria-label="Mois" className="h-full flex-1 px-3 text-[16px] text-gray-600 bg-white outline-none appearance-none">
-                  {MOIS_LONG.map((m, i) => <option key={m} value={i}>{m}</option>)}
-                </select>
-                <span className="px-2 text-gray-500 text-[16px] select-none">📅</span>
-                <select value={annee} onChange={e => setAnnee(Number(e.target.value))}
-                  aria-label="Année" className="h-full w-[76px] px-1 text-[16px] text-gray-600 bg-white outline-none border-l border-gray-200 appearance-none">
-                  {years.map(y => <option key={y} value={y}>{y}</option>)}
-                </select>
-              </div>
-            </div>
-          </div>
-
-          {/* Bandeau : 4 cartes + AVOIR (+/-) + Montant Restant. */}
-          <div className="flex w-[calc(100%_-_540px)] max-w-[968px] min-w-[900px] h-[136px] overflow-hidden">
+              {/* Bandeau : 4 cartes + AVOIR (+/-) + Montant Restant.
+                  La largeur est fluide : les cartes ne peuvent plus se
+                  réduire à quelques pixels lorsque le menu est ouvert. */}
+              <div className="flex w-full h-[136px] overflow-hidden rounded-none">
             {[
               { value: fmtInt(d.objectif), label: 'Objectif', bg: C_OBJECTIF },
               { value: fmtInt(d.caMonth), label: "Chiffre\nd'Affaires", bg: C_CA },
@@ -594,6 +579,31 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
             <div className="w-[167px] px-[10px] py-[8px] flex flex-col justify-between" style={{ backgroundColor: C_RESTANT, color: '#fff' }}>
               <div className="font-bold text-[18px] leading-[20px] text-center">{fmtInt(d.montantRestantTotal)}</div>
               <div className="font-bold text-[18px] leading-[23px]">Montant<br/>Restant</div>
+              </div>
+            </div>
+
+            {/* Contrôles Desktop : colonne droite, toujours visible même lorsque
+                le menu latéral est déplié. */}
+            <div className="flex items-center gap-5 pt-[28px] min-w-0">
+              <select value={magasin} onChange={e => setMagasin(e.target.value)}
+                aria-label="Magasin"
+                className="flex-1 min-w-0 h-[58px] border border-gray-300 rounded-[8px] px-4 text-[18px] font-medium text-gray-700 bg-white outline-none">
+                <option value="__TOUS__">Tous les Magasins</option>
+                {magasins.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+              </select>
+              <div className="flex-1 min-w-0">
+                <div className="h-[58px] border border-gray-300 rounded-[8px] bg-white flex items-center overflow-hidden">
+                  <select value={mois} onChange={e => setMois(Number(e.target.value))}
+                    aria-label="Mois" className="h-full flex-1 min-w-0 px-4 text-[18px] text-gray-600 bg-white outline-none appearance-none">
+                    {MOIS_LONG.map((m, i) => <option key={m} value={i}>{m}</option>)}
+                  </select>
+                  <span className="px-2 text-gray-500 text-[18px] select-none">📅</span>
+                  <select value={annee} onChange={e => setAnnee(Number(e.target.value))}
+                    aria-label="Année" className="h-full w-[82px] px-1 text-[18px] text-gray-600 bg-white outline-none border-l border-gray-200 appearance-none">
+                    {years.map(y => <option key={y} value={y}>{y}</option>)}
+                  </select>
+                </div>
+              </div>
             </div>
           </div>
 
