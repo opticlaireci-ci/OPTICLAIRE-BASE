@@ -169,6 +169,9 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
   const [mois, setMois] = useState<number>(now.getMonth());
   const [annee, setAnnee] = useState<number>(now.getFullYear());
   const years = Array.from({ length: 5 }, (_, i) => now.getFullYear() - i);
+  // Sélecteur mobile : autorise aussi les mois/années à venir sans modifier
+  // les contrôles Desktop existants.
+  const mobileYears = Array.from({ length: 9 }, (_, i) => now.getFullYear() - 4 + i);
 
   useEffect(() => {
     // Atterrir DIRECTEMENT sur le bloc « STATISTIQUES … (chiffres du jour) ».
@@ -467,8 +470,27 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
 
           <div className="monthly-mobile-store">{magSel}</div>
 
-          <div className="monthly-mobile-month-box">
-            <span>{MOIS_LONG[mois].toLowerCase()} {annee}</span>
+          <div className="monthly-mobile-month-box" aria-label="Sélection de la période de l'activité mensuelle">
+            <select
+              className="monthly-mobile-month-select"
+              value={mois}
+              onChange={e => setMois(Number(e.target.value))}
+              aria-label="Sélectionner le mois"
+            >
+              {MOIS_LONG.map((m, i) => (
+                <option key={m} value={i}>{m.toLowerCase()}</option>
+              ))}
+            </select>
+            <select
+              className="monthly-mobile-year-select"
+              value={annee}
+              onChange={e => setAnnee(Number(e.target.value))}
+              aria-label="Sélectionner l'année"
+            >
+              {mobileYears.map(y => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
           </div>
 
           <div className="monthly-mobile-chart-scroll">
@@ -639,18 +661,48 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
           .monthly-mobile-month-box {
             min-height: 72px;
             margin-top: 0;
+            padding: 10px 12px;
             border: 1px solid #cfcfcf;
             border-radius: 7px;
             background: #fff;
             display: flex;
             align-items: center;
             justify-content: center;
+            gap: 8px;
             color: #4b5563;
-            font-size: clamp(17px, 5.2vw, 21px);
+            text-align: center;
+            overflow: hidden;
+          }
+
+          .monthly-mobile-month-select,
+          .monthly-mobile-year-select {
+            min-width: 0;
+            max-width: 100%;
+            box-sizing: border-box;
+            border: 1px solid #c7cdd4;
+            border-radius: 6px;
+            background: #fff;
+            color: #374151;
+            font-size: clamp(15px, 4.4vw, 19px);
+            font-weight: 600;
             line-height: 1.2;
+            padding: 9px 28px 9px 10px;
             text-align: center;
             overflow-wrap: anywhere;
-            word-break: break-word;
+          }
+
+          .monthly-mobile-month-select {
+            flex: 1 1 auto;
+          }
+
+          .monthly-mobile-year-select {
+            flex: 0 1 92px;
+          }
+
+          .monthly-mobile-month-select:focus,
+          .monthly-mobile-year-select:focus {
+            outline: 2px solid rgba(43, 143, 176, 0.25);
+            outline-offset: 1px;
           }
 
           /* Le graphique peut défiler horizontalement sans provoquer de
