@@ -242,18 +242,22 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
     const inYear = (x: Date | null, y: number) => !!x && x.getFullYear() === y;
     const inMonth = (x: Date | null) => !!x && x.getFullYear() === annee && x.getMonth() === mois;
 
-    // Acompte initial inclus dans la vente (recap.acompte) — hors table reglements.
+    // Acompte initial + règlements complémentaires : tous les paiements sont
+    // rattachés à la facture concernée, même si le règlement est effectué un
+    // autre jour/mois. Cela garantit : CA = paiements + assurance + reste.
     const venteAcompte = (v: any) => Number(v?.recap?.acompte ?? 0) || 0;
+    const paiementVente = (v: any) => venteAcompte(v) + (reglementsParVente[v.id] || 0);
 
     // ── STATISTIQUES DU JOUR ──────────────────────────────────────────────────
     let caToday = 0, bonsToday = 0, payToday = 0, factToday = 0, devisToday = 0;
-    for (const v of realSales) { if (isToday(dateOf(v.date))) { caToday += venteNet(v); bonsToday += bonsAmount(v); factToday++; payToday += venteAcompte(v); } }
+    for (const v of realSales) { if (isToday(dateOf(v.date))) { caToday += venteNet(v); bonsToday += bonsAmount(v); factToday++; payToday += paiementVente(v); } }
     for (const v of devisAll) { if (isToday(dateOf(v.date))) devisToday++; }
-    for (const r of reglementsA) { if (isToday(dateOf(r.date))) payToday += Number(r.montant) || 0; }
 
-    // ── Séries mensuelles (année sélectionnée) ────────────────────────────────
+    // ── Séries mensuelles : les paiements sont rattachés à leur facture ───────
+    // et non à la date du règlement. Le rapprochement financier est donc stable
+    // même lorsqu'un client règle une ancienne facture ce mois-ci.
     const z = () => Array.from({ length: 12 }, () => 0);
-    const caM = z(), payM = z(), bonsM = z(), factCntM = z(), devisCntM = z();
+    const caM = z(), payM = z(), bonsM = z(), factCntM = z(), devisCntM = z(), restantM = z();
     for (const v of realSales) {
       const x = dateOf(v.date);
       if (inYear(x, annee)) {
@@ -261,26 +265,22 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
         caM[m] += venteNet(v);
         bonsM[m] += bonsAmount(v);
         factCntM[m]++;
-        payM[m] += venteAcompte(v);
+        payM[m] += paiementVente(v);
+        restantM[m] += restantVente(v);
       }
     }
     for (const v of devisAll) { const x = dateOf(v.date); if (inYear(x, annee)) devisCntM[x!.getMonth()]++; }
-    for (const r of reglementsA) { const x = dateOf(r.date); if (inYear(x, annee)) payM[x!.getMonth()] += Number(r.montant) || 0; }
-    const restantM = caM.map((c, i) => Math.max(c - payM[i] - bonsM[i], 0));
 
-    // ── Journalier (mois sélectionné) ─────────────────────────────────────────
+    // ── Journalier (mois sélectionné) : factures créées ce jour ──────────────
     const nbJours = new Date(annee, mois + 1, 0).getDate();
     const dayData = Array.from({ length: nbJours }, (_, i) => ({ jour: i + 1, ca: 0, paiements: 0, bons: 0, restant: 0 }));
-    for (const v of realSales) { const x = dateOf(v.date); if (inMonth(x)) { const i = x!.getDate() - 1; if (dayData[i]) { dayData[i].ca += venteNet(v); dayData[i].bons += bonsAmount(v); dayData[i].paiements += venteAcompte(v); } } }
-    for (const r of reglementsA) { const x = dateOf(r.date); if (inMonth(x)) { const i = x!.getDate() - 1; if (dayData[i]) dayData[i].paiements += Number(r.montant) || 0; } }
-    dayData.forEach(dd => { dd.restant = Math.max(dd.ca - dd.paiements - dd.bons, 0); });
+    for (const v of realSales) { const x = dateOf(v.date); if (inMonth(x)) { const i = x!.getDate() - 1; if (dayData[i]) { dayData[i].ca += venteNet(v); dayData[i].bons += bonsAmount(v); dayData[i].paiements += paiementVente(v); dayData[i].restant += restantVente(v); } } }
 
     // ── Cumuls année ──────────────────────────────────────────────────────────
     const caYear = caM.reduce((a, b) => a + b, 0);
     const payYear = payM.reduce((a, b) => a + b, 0);
     const bonsYear = bonsM.reduce((a, b) => a + b, 0);
-    const restantYear = Math.max(caYear - payYear - bonsYear, 0);
-
+    const restantYear = restantM.reduce((a, b) => a + b, 0);
     // ── Bandeau mensuel ───────────────────────────────────────────────────────
     const caMonth = caM[mois], payMonth = payM[mois], bonsMonth = bonsM[mois], restantMonth = restantM[mois];
     const annualMonths = MOIS_SHORT.map((m, i) => ({ mois: m, ca: caM[i], paiements: payM[i], bons: bonsM[i], restant: restantM[i], objectif: 0 }));

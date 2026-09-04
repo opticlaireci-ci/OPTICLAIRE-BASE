@@ -8,12 +8,13 @@ import { chargerVentes, readVentesCache, type VenteSupabase } from '../../servic
 
 /** Map snake_case Firestore → forme camelCase attendue par les graphiques. */
 const mapVenteToVente = (v: VenteSupabase) => ({
+  id: v.id,
   date: v.date,
-  totalNet: v.total_net,
-  montantPaye: (v as any).montant_paye,
-  totalAssurance: (v as any).total_assurance,
-  avoirClient: (v as any).avoir_client,
-  restant: (v as any).restant,
+  totalNet: Number(v.total_net) || 0,
+  montantPaye: Number((v as any).montant_paye ?? v.recap?.acompte) || 0,
+  totalAssurance: Array.isArray(v.bons_assurance) ? v.bons_assurance.reduce((s: number, b: any) => s + (Number(b?.montantPrisEnCharge ?? b?.montant ?? b?.total ?? 0) || 0), 0) : 0,
+  avoirClient: Number((v as any).avoir_client) || 0,
+  restant: Number((v as any).restant) || 0,
 });
 
 interface Objectif {

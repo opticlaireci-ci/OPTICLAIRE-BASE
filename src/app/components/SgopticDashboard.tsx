@@ -7,7 +7,7 @@ import {
 // ── Type minimal attendu pour une vente / un règlement ────────────────────────
 export interface SgopticVente {
   type?: string; date?: string; total_net?: number; totalNet?: number;
-  total_brut?: number; total?: number; recap?: any; bons_assurance?: any[]; statut?: string;
+  total_brut?: number; total?: number; recap?: any; bons_assurance?: any[]; statut?: string; id?: string; magasin_id?: string;
 }
 export interface SgopticReglement { montant?: number; date?: string }
 
@@ -96,32 +96,46 @@ export function SgopticDashboard({ title, ventes, reglements, objectif = 0, taux
     const realSales = ventes.filter(v => (v.type || 'vente') === 'vente');
     const devis = ventes.filter(v => v.type === 'devis');
 
+    // Règle financière unique : une facture/vente porte son TOTAL NET.
+    // Le paiement client d'une facture = acompte initial + tous les règlements
+    // rattachés à cette facture. Le restant = ce que le client doit encore,
+    // après acompte, assurance et règlements complémentaires.
+    const reglementsParVente: Record<string, number> = {};
+    for (const r of reglements) {
+      if (!r.vente_id) continue;
+      reglementsParVente[r.vente_id] = (reglementsParVente[r.vente_id] || 0) + (Number(r.montant) || 0);
+    }
+    const acompteVente = (v: any) => Number(v?.recap?.acompte ?? 0) || 0;
+    const paiementVente = (v: any) => acompteVente(v) + (reglementsParVente[v?.id] || 0);
+    const restantVente = (v: any) => Math.max(venteAmount(v) - paiementVente(v) - bonsAmount(v), 0);
+
     // ── STATISTIQUES DU JOUR ──────────────────────────────────────────────────
     let caToday = 0, bonsToday = 0, payToday = 0, factToday = 0, devisToday = 0;
     for (const v of realSales) {
       if (!isToday(dateOf(v.date))) continue;
-      caToday += venteAmount(v); bonsToday += bonsAmount(v); factToday += 1;
+      caToday += venteAmount(v); bonsToday += bonsAmount(v); payToday += paiementVente(v); factToday += 1;
     }
     for (const v of devis) { if (isToday(dateOf(v.date))) devisToday += 1; }
-    for (const r of reglements) { if (isToday(dateOf(r.date))) payToday += Number(r.montant) || 0; }
     const pctRealiseToday = objectif > 0 ? (caToday / objectif) * 100 : 0;
 
-    // ── Agrégats mensuels sur l'année sélectionnée ────────────────────────────
+    // ── Agrégats mensuels : les paiements sont rattachés à la facture ────────
+    // et non à la date du règlement. Ainsi, pour chaque période :
+    // CA = Paiements Clients + Bons Assurance + Montant Restant.
     const zero = () => Array.from({ length: 12 }, () => 0);
-    const caM = zero(), payM = zero(), bonsM = zero(), factCountM = zero(), devisCountM = zero();
+    const caM = zero(), payM = zero(), bonsM = zero(), factCountM = zero(), devisCountM = zero(), restantM = zero();
     for (const v of realSales) {
       const d = dateOf(v.date); if (!d || d.getFullYear() !== selYear) continue;
-      const m = d.getMonth(); caM[m] += venteAmount(v); bonsM[m] += bonsAmount(v); factCountM[m] += 1;
+      const m = d.getMonth();
+      caM[m] += venteAmount(v);
+      payM[m] += paiementVente(v);
+      bonsM[m] += bonsAmount(v);
+      restantM[m] += restantVente(v);
+      factCountM[m] += 1;
     }
     for (const v of devis) {
       const d = dateOf(v.date); if (!d || d.getFullYear() !== selYear) continue;
       devisCountM[d.getMonth()] += 1;
     }
-    for (const r of reglements) {
-      const d = dateOf(r.date); if (!d || d.getFullYear() !== selYear) continue;
-      payM[d.getMonth()] += Number(r.montant) || 0;
-    }
-    const restantM = caM.map((ca, i) => Math.max(ca - payM[i] - bonsM[i], 0));
 
     // ── Données journalières du mois sélectionné ──────────────────────────────
     const daysInMonth = new Date(selYear, selMonth + 1, 0).getDate();
@@ -129,20 +143,19 @@ export function SgopticDashboard({ title, ventes, reglements, objectif = 0, taux
     for (const v of realSales) {
       const d = dateOf(v.date); if (!d || d.getFullYear() !== selYear || d.getMonth() !== selMonth) continue;
       const idx = d.getDate() - 1;
-      if (dayData[idx]) { dayData[idx].ca += venteAmount(v); dayData[idx].bons += bonsAmount(v); }
+      if (dayData[idx]) {
+        dayData[idx].ca += venteAmount(v);
+        dayData[idx].bons += bonsAmount(v);
+        dayData[idx].paiements += paiementVente(v);
+        dayData[idx].restant += restantVente(v);
+      }
     }
-    for (const r of reglements) {
-      const d = dateOf(r.date); if (!d || d.getFullYear() !== selYear || d.getMonth() !== selMonth) continue;
-      const idx = d.getDate() - 1;
-      if (dayData[idx]) dayData[idx].paiements += Number(r.montant) || 0;
-    }
-    dayData.forEach(dd => { (dd as any).restant = Math.max(dd.ca - dd.paiements - dd.bons, 0); });
 
     // ── Cumuls annuels + variations ───────────────────────────────────────────
     const caYear = caM.reduce((a, b) => a + b, 0);
     const payYear = payM.reduce((a, b) => a + b, 0);
     const bonsYear = bonsM.reduce((a, b) => a + b, 0);
-    const restantYear = Math.max(caYear - payYear - bonsYear, 0);
+    const restantYear = restantM.reduce((a, b) => a + b, 0);
     const avoirPlusYear = Math.max(0, payYear + bonsYear - caYear);
     const avoirMoinsYear = restantYear;
     const prevCA = selMonth > 0 ? caM[selMonth - 1] : 0;
