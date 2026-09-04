@@ -437,9 +437,9 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
       <div className="lg:hidden">
         <Panel
           title="ACTIVITÉ MENSUELLE"
-          controls={<div className="flex flex-wrap items-center gap-3">{magSel}{moisSel}{anneeSel}</div>}
+          controls={<div className="flex flex-wrap items-center gap-2 w-full">{magSel}{moisSel}{anneeSel}</div>}
         >
-          <div className="monthly-mobile-cards grid grid-cols-1 sm:grid-cols-2 gap-0 overflow-hidden rounded">
+          <div className="monthly-mobile-cards grid grid-cols-2 gap-1 rounded">
             {[
               { value: fmtInt(d.objectif), label: 'Objectif', bg: C_OBJECTIF },
               { value: fmtInt(d.caMonth), label: "Chiffre d'Affaires", bg: C_CA },
@@ -449,7 +449,7 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
               { value: fmtInt(Math.max(0, d.caMonth - d.payMonth - d.bonsMonth)), label: 'AVOIR-CLIENT -', bg: C_AVOIR_M, fg: '#111827' },
               { value: fmtInt(d.montantRestantTotal), label: 'Montant Restant', bg: C_RESTANT },
             ].map((c, i) => (
-              <div key={i} className="px-3 py-4 min-h-[95px] flex flex-col justify-between" style={{ backgroundColor: c.bg, color: c.fg || '#fff' }}>
+              <div key={i} className="px-2 py-3 min-h-[96px] flex flex-col justify-between min-w-0" style={{ backgroundColor: c.bg, color: c.fg || '#fff' }}>
                 <div className="font-bold text-sm">{c.value}</div>
                 <div className="font-semibold text-sm">{c.label}</div>
               </div>
@@ -472,6 +472,11 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
       </div>
 
       <style>{`
+        @media (max-width: 767px) {
+          .monthly-mobile-cards > div { min-width: 0 !important; overflow: hidden; }
+          .monthly-mobile-cards > div > div { overflow-wrap: anywhere; }
+          .monthly-mobile-cards .font-bold { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        }
         /* La largeur du dashboard est celle qui reste réellement après le menu latéral.
            Les container queries rendent le rendu identique quelle que soit la largeur
            du navigateur et que le drawer soit ouvert ou replié. */

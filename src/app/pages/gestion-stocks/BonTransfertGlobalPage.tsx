@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Search } from 'lucide-react';
 import { getMagasins } from '../../constants/magasins';
 import { useLiveData } from '../../hooks/useLiveData';
+import { imprimerGestionStock, imprimerFormatGestionStock } from '../../utils/stockActions';
 
 interface BonTransfert {
   id: string;
@@ -25,12 +26,19 @@ const getStatutColor = (statut: string) => {
 };
 
 export function BonTransfertGlobalPage() {
-  const [bons] = useLiveData<BonTransfert>('leclaire_db_bon-transfert');
+  const [bons, setBons] = useLiveData<BonTransfert>('leclaire_db_bon-transfert');
   const [searchTerm, setSearchTerm] = useState('');
   const [searchDate, setSearchDate] = useState('');
   const [filterStatut, setFilterStatut] = useState('');
   const [filterMagasin, setFilterMagasin] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+
+  const handleEdit = (bon: BonTransfert) => {
+    const expediteur = window.prompt('Magasin expéditeur', bon.magasinExpediteur || ''); if (expediteur === null) return;
+    const recepteur = window.prompt('Magasin récepteur', bon.magasinRecepteur || ''); if (recepteur === null) return;
+    const responsable = window.prompt('Récepteur', bon.recepteur || ''); if (responsable === null) return;
+    setBons(bons.map(b => b.id === bon.id ? { ...b, magasinExpediteur: expediteur, magasinRecepteur: recepteur, recepteur: responsable } : b));
+  };
 
   const filteredBons = bons.filter(bon => {
     const matchSearch = searchTerm === '' ||
@@ -172,20 +180,11 @@ export function BonTransfertGlobalPage() {
                   <td style={{ padding: '12px', fontSize: '14px' }}>{bon.magasinRecepteur}</td>
                   <td style={{ padding: '12px', fontSize: '14px' }}>{bon.recepteur}</td>
                   <td style={{ padding: '12px', fontSize: '14px' }}>{bon.statut}</td>
-                  <td style={{ padding: '12px', fontSize: '14px' }}>
-                    <button
-                      style={{
-                        padding: '4px 12px',
-                        backgroundColor: '#3b82f6',
-                        color: '#fff',
-                        border: 'none',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
-                        fontSize: '12px',
-                      }}
-                    >
-                      Éditer
-                    </button>
+                  <td style={{ padding: '8px', fontSize: '14px' }}>
+                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                      <button onClick={() => imprimerGestionStock(`Bon de transfert ${bon.numeroBon}`)} title="Imprimer">🖨️</button>
+                      <button onClick={() => handleEdit(bon)} title="Éditer" style={{ padding: '4px 12px', backgroundColor: '#3b82f6', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' }}>Éditer</button>
+                    </div>
                   </td>
                 </tr>
               ))

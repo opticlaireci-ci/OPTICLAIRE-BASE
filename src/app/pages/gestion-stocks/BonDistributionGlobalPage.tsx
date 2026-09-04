@@ -9,6 +9,7 @@ import { enregistrerDistribution } from '../../services/inventaireService';
 import { upsertBon, supprimerBon, distributionToRow } from '../../services/bonsService';
 import { useLiveData } from '../../hooks/useLiveData';
 import { TENANT } from '../../config/tenant';
+import { imprimerGestionStock, imprimerFormatGestionStock } from '../../utils/stockActions';
 
 interface BonDistribution extends AuditInfo {
   id: string;
@@ -40,6 +41,7 @@ const getStatutColor = (statut: string) => {
 export function BonDistributionGlobalPage() {
   const [bons, setBons] = useLiveData<BonDistribution>('leclaire_db_bon-distribution');
   const [showModal, setShowModal] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [searchDate, setSearchDate] = useState('');
   const [filterStatut, setFilterStatut] = useState('');
@@ -74,10 +76,13 @@ export function BonDistributionGlobalPage() {
 
     // Créer le bon avec le format attendu par la page magasin
     const newBon: any = {
-      id: Date.now().toString(),
+      id: editingId || Date.now().toString(),
+      reference,
       numero: reference,
+      dateCreation: new Date().toISOString(),
       date: new Date().toISOString(),
-      magasinDest: magasin.id, // ID du magasin, pas le label
+      magasinRecepteur,
+      magasinDest: magasin.id,
       responsable: localStorage.getItem('leclaire_current_user') || 'Administrateur',
       items: items.map(item => ({
         id: item.id, // id catalogue : clé stable du stock (évite les décalages de désignation)
@@ -85,11 +90,11 @@ export function BonDistributionGlobalPage() {
         quantite: item.quantite,
         prixUnit: item.prixVente,
       })),
-      statut: 'En attente',
+      statut: editingId ? (bons.find(b => b.id === editingId)?.statut || 'En attente') : 'En attente',
     };
 
     const bonWithAudit = addCreateAudit(newBon);
-    const updatedBons = [...bons, bonWithAudit];
+    const updatedBons = editingId ? bons.map(b => b.id === editingId ? { ...b, ...bonWithAudit, id: editingId } : b) : [...bons, bonWithAudit];
     setBons(updatedBons);
     upsertBon(distributionToRow(bonWithAudit)).catch(e => logger.error('❌ upsertBon distribution:', e));
 
@@ -101,8 +106,17 @@ export function BonDistributionGlobalPage() {
     handleClose();
   };
 
+  const handleEdit = (bon: BonDistribution) => {
+    setEditingId(bon.id);
+    setReference(bon.reference || '00001');
+    setMagasinRecepteur(bon.magasinRecepteur || '');
+    setItems((bon.items || []).map(i => ({ ...i, prixVente: i.prixVente || 0 })));
+    setShowModal(true);
+  };
+
   const handleClose = () => {
     setShowModal(false);
+    setEditingId(null);
     setReference('00001');
     setMagasinRecepteur('');
     setItems([]);
@@ -570,10 +584,10 @@ export function BonDistributionGlobalPage() {
                     ) : '-'}
                   </td>
                   <td className="stock-edition-actions" style={{ padding: '8px', fontSize: '14px' }}>
-                    <button title="Imprimer">🖨️</button>
-                    <button title="Format B5">B5</button>
-                    <button title="Format A5">A5</button>
-                    <button title="Éditer">✏️</button>
+                    <button onClick={() => imprimerGestionStock()} title="Imprimer">🖨️</button>
+                    <button onClick={() => imprimerFormatGestionStock("Document", "B5")} title="Format B5">B5</button>
+                    <button onClick={() => imprimerFormatGestionStock("Document", "A5")} title="Format A5">A5</button>
+                    <button onClick={() => handleEdit(bon)} title="Éditer">✏️</button>
                   </td>
                 </tr>
               ))
@@ -671,6 +685,7 @@ export function BonDistributionGlobalPage() {
                   <Trash2 size={13} /> Supprimer
                 </button>
                 <button
+                  onClick={() => handleEdit(bon)}
                   style={{
                     padding: '6px 14px',
                     backgroundColor: '#3b82f6',

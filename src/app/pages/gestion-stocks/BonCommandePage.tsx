@@ -7,6 +7,7 @@ import { SelectionMonturesAccessoiresModal } from '../../components/SelectionMon
 import { upsertBon, supprimerBon, commandeToRow } from '../../services/bonsService';
 import { useLiveData } from '../../hooks/useLiveData';
 import { TENANT } from '../../config/tenant';
+import { imprimerGestionStock, imprimerFormatGestionStock } from '../../utils/stockActions';
 
 interface BonCommande extends AuditInfo {
   id: string;
@@ -48,6 +49,7 @@ const getStatutColor = (statut: string) => {
 export function BonCommandePage() {
   const [bons, setBons] = useLiveData<BonCommande>('leclaire_bons_commande');
   const [showModal, setShowModal] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [searchDate, setSearchDate] = useState('');
   const [filterStatut, setFilterStatut] = useState('');
@@ -69,7 +71,7 @@ export function BonCommandePage() {
 
   const handleSave = () => {
     const newBon: BonCommande = {
-      id: Date.now().toString(),
+      id: editingId || Date.now().toString(),
       reference,
       fournisseur,
       numeroBonFournisseur,
@@ -89,15 +91,20 @@ export function BonCommandePage() {
     };
 
     const bonWithAudit = addCreateAudit(newBon);
-    const updatedBons = [...bons, bonWithAudit];
+    const updatedBons = editingId ? bons.map(b => b.id === editingId ? { ...b, ...bonWithAudit, id: editingId } : b) : [...bons, bonWithAudit];
     setBons(updatedBons);
     upsertBon(commandeToRow(bonWithAudit)).catch(e => logger.error('❌ upsertBon commande:', e));
 
     handleClose();
   };
 
+  const handleEdit = (bon: BonCommande) => {
+    setEditingId(bon.id); setReference(bon.reference || '00001'); setFournisseur(bon.fournisseur || ''); setNumeroBonFournisseur(bon.numeroBonFournisseur || ''); setItems(bon.items || []); setDevise(bon.devise || 'F CFA'); setValeurDevise(bon.valeurDevise || 1); setRemisePourcent(bon.remisePourcent || 0); setValeurRemise(bon.valeurRemise || 0); setTotal(bon.total || 0); setTaxe(bon.taxe || ''); setTotalNet(bon.totalNet || 0); setEnvoyerFournisseur(!!bon.envoyerFournisseur); setShowModal(true);
+  };
+
   const handleClose = () => {
     setShowModal(false);
+    setEditingId(null);
     setReference('00001');
     setFournisseur('');
     setNumeroBonFournisseur('');
@@ -815,7 +822,7 @@ export function BonCommandePage() {
                     ) : '-'}
                   </td>
                   <td style={{ padding: '12px', fontSize: '14px' }}>
-                    <button title="Imprimer">🖨️</button><button title="B5">B5</button><button title="A5">A5</button><button title="Éditer">✏️</button>
+                    <button onClick={() => imprimerGestionStock()} title="Imprimer">🖨️</button><button onClick={() => imprimerFormatGestionStock("Document", "B5")} title="B5">B5</button><button onClick={() => imprimerFormatGestionStock("Document", "A5")} title="A5">A5</button><button onClick={() => handleEdit(bon)} title="Éditer">✏️</button>
                   </td>
                 </tr>
               ))
@@ -899,6 +906,7 @@ export function BonCommandePage() {
                   <Trash2 size={13} /> Supprimer
                 </button>
                 <button
+                  onClick={() => handleEdit(bon)}
                   style={{
                     padding: '6px 14px',
                     backgroundColor: '#3b82f6',

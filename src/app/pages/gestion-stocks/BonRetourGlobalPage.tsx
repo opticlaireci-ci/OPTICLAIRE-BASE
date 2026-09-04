@@ -5,6 +5,7 @@ import { getMagasins } from '../../constants/magasins';
 import { useAuth } from '../../contexts/AuthContext';
 import { upsertBon, retourToRow } from '../../services/bonsService';
 import { useLiveData } from '../../hooks/useLiveData';
+import { imprimerGestionStock, imprimerFormatGestionStock } from '../../utils/stockActions';
 
 interface BonRetour {
   id: string;
@@ -302,6 +303,11 @@ export function BonRetourGlobalPage() {
                   <td style={{ padding: '12px', textAlign: 'center' }}>
                     <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
                       <button
+                        onClick={() => imprimerGestionStock(`Bon de retour ${bon.numero}`)}
+                        title="Imprimer"
+                        style={{ padding: '6px 12px', backgroundColor: '#fff', border: '1px solid #d1d5db', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' }}
+                      >🖨️</button>
+                      <button
                         onClick={() => {
                           setSelectedBon(bon);
                           setShowDetailModal(true);
@@ -444,6 +450,7 @@ export function BonRetourGlobalPage() {
               </div>
               {/* Card footer */}
               <div style={{ padding: '10px 16px', borderTop: '1px solid #f3f4f6', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <button onClick={() => imprimerGestionStock(`Bon de retour ${bon.numero}`)} style={{ padding: '6px 12px', backgroundColor: '#fff', color: '#374151', border: '1px solid #d1d5db', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' }}>🖨️ Imprimer</button>
                 <button
                   onClick={() => {
                     setSelectedBon(bon);

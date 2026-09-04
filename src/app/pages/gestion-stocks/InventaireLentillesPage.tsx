@@ -10,6 +10,7 @@ import { safeUuid } from '../../utils/safeId';
 import { TENANT } from '../../config/tenant';
 import { useAuth } from '../../contexts/AuthContext';
 import { getMagasins, getAllMagasinIds } from '../../constants/magasins';
+import { imprimerGestionStock, imprimerFormatGestionStock } from '../../utils/stockActions';
 
 // ─── types ────────────────────────────────────────────────────────────────────
 

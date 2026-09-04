@@ -7,6 +7,7 @@ import { SelectionMonturesAccessoiresModal } from '../../components/SelectionMon
 import { upsertBon, supprimerBon, peremptionToRow } from '../../services/bonsService';
 import { useLiveData } from '../../hooks/useLiveData';
 import { TENANT } from '../../config/tenant';
+import { imprimerGestionStock, imprimerFormatGestionStock } from '../../utils/stockActions';
 
 interface BonPeremption extends AuditInfo {
   id: string;
@@ -26,6 +27,7 @@ interface BonPeremption extends AuditInfo {
 export function BonPeremptionPage() {
   const [bons, setBons] = useLiveData<BonPeremption>('leclaire_bons_peremption');
   const [showModal, setShowModal] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [searchDate, setSearchDate] = useState('');
 
@@ -38,7 +40,7 @@ export function BonPeremptionPage() {
 
   const handleSave = () => {
     const newBon: BonPeremption = {
-      id: Date.now().toString(),
+      id: editingId || Date.now().toString(),
       reference,
       motif,
       items,
@@ -47,15 +49,18 @@ export function BonPeremptionPage() {
     };
 
     const bonWithAudit = addCreateAudit(newBon);
-    const updatedBons = [...bons, bonWithAudit];
+    const updatedBons = editingId ? bons.map(b => b.id === editingId ? { ...b, ...bonWithAudit, id: editingId } : b) : [...bons, bonWithAudit];
     setBons(updatedBons);
     upsertBon(peremptionToRow(bonWithAudit)).catch(e => logger.error('❌ upsertBon péremption:', e));
 
     handleClose();
   };
 
+  const handleEdit = (bon: BonPeremption) => { setEditingId(bon.id); setReference(bon.reference || '00001'); setMotif(bon.motif || ''); setItems(bon.items || []); setShowModal(true); };
+
   const handleClose = () => {
     setShowModal(false);
+    setEditingId(null);
     setReference('00001');
     setMotif('');
     setItems([]);
@@ -484,7 +489,8 @@ export function BonPeremptionPage() {
                     ) : '-'}
                   </td>
                   <td style={{ padding: '12px', fontSize: '14px' }}>
-                    <button style={{ padding: '4px 12px', backgroundColor: '#3b82f6', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' }}>
+                    <button onClick={() => imprimerGestionStock(`Bon de péremption-casse ${bon.reference}`)} style={{ padding: '4px 10px', backgroundColor: '#fff', color: '#374151', border: '1px solid #d1d5db', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' }}>🖨️</button>
+                  <button onClick={() => handleEdit(bon)} style={{ padding: '4px 12px', backgroundColor: '#3b82f6', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' }}>
                       Éditer
                     </button>
                   </td>

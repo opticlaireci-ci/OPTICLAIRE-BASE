@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Search, Trash2 } from 'lucide-react';
 import { useLiveData } from '../../hooks/useLiveData';
+import { imprimerGestionStock, imprimerFormatGestionStock } from '../../utils/stockActions';
 
 interface BonLivraison {
   id: string;
@@ -14,6 +15,14 @@ export function BonLivraisonPage() {
   const [bons, setBons] = useLiveData<BonLivraison>('leclaire_bons_livraison');
   const [searchTerm, setSearchTerm] = useState('');
   const [searchDate, setSearchDate] = useState('');
+
+  const handleEdit = (bon: BonLivraison) => {
+    const fournisseur = window.prompt('Fournisseur', bon.fournisseur || ''); if (fournisseur === null) return;
+    const numeroBonCommande = window.prompt('N° Bon de Commande', bon.numeroBonCommande || ''); if (numeroBonCommande === null) return;
+    const numeroBonLivraison = window.prompt('N° Bon de Livraison', bon.numeroBonLivraison || ''); if (numeroBonLivraison === null) return;
+    const updated = bons.map(b => b.id === bon.id ? { ...b, fournisseur, numeroBonCommande, numeroBonLivraison } : b);
+    setBons(updated);
+  };
 
   const handleDelete = (id: string) => {
     const updatedBons = bons.filter(b => b.id !== id);
@@ -125,7 +134,7 @@ export function BonLivraisonPage() {
                   <td style={{ padding: '12px', fontSize: '14px' }}>{bon.numeroBonCommande}</td>
                   <td style={{ padding: '12px', fontSize: '14px' }}>{bon.numeroBonLivraison}</td>
                   <td style={{ padding: '12px', fontSize: '14px' }}>
-                    <button title="Imprimer">🖨️</button><button title="B5">B5</button><button title="A5">A5</button><button title="Éditer">✏️</button>
+                    <button onClick={() => imprimerGestionStock(`Bon de livraison ${bon.numeroBonLivraison}`)} title="Imprimer">🖨️</button><button onClick={() => imprimerFormatGestionStock(`Bon de livraison ${bon.numeroBonLivraison}`, "B5")} title="B5">B5</button><button onClick={() => imprimerFormatGestionStock(`Bon de livraison ${bon.numeroBonLivraison}`, "A5")} title="A5">A5</button><button onClick={() => handleEdit(bon)} title="Éditer">✏️</button>
                   </td>
                 </tr>
               ))
@@ -190,6 +199,11 @@ export function BonLivraisonPage() {
                   <Trash2 size={13} /> Supprimer
                 </button>
                 <button
+                  onClick={() => imprimerGestionStock(`Bon de livraison ${bon.numeroBonLivraison}`)}
+                  style={{ padding: '6px 14px', backgroundColor: '#fff', color: '#374151', border: '1px solid #d1d5db', borderRadius: '4px', cursor: 'pointer', fontSize: '13px' }}
+                >🖨️ Imprimer</button>
+                <button
+                  onClick={() => handleEdit(bon)}
                   style={{
                     padding: '6px 14px',
                     backgroundColor: '#3b82f6',

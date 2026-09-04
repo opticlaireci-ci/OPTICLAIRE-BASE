@@ -8,6 +8,7 @@ import { replaceInventaires, chargerInventaires, rowToInventaire } from '../../s
 import { loadStockMagasin, readStockCache, type StockMagasin } from '../../services/inventaireService';
 import { safeUuid } from '../../utils/safeId';
 import { TENANT, nomMagasin } from '../../config/tenant';
+import { imprimerGestionStock, imprimerFormatGestionStock } from '../../utils/stockActions';
 
 interface InventaireItem {
   id: string;
@@ -855,7 +856,7 @@ export function InventairePage() {
                   </td>
                   <td style={{ padding: '12px 14px' }}>
                     <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', alignItems: 'center' }}>
-                      <button title="Imprimer" style={{ padding: '6px 10px', backgroundColor: '#fff', border: '1px solid #d1d5db', borderRadius: '5px', cursor: 'pointer', color: '#374151', display: 'flex', alignItems: 'center' }}>
+                      <button onClick={() => imprimerGestionStock()} title="Imprimer" style={{ padding: '6px 10px', backgroundColor: '#fff', border: '1px solid #d1d5db', borderRadius: '5px', cursor: 'pointer', color: '#374151', display: 'flex', alignItems: 'center' }}>
                         <Printer size={15} />
                       </button>
                       <button onClick={() => handleVoirManquants(inv)} title="Voir les articles non inventoriés" style={{ padding: '6px 12px', backgroundColor: '#f59e0b', border: 'none', borderRadius: '5px', cursor: 'pointer', color: '#fff', fontSize: '12px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -904,7 +905,7 @@ export function InventairePage() {
                 )}
               </div>
               <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                <button title="Imprimer" style={{ padding: '6px 10px', backgroundColor: '#fff', border: '1px solid #d1d5db', borderRadius: '5px', cursor: 'pointer', color: '#374151', display: 'flex', alignItems: 'center' }}>
+                <button onClick={() => imprimerGestionStock()} title="Imprimer" style={{ padding: '6px 10px', backgroundColor: '#fff', border: '1px solid #d1d5db', borderRadius: '5px', cursor: 'pointer', color: '#374151', display: 'flex', alignItems: 'center' }}>
                   <Printer size={15} />
                 </button>
                 <button onClick={() => handleVoirManquants(inv)} style={{ padding: '6px 10px', backgroundColor: '#f59e0b', border: 'none', borderRadius: '5px', cursor: 'pointer', color: '#fff', fontSize: '11px', fontWeight: '700' }}>
