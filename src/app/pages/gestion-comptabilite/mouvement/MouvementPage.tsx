@@ -210,14 +210,14 @@ export function MouvementPage() {
           magasin: labelParId.get(vente.magasin_id) || vente.magasin_id || '',
           dateMouvement: dateVente ? new Date(dateVente).toISOString().slice(0, 10) : '',
           heure: dateVente ? new Date(dateVente).toTimeString().slice(0, 5) : '',
-          beneficiaire: vente.numero_client || vente.client || 'Client',
+          beneficiaire: vente.client || vente.numero_client || 'Client',
           type: 'Entrée',
           nature: 'Vente',
           montant: vente.total_net ?? vente.total_brut ?? 0,
           modePaiement: recap.modePaiement || 'Espèces',
-          compteBanque: recap.compteBanque || '',
+          compteBanque: recap.compteBanque || 'CAISSE INTERNE',
           details: `Vente ${recap.numFacture || ''}`.trim(),
-          commentaire: (vente as any).observations || '',
+          commentaire: (vente as any).observations || `Encaissement de la vente ${recap.numFacture || vente.id}`,
         });
       });
 
@@ -237,12 +237,12 @@ export function MouvementPage() {
           heure: '',
           beneficiaire: 'CAISSE',
           type: 'Sortie',
-          nature: 'Autre',
+          nature: 'Dépense',
           montant: depense,
           modePaiement: 'Espèces',
-          compteBanque: '',
+          compteBanque: 'CAISSE INTERNE',
           details: `Dépense hebdomadaire ${r.jour || ''} (semaine du ${r.semaine || ''})`,
-          commentaire: '',
+          commentaire: `Dépense ${r.jour || ''} — semaine du ${r.semaine || ''}`,
         });
       });
     } catch (error) {
@@ -407,24 +407,24 @@ export function MouvementPage() {
                 : filtered.map(m => (
                   <tr key={m.id} className="border-b border-gray-100 hover:bg-gray-50">
                     <td className="px-2 py-2 text-center"><input type="checkbox" /></td>
-                    <td className="px-2 py-2 font-mono text-blue-700">{m.reference}</td>
-                    <td className="px-2 py-2 text-gray-600">{m.magasin || '—'}</td>
-                    <td className="px-2 py-2 font-semibold">{m.beneficiaire}</td>
+                    <td className="px-2 py-2 font-mono text-blue-700">{m.reference || `MVT-${m.id.replace(/[^a-zA-Z0-9]/g, '').slice(-6).toUpperCase()}`}</td>
+                    <td className="px-2 py-2 text-gray-600">{m.magasin || 'Administration'}</td>
+                    <td className="px-2 py-2 font-semibold">{m.beneficiaire || 'CAISSE'}</td>
                     <td className="px-2 py-2 bg-green-50">
                       <span className="px-1.5 py-0.5 rounded text-xs font-semibold text-white" style={{ backgroundColor: typeColor(m.type) }}>{m.type}</span>
                     </td>
-                    <td className="px-2 py-2 text-gray-600">{m.nature}</td>
+                    <td className="px-2 py-2 text-gray-600">{m.nature || 'Autre'}</td>
                     <td className="px-2 py-2 text-right font-semibold">{m.montant.toLocaleString('fr-FR')}</td>
-                    <td className="px-2 py-2 text-gray-600">{m.modePaiement}</td>
-                    <td className="px-2 py-2 text-gray-600 text-xs">{m.compteBanque}</td>
-                    <td className="px-2 py-2 text-gray-500 max-w-xs truncate">{m.commentaire || '—'}</td>
+                    <td className="px-2 py-2 text-gray-600">{m.modePaiement || 'Espèces'}</td>
+                    <td className="px-2 py-2 text-gray-600 text-xs">{m.compteBanque || 'CAISSE INTERNE'}</td>
+                    <td className="px-2 py-2 text-gray-500 max-w-xs truncate">{m.commentaire || m.details || 'Mouvement de caisse'}</td>
                     <td className="px-2 py-2 text-xs text-gray-600">
                       {m.createdBy ? (
                         <div>
                           <div className="font-medium">{m.createdBy}</div>
                           <div className="text-gray-400">{formatDate(m.createdAt)}</div>
                         </div>
-                      ) : '-'}
+                      ) : <span className="text-gray-500">Système</span>}
                     </td>
                     <td className="px-2 py-2 text-xs text-gray-600">
                       {m.updatedBy ? (
@@ -432,20 +432,13 @@ export function MouvementPage() {
                           <div className="font-medium">{m.updatedBy}</div>
                           <div className="text-gray-400">{formatDate(m.updatedAt)}</div>
                         </div>
-                      ) : '-'}
+                      ) : <span className="text-gray-500">Non modifié</span>}
                     </td>
                     <td className="px-2 py-2 text-center">
                       <div className="flex items-center justify-center gap-1">
-                        {m.id.startsWith('vente-') ? (
-                          <span className="text-xs text-gray-400 italic">Vente</span>
-                        ) : m.id.startsWith('depense-') ? (
-                          <span className="text-xs text-gray-400 italic">Dépense</span>
-                        ) : (
-                          <>
-                            <button onClick={() => setModal({ mode: 'edit', item: m })} className="text-blue-500 hover:text-blue-700 p-1"><Edit size={13} /></button>
-                            <button onClick={() => handleDelete(m.id)} className="text-red-400 hover:text-red-600 p-1"><Trash2 size={13} /></button>
-                          </>
-                        )}
+                        {
+                          <button onClick={() => window.print()} className="px-2 py-1 rounded text-xs font-semibold text-white" style={{ backgroundColor: '#0f7894' }}>PDF</button>
+                        }
                       </div>
                     </td>
                   </tr>
@@ -462,29 +455,29 @@ export function MouvementPage() {
             <div key={m.id} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, padding: '0.875rem', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
               {/* Top row: date + type badge */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
-                <span style={{ fontSize: '0.8125rem', color: '#6b7280' }}>{m.dateMouvement || '—'}{m.heure ? ` · ${m.heure}` : ''}</span>
+                <span style={{ fontSize: '0.8125rem', color: '#6b7280' }}>{m.dateMouvement || new Date().toISOString().slice(0, 10)}{m.heure ? ` · ${m.heure}` : ''}</span>
                 <span style={{
                   background: m.type === 'Entrée' ? '#dcfce7' : '#fee2e2',
                   color: typeColor(m.type),
                   borderRadius: 9999, padding: '0.15rem 0.65rem', fontSize: '0.75rem', fontWeight: 700,
                 }}>
-                  {m.type || '—'}
+                  {m.type || 'Mouvement'}
                 </span>
               </div>
               {/* Beneficiaire + montant */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.3rem' }}>
-                <span style={{ fontWeight: 700, fontSize: '0.9375rem', color: '#1e3a5f' }}>{m.beneficiaire || '—'}</span>
+                <span style={{ fontWeight: 700, fontSize: '0.9375rem', color: '#1e3a5f' }}>{m.beneficiaire || 'CAISSE'}</span>
                 <span style={{ fontWeight: 700, fontSize: '0.9375rem', color: m.type === 'Entrée' ? '#16a34a' : '#dc2626' }}>
                   {m.montant.toLocaleString('fr-FR')} F
                 </span>
               </div>
               {/* Nature + libellé */}
               <div style={{ fontSize: '0.8125rem', color: '#6b7280', marginBottom: '0.25rem' }}>
-                {m.nature}{m.details ? ` · ${m.details}` : ''}
+                {m.nature || 'Autre'}{m.details ? ` · ${m.details}` : ''}
               </div>
               {/* Compte banque */}
               {m.compteBanque && (
-                <div style={{ fontSize: '0.78rem', color: '#9ca3af' }}>{m.compteBanque}</div>
+                <div style={{ fontSize: '0.78rem', color: '#9ca3af' }}>{m.compteBanque || 'CAISSE INTERNE'}</div>
               )}
               {/* Magasin */}
               {m.magasin && (
@@ -492,16 +485,7 @@ export function MouvementPage() {
               )}
               {/* Actions */}
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.625rem', borderTop: '1px solid #f3f4f6', paddingTop: '0.5rem' }}>
-                {m.id.startsWith('vente-') ? (
-                  <span style={{ fontSize: '0.75rem', color: '#9ca3af', fontStyle: 'italic' }}>Vente</span>
-                ) : m.id.startsWith('depense-') ? (
-                  <span style={{ fontSize: '0.75rem', color: '#9ca3af', fontStyle: 'italic' }}>Dépense</span>
-                ) : (
-                  <>
-                    <button onClick={() => setModal({ mode: 'edit', item: m })} style={{ color: '#3b82f6', padding: '0.25rem' }}><Edit size={15} /></button>
-                    <button onClick={() => handleDelete(m.id)} style={{ color: '#ef4444', padding: '0.25rem' }}><Trash2 size={15} /></button>
-                  </>
-                )}
+                <button onClick={() => window.print()} style={{ backgroundColor: '#0f7894', color: '#fff', borderRadius: 5, padding: '0.3rem 0.65rem', fontSize: '0.75rem', fontWeight: 700 }}>PDF</button>
               </div>
             </div>
           ))}

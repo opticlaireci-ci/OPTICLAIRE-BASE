@@ -43,6 +43,10 @@ interface MouvementCaisse {
   modePaiement: string;
   reference?: string;
   responsable: string;
+  beneficiaire?: string;
+  nature?: string;
+  compteBanque?: string;
+  commentaire?: string;
 }
 
 function getMagasinLabel(magasinId: string): string {
@@ -81,8 +85,12 @@ export function MouvementsCaissePage() {
           montant: montantPaye,
           libelle: `Vente ${numFacture} - ${vente.numero_client || 'Client'}`,
           modePaiement: (vente.recap && vente.recap.modePaiement) || 'Espèces',
-          reference: numFacture,
-          responsable: vente.edite_par || 'N/A',
+          reference: numFacture || `V-${vente.id}`,
+          responsable: vente.edite_par || 'Utilisateur',
+          beneficiaire: vente.numero_client || vente.client || 'Client',
+          nature: 'Vente',
+          compteBanque: (vente.recap && vente.recap.compteBanque) || 'CAISSE INTERNE',
+          commentaire: (vente as any).observations || `Encaissement de la vente ${numFacture || vente.id}`,
         });
       }
     });
@@ -90,7 +98,7 @@ export function MouvementsCaissePage() {
   };
   // Dérive une entrée de caisse par RÈGLEMENT (encaissement postérieur à la
   // vente), daté à la date du règlement — c'est ce que demande le magasin.
-  const deriveFromReglements = (reglements: ReglementSupabase[], mag: string): MouvementCaisse[] => {
+  const deriveFromReglements = (reglements: ReglementSupabase[], mag: string, ventes: VenteSupabase[] = []): MouvementCaisse[] => {
     return (reglements || [])
       .filter((r) => (r.magasin_id || '').toUpperCase() === (mag || '').toUpperCase())
       .filter((r) => (Number(r.montant) || 0) > 0)
@@ -103,8 +111,12 @@ export function MouvementsCaissePage() {
         montant: Number(r.montant) || 0,
         libelle: `Règlement ${r.recu || ''}`.trim(),
         modePaiement: r.mode_paiement || 'Espèces',
-        reference: r.recu || '',
-        responsable: r.edite_par || 'N/A',
+        reference: r.recu || `REG-${r.id}`,
+        responsable: r.edite_par || 'Utilisateur',
+        beneficiaire: ventes.find(v => v.id === r.vente_id)?.numero_client || ventes.find(v => v.id === r.vente_id)?.client || 'Client',
+        nature: 'Règlement',
+        compteBanque: r.compte_banque || 'CAISSE INTERNE',
+        commentaire: r.details || `Règlement client ${r.recu || r.id}`,
       }));
   };
   const readReglementsCacheMagasin = (mag: string): ReglementSupabase[] => {
@@ -116,7 +128,7 @@ export function MouvementsCaissePage() {
     () => deriveFromVentes(readVentesCache(magasinId || ''), magasinId || ''),
   );
   const [reglementsDerives, setReglementsDerives] = useState<MouvementCaisse[]>(
-    () => deriveFromReglements(readReglementsCacheMagasin(magasinId || ''), magasinId || ''),
+    () => deriveFromReglements(readReglementsCacheMagasin(magasinId || ''), magasinId || '', readVentesCache(magasinId || '')),
   );
   const [mouvements, setMouvements] = useState<MouvementCaisse[]>([]);
   const [filteredMouvements, setFilteredMouvements] = useState<MouvementCaisse[]>([]);
@@ -163,10 +175,10 @@ export function MouvementsCaissePage() {
   useEffect(() => {
     if (!magasinId) { setReglementsDerives([]); return; }
     let annule = false;
-    setReglementsDerives(deriveFromReglements(readReglementsCacheMagasin(magasinId), magasinId));
+    setReglementsDerives(deriveFromReglements(readReglementsCacheMagasin(magasinId), magasinId, readVentesCache(magasinId)));
     const load = () => {
       chargerReglementsParMagasin(magasinId).then((regls) => {
-        if (!annule) setReglementsDerives(deriveFromReglements(regls, magasinId));
+        if (!annule) setReglementsDerives(deriveFromReglements(regls, magasinId, readVentesCache(magasinId)));
       }).catch(() => {});
     };
     load();
@@ -237,8 +249,12 @@ export function MouvementsCaissePage() {
       montant: parseFloat(formMontant),
       libelle: formLibelle,
       modePaiement: formModePaiement,
-      reference: formReference,
+      reference: formReference.trim() || `MVT-${Date.now().toString().slice(-6)}`,
       responsable: localStorage.getItem('leclaire_current_user') || 'Utilisateur',
+      beneficiaire: formLibelle.trim() || 'CAISSE',
+      nature: formCategorie || 'Autre',
+      compteBanque: 'CAISSE INTERNE',
+      commentaire: formLibelle.trim() || `Mouvement ${formType === 'entree' ? 'entrée' : 'sortie'}`,
     };
 
     // Sauvegarder dans Firestore (partagé entre navigateurs) via useLiveData
@@ -413,92 +429,100 @@ export function MouvementsCaissePage() {
         </Box>
       </Paper>
 
-      {/* Tableau — desktop */}
-      <div className="hidden md:block">
-        <TableContainer component={Paper}>
-          <Table>
+      {/* Tableau — même présentation que les mouvements de l'administration */}
+      <div className="hidden md:block border border-gray-200 rounded overflow-x-auto">
+        <TableContainer component={Paper} elevation={0}>
+          <Table sx={{ minWidth: 1250 }}>
             <TableHead>
               <TableRow sx={{ bgcolor: '#f5f5f5' }}>
-                <TableCell sx={{ fontWeight: 'bold' }}>Date</TableCell>
+                <TableCell padding="checkbox"><input type="checkbox" /></TableCell>
+                <TableCell sx={{ fontWeight: 'bold' }}>N° Mouvement</TableCell>
+                <TableCell sx={{ fontWeight: 'bold' }}>Emplacement</TableCell>
+                <TableCell sx={{ fontWeight: 'bold' }}>Bénéficiaire</TableCell>
                 <TableCell sx={{ fontWeight: 'bold' }}>Type</TableCell>
-                <TableCell sx={{ fontWeight: 'bold' }}>Catégorie</TableCell>
-                <TableCell sx={{ fontWeight: 'bold' }}>Libellé</TableCell>
+                <TableCell sx={{ fontWeight: 'bold' }}>Nature</TableCell>
                 <TableCell sx={{ fontWeight: 'bold' }}>Montant</TableCell>
                 <TableCell sx={{ fontWeight: 'bold' }}>Mode de Paiement</TableCell>
-                <TableCell sx={{ fontWeight: 'bold' }}>Référence</TableCell>
-                <TableCell sx={{ fontWeight: 'bold' }}>Responsable</TableCell>
+                <TableCell sx={{ fontWeight: 'bold' }}>Compte Banque</TableCell>
+                <TableCell sx={{ fontWeight: 'bold' }}>Commentaire</TableCell>
+                <TableCell sx={{ fontWeight: 'bold', textAlign: 'center' }}>Édition</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {filteredMouvements.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={8} align="center" sx={{ py: 4 }}>
-                    <Typography color="textSecondary">
-                      Aucun mouvement trouvé
-                    </Typography>
-                  </TableCell>
-                </TableRow>
-              ) : (
-                filteredMouvements.map((mouvement) => (
+                <TableRow><TableCell colSpan={11} align="center" sx={{ py: 4 }}><Typography color="textSecondary">Aucun mouvement trouvé</Typography></TableCell></TableRow>
+              ) : filteredMouvements.map((mouvement) => {
+                const isEntree = mouvement.type === 'entree';
+                const reference = mouvement.reference || `MVT-${mouvement.id.replace(/[^a-zA-Z0-9]/g, '').slice(-6).toUpperCase()}`;
+                const beneficiaire = mouvement.beneficiaire || (mouvement.libelle?.split(' - ')[1] || (isEntree ? 'Client' : 'CAISSE'));
+                const nature = mouvement.nature || mouvement.categorie || (isEntree ? 'Entrée' : 'Sortie');
+                const compte = mouvement.compteBanque || 'CAISSE INTERNE';
+                const commentaire = mouvement.commentaire || mouvement.libelle || `${nature} — ${isEntree ? 'Encaissement' : 'Dépense'}`;
+                return (
                   <TableRow key={mouvement.id} hover>
+                    <TableCell padding="checkbox"><input type="checkbox" /></TableCell>
+                    <TableCell sx={{ fontFamily: 'monospace', color: '#1565c0', fontWeight: 600 }}>{reference}</TableCell>
+                    <TableCell>{getMagasinLabel(magasinId || '')}</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }}>{beneficiaire}</TableCell>
                     <TableCell>
-                      {new Date(mouvement.date).toLocaleDateString('fr-FR')}
+                      <Chip label={isEntree ? 'Entrée' : 'Sortie'} color={isEntree ? 'success' : 'error'} size="small" />
                     </TableCell>
-                    <TableCell>
-                      <Chip
-                        label={mouvement.type === 'entree' ? 'Entrée' : 'Sortie'}
-                        color={mouvement.type === 'entree' ? 'success' : 'error'}
+                    <TableCell>{nature}</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', color: isEntree ? '#16a34a' : '#dc2626' }}>
+                      {isEntree ? '+' : '-'}{(Number(mouvement.montant) || 0).toLocaleString('fr-FR')}
+                    </TableCell>
+                    <TableCell>{mouvement.modePaiement || 'Espèces'}</TableCell>
+                    <TableCell>{compte}</TableCell>
+                    <TableCell sx={{ maxWidth: 260, whiteSpace: 'normal', overflowWrap: 'anywhere' }}>{commentaire}</TableCell>
+                    <TableCell align="center">
+                      <Button
                         size="small"
-                      />
+                        variant="contained"
+                        startIcon={<Print />}
+                        onClick={handlePrint}
+                        sx={{ bgcolor: '#0f7894', textTransform: 'none', minWidth: 82 }}
+                      >
+                        PDF
+                      </Button>
                     </TableCell>
-                    <TableCell>{mouvement.categorie}</TableCell>
-                    <TableCell>{mouvement.libelle}</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold', color: mouvement.type === 'entree' ? '#4caf50' : '#f44336' }}>
-                      {mouvement.type === 'entree' ? '+' : '-'}{mouvement.montant.toLocaleString('fr-FR')} FCFA
-                    </TableCell>
-                    <TableCell>{mouvement.modePaiement}</TableCell>
-                    <TableCell>{mouvement.reference || '-'}</TableCell>
-                    <TableCell>{mouvement.responsable}</TableCell>
                   </TableRow>
-                ))
-              )}
+                );
+              })}
             </TableBody>
           </Table>
         </TableContainer>
       </div>
 
-      {/* Cartes — mobile */}
+      {/* Cartes — mobile : reprend toutes les informations du tableau */}
       <div className="md:hidden">
         {filteredMouvements.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '32px 16px', color: '#9ca3af', fontSize: 14 }}>
-            Aucun mouvement trouvé
-          </div>
+          <div style={{ textAlign: 'center', padding: '32px 16px', color: '#9ca3af', fontSize: 14 }}>Aucun mouvement trouvé</div>
         ) : filteredMouvements.map((mouvement) => {
           const isEntree = mouvement.type === 'entree';
+          const reference = mouvement.reference || `MVT-${mouvement.id.replace(/[^a-zA-Z0-9]/g, '').slice(-6).toUpperCase()}`;
+          const beneficiaire = mouvement.beneficiaire || (mouvement.libelle?.split(' - ')[1] || (isEntree ? 'Client' : 'CAISSE'));
+          const nature = mouvement.nature || mouvement.categorie || (isEntree ? 'Entrée' : 'Sortie');
+          const compte = mouvement.compteBanque || 'CAISSE INTERNE';
+          const commentaire = mouvement.commentaire || mouvement.libelle || `${nature} — ${isEntree ? 'Encaissement' : 'Dépense'}`;
           return (
             <div key={mouvement.id} style={{ border: `1px solid ${isEntree ? '#bbf7d0' : '#fecaca'}`, borderRadius: 8, marginBottom: 10, overflow: 'hidden', backgroundColor: '#fff' }}>
-              {/* Card header */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6, padding: '10px 14px', backgroundColor: isEntree ? '#f0fdf4' : '#fff5f5' }}>
-                <span style={{ fontSize: 13, color: '#374151' }}>
-                  {new Date(mouvement.date).toLocaleDateString('fr-FR')}
-                </span>
+                <span style={{ fontSize: 12, color: '#374151', fontFamily: 'monospace' }}>{reference}</span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ padding: '2px 10px', borderRadius: 12, fontSize: 11, fontWeight: 700, backgroundColor: isEntree ? '#16a34a' : '#dc2626', color: '#fff' }}>
-                    {isEntree ? 'Entrée' : 'Sortie'}
-                  </span>
-                  <span style={{ fontSize: 15, fontWeight: 700, color: isEntree ? '#16a34a' : '#dc2626' }}>
-                    {isEntree ? '+' : '-'}{mouvement.montant.toLocaleString('fr-FR')} FCFA
-                  </span>
+                  <span style={{ padding: '2px 10px', borderRadius: 12, fontSize: 11, fontWeight: 700, backgroundColor: isEntree ? '#16a34a' : '#dc2626', color: '#fff' }}>{isEntree ? 'Entrée' : 'Sortie'}</span>
+                  <span style={{ fontSize: 15, fontWeight: 700, color: isEntree ? '#16a34a' : '#dc2626' }}>{isEntree ? '+' : '-'}{(Number(mouvement.montant) || 0).toLocaleString('fr-FR')} FCFA</span>
                 </div>
               </div>
-              {/* Card body */}
-              <div style={{ padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <div style={{ fontSize: 13, color: '#111827', fontWeight: 500 }}>{mouvement.libelle}</div>
-                <div style={{ fontSize: 12, color: '#6b7280' }}>{mouvement.categorie} · {mouvement.modePaiement}</div>
-                {mouvement.reference && (
-                  <div style={{ fontSize: 12, color: '#6b7280' }}>Réf : {mouvement.reference}</div>
-                )}
-                <div style={{ fontSize: 11, color: '#9ca3af' }}>Par : {mouvement.responsable}</div>
+              <div style={{ padding: '10px 14px', display: 'grid', gap: 5, fontSize: 12 }}>
+                <div><strong>Bénéficiaire :</strong> {beneficiaire}</div>
+                <div><strong>Emplacement :</strong> {getMagasinLabel(magasinId || '')}</div>
+                <div><strong>Nature :</strong> {nature}</div>
+                <div><strong>Mode de Paiement :</strong> {mouvement.modePaiement || 'Espèces'}</div>
+                <div><strong>Compte Banque :</strong> {compte}</div>
+                <div style={{ overflowWrap: 'anywhere' }}><strong>Commentaire :</strong> {commentaire}</div>
+                <div><strong>Date :</strong> {new Date(mouvement.date).toLocaleDateString('fr-FR')}</div>
+                <div><strong>Responsable :</strong> {mouvement.responsable || 'Utilisateur'}</div>
+                <Button size="small" variant="contained" startIcon={<Print />} onClick={handlePrint} sx={{ bgcolor: '#0f7894', textTransform: 'none', width: 'fit-content', mt: 0.5 }}>PDF</Button>
               </div>
             </div>
           );
