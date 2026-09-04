@@ -9,7 +9,7 @@ import { enregistrerDistribution } from '../../services/inventaireService';
 import { upsertBon, supprimerBon, distributionToRow } from '../../services/bonsService';
 import { useLiveData } from '../../hooks/useLiveData';
 import { TENANT } from '../../config/tenant';
-import { imprimerGestionStock, imprimerFormatGestionStock } from '../../utils/stockActions';
+import { imprimerGestionStock, imprimerFormatGestionStock, imprimerBonDistribution } from '../../utils/stockActions';
 
 interface BonDistribution extends AuditInfo {
   id: string;
@@ -573,7 +573,7 @@ export function BonDistributionGlobalPage() {
                   <td style={{ padding: '12px', textAlign: 'center', fontSize: '12px', color: '#9ca3af', fontWeight: 500 }}>{idx + 1}</td>
                   <td style={{ padding: '12px', fontSize: '14px' }}>{bon.reference}</td>
                   <td style={{ padding: '12px', fontSize: '14px' }}>{bon.magasinRecepteur || '-'}</td>
-                  <td style={{ padding: '12px', fontSize: '14px' }}>{'-'}</td>
+                  <td style={{ padding: '12px', fontSize: '14px' }}>{(bon as any).recepteur || (bon as any).receiver || (bon as any).responsable || '-'}</td>
                   <td style={{ padding: '12px', fontSize: '14px' }}>{bon.statut}</td>
                   <td style={{ padding: '12px', fontSize: '12px', color: '#6b7280' }}>
                     {bon.createdBy ? (
@@ -584,9 +584,9 @@ export function BonDistributionGlobalPage() {
                     ) : '-'}
                   </td>
                   <td className="stock-edition-actions" style={{ padding: '8px', fontSize: '14px' }}>
-                    <button onClick={() => imprimerGestionStock()} title="Imprimer">🖨️</button>
-                    <button onClick={() => imprimerFormatGestionStock("Document", "B5")} title="Format B5">B5</button>
-                    <button onClick={() => imprimerFormatGestionStock("Document", "A5")} title="Format A5">A5</button>
+                    <button onClick={() => imprimerBonDistribution(bon)} title="Imprimer le bon et les montures/accessoires distribués">🖨️</button>
+                    <button onClick={() => imprimerBonDistribution(bon, 'B5')} title="Imprimer le bon au format B5">B5</button>
+                    <button onClick={() => imprimerBonDistribution(bon, 'A5')} title="Imprimer le bon au format A5">A5</button>
                     <button onClick={() => handleEdit(bon)} title="Éditer">✏️</button>
                   </td>
                 </tr>

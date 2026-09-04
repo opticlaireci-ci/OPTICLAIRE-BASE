@@ -439,21 +439,37 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
           title="ACTIVITÉ MENSUELLE"
           controls={<div className="flex flex-wrap items-center gap-2 w-full">{magSel}{moisSel}{anneeSel}</div>}
         >
-          <div className="monthly-mobile-cards grid grid-cols-2 gap-1 rounded">
-            {[
-              { value: fmtInt(d.objectif), label: 'Objectif', bg: C_OBJECTIF },
-              { value: fmtInt(d.caMonth), label: "Chiffre d'Affaires", bg: C_CA },
-              { value: fmtInt(d.payMonth), label: 'Paiements Clients', bg: C_PAY },
-              { value: fmtInt(d.bonsMonth), label: 'Bons Assurance', bg: C_BONS },
-              { value: fmtInt(Math.max(0, d.payMonth + d.bonsMonth - d.caMonth)), label: 'AVOIR-CLIENT +', bg: C_AVOIR_P, fg: '#111827' },
-              { value: fmtInt(Math.max(0, d.caMonth - d.payMonth - d.bonsMonth)), label: 'AVOIR-CLIENT -', bg: C_AVOIR_M, fg: '#111827' },
-              { value: fmtInt(d.montantRestantTotal), label: 'Montant Restant', bg: C_RESTANT },
-            ].map((c, i) => (
-              <div key={i} className="px-2 py-3 min-h-[96px] flex flex-col justify-between min-w-0" style={{ backgroundColor: c.bg, color: c.fg || '#fff' }}>
-                <div className="font-bold text-sm">{c.value}</div>
-                <div className="font-semibold text-sm">{c.label}</div>
+          <div className="monthly-mobile-cards">
+            <div className="monthly-mobile-kpi" style={{ backgroundColor: C_OBJECTIF, color: '#fff' }}>
+              <div className="monthly-mobile-value">{fmtInt(d.objectif)}</div>
+              <div className="monthly-mobile-label">Objectif</div>
+            </div>
+            <div className="monthly-mobile-kpi" style={{ backgroundColor: C_CA, color: '#fff' }}>
+              <div className="monthly-mobile-value">{fmtInt(d.caMonth)}</div>
+              <div className="monthly-mobile-label">Chiffre<br/>d'Affaires</div>
+            </div>
+            <div className="monthly-mobile-kpi" style={{ backgroundColor: C_PAY, color: '#fff' }}>
+              <div className="monthly-mobile-value">{fmtInt(d.payMonth)}</div>
+              <div className="monthly-mobile-label">Paiements<br/>Clients</div>
+            </div>
+            <div className="monthly-mobile-kpi" style={{ backgroundColor: C_BONS, color: '#fff' }}>
+              <div className="monthly-mobile-value">{fmtInt(d.bonsMonth)}</div>
+              <div className="monthly-mobile-label">Bons<br/>Assurance</div>
+            </div>
+            <div className="monthly-mobile-avoir">
+              <div className="monthly-mobile-avoir-plus" style={{ backgroundColor: C_AVOIR_P, color: '#111827' }}>
+                <div className="monthly-mobile-value">{fmtInt(Math.max(0, d.payMonth + d.bonsMonth - d.caMonth))}</div>
+                <div className="monthly-mobile-label">AVOIR-CLIENT<br/>+</div>
               </div>
-            ))}
+              <div className="monthly-mobile-avoir-minus" style={{ backgroundColor: C_AVOIR_M, color: '#111827' }}>
+                <div className="monthly-mobile-value">{fmtInt(Math.max(0, d.caMonth - d.payMonth - d.bonsMonth))}</div>
+                <div className="monthly-mobile-label">AVOIR-CLIENT<br/>-</div>
+              </div>
+            </div>
+            <div className="monthly-mobile-restant" style={{ backgroundColor: C_RESTANT, color: '#fff' }}>
+              <div className="monthly-mobile-value">{fmtInt(d.montantRestantTotal)}</div>
+              <div className="monthly-mobile-label">Montant Restant</div>
+            </div>
           </div>
           <ResponsiveContainer width="100%" height={360}>
             <BarChart data={d.dayData}>
@@ -473,9 +489,67 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
 
       <style>{`
         @media (max-width: 767px) {
-          .monthly-mobile-cards > div { min-width: 0 !important; overflow: hidden; }
-          .monthly-mobile-cards > div > div { overflow-wrap: anywhere; }
-          .monthly-mobile-cards .font-bold { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+          .monthly-mobile-cards {
+            display: grid !important;
+            grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+            grid-template-rows: 170px 170px !important;
+            gap: 1px !important;
+            width: 100% !important;
+            overflow: hidden !important;
+            border-radius: 2px !important;
+            box-sizing: border-box !important;
+          }
+          .monthly-mobile-kpi, .monthly-mobile-avoir, .monthly-mobile-restant {
+            min-width: 0 !important;
+            box-sizing: border-box !important;
+            overflow: hidden !important;
+          }
+          .monthly-mobile-kpi {
+            grid-row: 1 !important;
+            padding: 12px 6px !important;
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: space-between !important;
+          }
+          .monthly-mobile-avoir {
+            grid-column: 5 !important;
+            grid-row: 1 !important;
+            display: flex !important;
+            flex-direction: column !important;
+          }
+          .monthly-mobile-avoir-plus, .monthly-mobile-avoir-minus {
+            flex: 1 1 50% !important;
+            min-height: 0 !important;
+            padding: 8px 6px !important;
+            box-sizing: border-box !important;
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: space-between !important;
+            overflow: hidden !important;
+          }
+          .monthly-mobile-restant {
+            grid-column: 1 / -1 !important;
+            grid-row: 2 !important;
+            padding: 10px 12px !important;
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: space-between !important;
+            text-align: center !important;
+          }
+          .monthly-mobile-value {
+            font-size: clamp(12px, 3.7vw, 18px) !important;
+            line-height: 1.15 !important;
+            font-weight: 700 !important;
+            overflow-wrap: anywhere !important;
+          }
+          .monthly-mobile-label {
+            font-size: clamp(12px, 3.5vw, 18px) !important;
+            line-height: 1.15 !important;
+            font-weight: 700 !important;
+            overflow-wrap: anywhere !important;
+          }
+          .monthly-mobile-restant .monthly-mobile-value { font-size: clamp(18px, 5vw, 24px) !important; }
+          .monthly-mobile-restant .monthly-mobile-label { font-size: clamp(16px, 4.5vw, 22px) !important; }
         }
         /* La largeur du dashboard est celle qui reste réellement après le menu latéral.
            Les container queries rendent le rendu identique quelle que soit la largeur
