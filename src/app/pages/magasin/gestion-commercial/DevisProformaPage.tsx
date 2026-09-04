@@ -1156,7 +1156,7 @@ function FormulaireDevis({ magasinId, onRetour, onSaved, devisInitial }: { magas
   });
   const [modePaiement, setModePaiement] = useState<string>(() => (devisInitial?._raw?.recap as any)?.modePaiement || '');
 
-  const handleEnregistrer = () => {
+  const handleEnregistrer = async () => {
     if (!client.nom) { alert('Veuillez renseigner le client (Étape I).'); return; }
     const record: DevisRecord = {
       id: devisInitial?.id || Date.now().toString(),
@@ -1167,9 +1167,10 @@ function FormulaireDevis({ magasinId, onRetour, onSaved, devisInitial }: { magas
       propositions,
       numDevis: devisInitial?.numDevis || `DEV-${Date.now().toString().slice(-6)}`,
     };
-    // Sauvegarder dans Supabase (source de vérité, partagé entre navigateurs)
-    ajouterVente({
-      id: record.id,
+    // Sauvegarder dans la source de vérité partagée.
+    // En édition, on utilise une mise à jour partielle afin de conserver
+    // la date de création et les autres métadonnées existantes du devis.
+    const devisPayload = {
       magasin_id: magasinId,
       type: 'devis',
       date: record.date,
@@ -1181,6 +1182,16 @@ function FormulaireDevis({ magasinId, onRetour, onSaved, devisInitial }: { magas
       email: client.email,
       adresse: client.adresse,
       profession: client.profession,
+      date_naissance: client.anneeNaissance && client.moisNaissance && client.jourNaissance
+        ? `${client.anneeNaissance}-${client.moisNaissance}-${client.jourNaissance}`
+        : '',
+      solde_client: client.soldeClient,
+      matricule_assurance: client.matriculeAssurance,
+      entreprise: client.entreprise,
+      ophtalmologue: client.ophtalmologue,
+      tel_ophtalmologue: client.telOphtalmologue,
+      cabinet_ophtalmologue: client.cabinetOphtalmologue,
+      tel_cabinet: client.telCabinet,
       verres: propositions as any,
       articles: [],
       bons_assurance: [],
@@ -1189,7 +1200,20 @@ function FormulaireDevis({ magasinId, onRetour, onSaved, devisInitial }: { magas
       total_net: 0,
       edite_par: user?.nom || user?.prenom || user?.email || '',
       statut: 'devis',
-    } as any).catch(e => logger.error('❌ sync devis Supabase:', e));
+    } as any;
+
+    try {
+      if (enEdition) {
+        await mettreAJourVente(record.id, devisPayload);
+      } else {
+        await ajouterVente({ id: record.id, ...devisPayload } as any);
+      }
+      window.dispatchEvent(new CustomEvent('ventes-updated'));
+    } catch (e) {
+      logger.error('❌ sync devis:', e);
+      alert('❌ L’enregistrement du devis a échoué. Réessayez.');
+      return;
+    }
 
     // Auto-enregistrer le client dans la base du magasin
     autoSaveClient({
@@ -1309,10 +1333,11 @@ function FormulaireDevis({ magasinId, onRetour, onSaved, devisInitial }: { magas
 // ── Liste Devis ───────────────────────────────────────────────────────────────
 function ListeDevis({ magasinId, onNouveau, onModifier }: { magasinId: string; onNouveau: () => void; onModifier?: (d: DevisRecord) => void }) {
   const { user } = useAuth();
-  // Les conseillères et opticiens ne peuvent JAMAIS modifier ni supprimer un devis/proforma.
-  const roleBloque = ['conseillere', 'opticien'].includes(user?.role || '');
-  const peutModifier = !roleBloque && canEdit(user);
-  const peutSupprimer = !roleBloque && canDelete(user);
+  // Les conseillères et opticiens peuvent modifier les devis/proforma.
+  // La suppression reste soumise au droit de suppression habituel.
+  const rolePeutModifierDevis = ['conseillere', 'opticien'].includes(user?.role || '');
+  const peutModifier = rolePeutModifierDevis || canEdit(user);
+  const peutSupprimer = canDelete(user);
   // Affichage INSTANTANÉ depuis le cache, puis rafraîchissement Firestore.
   const [devis, setDevis] = useState<DevisRecord[]>(
     () => readVentesCache(magasinId).filter(v => v.type === 'devis').map(supabaseToDevis),
