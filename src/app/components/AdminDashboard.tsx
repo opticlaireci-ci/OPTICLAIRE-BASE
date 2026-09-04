@@ -538,77 +538,98 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
         </Panel>
       </div>
 
-      {/* 2bis ── ACTIVITÉ MENSUELLE — DESKTOP : reproduction stricte de la référence */}
-      <section className="hidden lg:block bg-white border border-gray-200" style={{ minHeight: 620 }}>
-        <div className="px-[10px] pt-[12px]">
-          {/* Desktop uniquement : la zone de titre, les cartes et les filtres
-              sont organisés dans deux colonnes. Cela évite tout écrasement
-              lorsque le menu latéral est ouvert, quelle que soit la largeur
-              disponible dans le navigateur. */}
-          <div className="grid grid-cols-1 xl:grid-cols-[minmax(520px,1fr)_minmax(420px,520px)] gap-x-8 gap-y-3 items-start">
-            <div className="min-w-0">
-              <h2 className="font-bold text-[18px] leading-[22px] text-gray-900 mb-[2px]">ACTIVITÉ MENSUELLE</h2>
+      {/* 2bis ── ACTIVITÉ MENSUELLE — DESKTOP */}
+      <section className="hidden lg:block bg-white border border-gray-200" style={{ minHeight: 620, boxSizing: 'border-box', width: '100%', overflow: 'hidden' }}>
+        <div style={{ padding: '12px 10px 0', width: '100%', boxSizing: 'border-box' }}>
+          {/* En-tête indépendant : les filtres ne réduisent JAMAIS la largeur des cartes. */}
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 24,
+            width: '100%', minWidth: 0, boxSizing: 'border-box', marginBottom: 8
+          }}>
+            <h2 style={{ margin: 0, fontWeight: 700, fontSize: 18, lineHeight: '22px', color: '#111827', flex: '1 1 auto', minWidth: 0 }}>
+              ACTIVITÉ MENSUELLE
+            </h2>
+            <div style={{
+              display: 'grid', gridTemplateColumns: 'minmax(280px, 1fr) minmax(300px, 1fr)',
+              gap: 16, width: 'min(660px, 52%)', minWidth: 520, flex: '0 1 660px', boxSizing: 'border-box'
+            }}>
+              <div style={{ position: 'relative', minWidth: 0 }}>
+                <select value={magasin} onChange={e => setMagasin(e.target.value)} aria-label="Magasin"
+                  style={{
+                    width: '100%', height: 46, boxSizing: 'border-box', border: '1px solid #cfcfcf', borderRadius: 7,
+                    padding: '0 42px 0 16px', fontSize: 18, fontWeight: 500, color: '#374151', background: '#fff',
+                    appearance: 'none', WebkitAppearance: 'none', MozAppearance: 'none', outline: 'none', cursor: 'pointer'
+                  }}>
+                  <option value="__TOUS__">Tous les Magasins</option>
+                  {magasins.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+                </select>
+                <span aria-hidden="true" style={{ position: 'absolute', right: 14, top: 0, height: 46, display: 'flex', alignItems: 'center', pointerEvents: 'none', color: '#4b5563', fontSize: 16 }}>⌄</span>
+              </div>
+              <div style={{
+                display: 'grid', gridTemplateColumns: '1fr 92px', minWidth: 0, height: 46,
+                border: '1px solid #cfcfcf', borderRadius: 7, overflow: 'hidden', background: '#fff', boxSizing: 'border-box'
+              }}>
+                <div style={{ position: 'relative', minWidth: 0 }}>
+                  <select value={mois} onChange={e => setMois(Number(e.target.value))} aria-label="Mois"
+                    style={{
+                      width: '100%', height: '44px', border: 0, padding: '0 36px 0 16px', fontSize: 18, color: '#4b5563',
+                      background: '#fff', appearance: 'none', WebkitAppearance: 'none', MozAppearance: 'none', outline: 'none', cursor: 'pointer', boxSizing: 'border-box'
+                    }}>
+                    {MOIS_LONG.map((m, i) => <option key={m} value={i}>{m}</option>)}
+                  </select>
+                  <span aria-hidden="true" style={{ position: 'absolute', right: 10, top: 0, height: 44, display: 'flex', alignItems: 'center', pointerEvents: 'none', color: '#6b7280', fontSize: 16 }}>⌄</span>
+                </div>
+                <div style={{ position: 'relative', borderLeft: '1px solid #e5e7eb', minWidth: 0 }}>
+                  <select value={annee} onChange={e => setAnnee(Number(e.target.value))} aria-label="Année"
+                    style={{
+                      width: '100%', height: '44px', border: 0, padding: '0 22px 0 12px', fontSize: 18, color: '#4b5563',
+                      background: '#fff', appearance: 'none', WebkitAppearance: 'none', MozAppearance: 'none', outline: 'none', cursor: 'pointer', boxSizing: 'border-box'
+                    }}>
+                    {years.map(y => <option key={y} value={y}>{y}</option>)}
+                  </select>
+                  <span aria-hidden="true" style={{ position: 'absolute', right: 6, top: 0, height: 44, display: 'flex', alignItems: 'center', pointerEvents: 'none', color: '#6b7280', fontSize: 15 }}>⌄</span>
+                </div>
+              </div>
+            </div>
+          </div>
 
-              {/* Bandeau : 4 cartes + AVOIR (+/-) + Montant Restant.
-                  La largeur est fluide : les cartes ne peuvent plus se
-                  réduire à quelques pixels lorsque le menu est ouvert. */}
-              <div className="flex w-full h-[136px] overflow-hidden rounded-none">
+          {/* Cartes : pleine largeur disponible. Les filtres ci-dessus ne peuvent plus les écraser. */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(4, minmax(92px, 1fr)) minmax(145px, 1.12fr) minmax(160px, 1.28fr)',
+            width: '100%', minWidth: 0, height: 136, overflow: 'hidden', boxSizing: 'border-box'
+          }}>
             {[
               { value: fmtInt(d.objectif), label: 'Objectif', bg: C_OBJECTIF },
               { value: fmtInt(d.caMonth), label: "Chiffre\nd'Affaires", bg: C_CA },
               { value: fmtInt(d.payMonth), label: 'Paiements\nClients', bg: C_PAY },
               { value: fmtInt(d.bonsMonth), label: 'Bons\nAssurance', bg: C_BONS },
             ].map((c, i) => (
-              <div key={i} className="flex-1 px-[10px] py-[8px] flex flex-col justify-between" style={{ backgroundColor: c.bg, color: '#fff' }}>
-                <div className="font-bold text-[18px] leading-[20px] text-center">{c.value}</div>
-                <div className="font-bold text-[18px] leading-[23px] whitespace-pre-line">{c.label}</div>
+              <div key={i} style={{ backgroundColor: c.bg, color: '#fff', padding: '8px 10px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minWidth: 0, boxSizing: 'border-box' }}>
+                <div style={{ fontWeight: 700, fontSize: 18, lineHeight: '20px', textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.value}</div>
+                <div style={{ fontWeight: 700, fontSize: 18, lineHeight: '23px', whiteSpace: 'pre-line', overflow: 'hidden' }}>{c.label}</div>
               </div>
             ))}
 
-            <div className="w-[149px] flex flex-col">
-              <div className="flex-1 px-[8px] py-[6px] flex flex-col justify-between" style={{ backgroundColor: C_AVOIR_P, color: '#111827' }}>
-                <div className="font-bold text-[18px] leading-[20px]">{fmtInt(Math.max(0, d.payMonth + d.bonsMonth - d.caMonth))}</div>
-                <div className="font-bold text-[17px] leading-[20px]">AVOIR-CLIENT<br/>+</div>
+            <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, height: 136 }}>
+              <div style={{ flex: 1, backgroundColor: C_AVOIR_P, color: '#111827', padding: '6px 10px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: 0, boxSizing: 'border-box' }}>
+                <div style={{ fontWeight: 700, fontSize: 18, lineHeight: '20px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{fmtInt(Math.max(0, d.payMonth + d.bonsMonth - d.caMonth))}</div>
+                <div style={{ fontWeight: 700, fontSize: 17, lineHeight: '20px' }}>AVOIR-CLIENT<br/>+</div>
               </div>
-              <div className="flex-1 px-[8px] py-[6px] flex flex-col justify-between" style={{ backgroundColor: C_AVOIR_M, color: '#111827' }}>
-                <div className="font-bold text-[18px] leading-[20px]">{fmtInt(Math.max(0, d.caMonth - d.payMonth - d.bonsMonth))}</div>
-                <div className="font-bold text-[17px] leading-[20px]">AVOIR-CLIENT<br/>-</div>
-              </div>
-            </div>
-
-            <div className="w-[167px] px-[10px] py-[8px] flex flex-col justify-between" style={{ backgroundColor: C_RESTANT, color: '#fff' }}>
-              <div className="font-bold text-[18px] leading-[20px] text-center">{fmtInt(d.montantRestantTotal)}</div>
-              <div className="font-bold text-[18px] leading-[23px]">Montant<br/>Restant</div>
+              <div style={{ flex: 1, backgroundColor: C_AVOIR_M, color: '#111827', padding: '6px 10px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: 0, boxSizing: 'border-box' }}>
+                <div style={{ fontWeight: 700, fontSize: 18, lineHeight: '20px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{fmtInt(Math.max(0, d.caMonth - d.payMonth - d.bonsMonth))}</div>
+                <div style={{ fontWeight: 700, fontSize: 17, lineHeight: '20px' }}>AVOIR-CLIENT<br/>-</div>
               </div>
             </div>
 
-            {/* Contrôles Desktop : colonne droite, toujours visible même lorsque
-                le menu latéral est déplié. */}
-            <div className="flex items-center gap-5 pt-[28px] min-w-0">
-              <select value={magasin} onChange={e => setMagasin(e.target.value)}
-                aria-label="Magasin"
-                className="flex-1 min-w-0 h-[58px] border border-gray-300 rounded-[8px] px-4 text-[18px] font-medium text-gray-700 bg-white outline-none">
-                <option value="__TOUS__">Tous les Magasins</option>
-                {magasins.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
-              </select>
-              <div className="flex-1 min-w-0">
-                <div className="h-[58px] border border-gray-300 rounded-[8px] bg-white flex items-center overflow-hidden">
-                  <select value={mois} onChange={e => setMois(Number(e.target.value))}
-                    aria-label="Mois" className="h-full flex-1 min-w-0 px-4 text-[18px] text-gray-600 bg-white outline-none appearance-none">
-                    {MOIS_LONG.map((m, i) => <option key={m} value={i}>{m}</option>)}
-                  </select>
-                  <span className="px-2 text-gray-500 text-[18px] select-none">📅</span>
-                  <select value={annee} onChange={e => setAnnee(Number(e.target.value))}
-                    aria-label="Année" className="h-full w-[82px] px-1 text-[18px] text-gray-600 bg-white outline-none border-l border-gray-200 appearance-none">
-                    {years.map(y => <option key={y} value={y}>{y}</option>)}
-                  </select>
-                </div>
-              </div>
+            <div style={{ backgroundColor: C_RESTANT, color: '#fff', padding: '8px 10px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minWidth: 0, boxSizing: 'border-box' }}>
+              <div style={{ fontWeight: 700, fontSize: 18, lineHeight: '20px', textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{fmtInt(d.montantRestantTotal)}</div>
+              <div style={{ fontWeight: 700, fontSize: 18, lineHeight: '23px' }}>Montant<br/>Restant</div>
             </div>
           </div>
 
-          {/* Graphique : même zone, même marge gauche et même hauteur que la référence. */}
-          <div className="mt-[6px] w-full h-[430px] pr-[24px] pl-[72px]">
+          {/* Graphique : même largeur que les cartes, sans largeur fixe dépendante du navigateur. */}
+          <div style={{ marginTop: 6, width: '100%', height: 430, padding: '0 24px 0 72px', boxSizing: 'border-box' }}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={d.dayData} margin={{ top: 0, right: 0, left: 0, bottom: 20 }}>
                 <CartesianGrid strokeDasharray="0" vertical={false} stroke="#eeeeee" />
