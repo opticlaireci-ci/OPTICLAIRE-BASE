@@ -136,7 +136,7 @@ export function BonRetourGlobalPage() {
   const sortedBons = [...filteredBons].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   return (
-    <div style={{ padding: 'clamp(12px, 3vw, 24px)', backgroundColor: '#f9fafb', minHeight: '100vh' }}>
+    <div className="admin-stock-list-page" style={{ padding: 'clamp(12px, 3vw, 24px)', backgroundColor: '#f9fafb', minHeight: '100vh' }}>
       <h1 style={{ fontSize: 'clamp(18px, 4vw, 24px)', fontWeight: 'bold', marginBottom: '24px' }}>
         Validation Bons de Retour - Directeur ({bons.length})
       </h1>
@@ -158,7 +158,7 @@ export function BonRetourGlobalPage() {
       </div>
 
       {/* Search filters */}
-      <div style={{ marginBottom: '20px' }}>
+      <div className="admin-stock-search-filters" style={{ marginBottom: '20px' }}>
         <p style={{ fontSize: '14px', color: '#374151', marginBottom: '8px' }}>
           Filtrer les bons de retour
         </p>
@@ -234,7 +234,7 @@ export function BonRetourGlobalPage() {
       </div>
 
       {/* Desktop Table */}
-      <div className="hidden md:block" style={{ backgroundColor: '#fff', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+      <div className="hidden md:block admin-stock-table-wrap" style={{ backgroundColor: '#fff', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ backgroundColor: '#f9fafb', borderBottom: '2px solid #e5e7eb' }}>

@@ -323,7 +323,7 @@ export function BonPeremptionPage() {
   }
 
   return (
-    <div style={{ padding: '24px', backgroundColor: '#f9fafb', minHeight: '100vh' }}>
+    <div className="admin-stock-list-page" style={{ padding: '24px', backgroundColor: '#f9fafb', minHeight: '100vh' }}>
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
         <div>
@@ -351,7 +351,7 @@ export function BonPeremptionPage() {
       </h1>
 
       {/* Search filters - First row */}
-      <div style={{ marginBottom: '20px' }}>
+      <div className="admin-stock-search-filters" style={{ marginBottom: '20px' }}>
         <p style={{ fontSize: '14px', color: '#374151', marginBottom: '8px' }}>
           (N° Bon de Péremption-Casse)
         </p>
@@ -396,7 +396,7 @@ export function BonPeremptionPage() {
       </div>
 
       {/* Search filters - Second row */}
-      <div style={{ marginBottom: '20px' }}>
+      <div className="admin-stock-search-filters admin-stock-search-filters-secondary" style={{ marginBottom: '20px' }}>
         <p style={{ fontSize: '14px', color: '#374151', marginBottom: '8px' }}>
           (N° Bon de Péremption-Casse)
         </p>
@@ -437,7 +437,7 @@ export function BonPeremptionPage() {
       </div>
 
       {/* Table — desktop */}
-      <div className="hidden md:block" style={{ backgroundColor: '#fff', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+      <div className="hidden md:block admin-stock-table-wrap" style={{ backgroundColor: '#fff', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
@@ -548,7 +548,7 @@ export function BonPeremptionPage() {
       </div>
 
       {/* Pagination */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '16px' }}>
+      <div className="admin-stock-pagination" style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '16px' }}>
         <button style={{ padding: '6px 12px', border: '1px solid #d1d5db', borderRadius: '4px', backgroundColor: '#fff', cursor: 'pointer' }}>
           {'<<'}
         </button>

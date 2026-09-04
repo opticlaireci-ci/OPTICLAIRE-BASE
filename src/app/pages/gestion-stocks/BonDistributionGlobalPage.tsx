@@ -423,7 +423,7 @@ export function BonDistributionGlobalPage() {
   }
 
   return (
-    <div style={{ padding: 'clamp(12px, 3vw, 24px)', backgroundColor: '#f9fafb', minHeight: '100vh' }}>
+    <div className="admin-stock-list-page" style={{ padding: 'clamp(12px, 3vw, 24px)', backgroundColor: '#f9fafb', minHeight: '100vh' }}>
       {/* Header */}
       <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
         <div>
@@ -451,7 +451,7 @@ export function BonDistributionGlobalPage() {
       </h1>
 
       {/* Search filters */}
-      <div style={{ marginBottom: '20px' }}>
+      <div className="admin-stock-search-filters" style={{ marginBottom: '20px' }}>
         <p style={{ fontSize: '14px', color: '#374151', marginBottom: '8px' }}>
           (N° Bon de Distribution)
         </p>
@@ -515,7 +515,7 @@ export function BonDistributionGlobalPage() {
       </div>
 
       {/* Desktop Table */}
-      <div className="hidden md:block" style={{ backgroundColor: '#fff', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+      <div className="hidden md:block admin-stock-table-wrap" style={{ backgroundColor: '#fff', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
@@ -714,7 +714,7 @@ export function BonDistributionGlobalPage() {
       </div>
 
       {/* Pagination */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '16px' }}>
+      <div className="admin-stock-pagination" style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '16px' }}>
         <button
           onClick={() => setCurrentPage(1)}
           style={{ padding: '6px 12px', border: '1px solid #d1d5db', borderRadius: '4px', backgroundColor: '#fff', cursor: 'pointer' }}

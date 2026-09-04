@@ -1,0 +1,169 @@
+/* Modèle des listes Gestion Stocks — Desktop uniquement.
+   Le mobile conserve intégralement les styles/composants existants. */
+@media (min-width: 768px) {
+  .admin-stock-list-page {
+    padding: 16px !important;
+    background: #fff !important;
+    min-height: 100vh;
+    box-sizing: border-box;
+  }
+
+  .admin-stock-list-page > h1 {
+    font-size: 24px !important;
+    font-weight: 400 !important;
+    line-height: 1.25 !important;
+    margin: 10px 0 12px !important;
+    padding: 0 0 12px !important;
+    border-bottom: 1px solid #ddd !important;
+    color: #111 !important;
+  }
+
+  .admin-stock-list-page .admin-stock-search-filters {
+    margin: 0 0 0 !important;
+    padding: 12px 0 0 !important;
+  }
+  .admin-stock-list-page .admin-stock-search-filters > p {
+    margin: 0 0 5px !important;
+    font-size: 15px !important;
+    color: #111 !important;
+  }
+  .admin-stock-list-page .admin-stock-search-filters > div {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    gap: 44px !important;
+    align-items: stretch !important;
+    position: relative !important;
+    padding-bottom: 0 !important;
+  }
+  .admin-stock-list-page .admin-stock-search-filters input,
+  .admin-stock-list-page .admin-stock-search-filters select {
+    height: 47px !important;
+    min-height: 47px !important;
+    box-sizing: border-box !important;
+    border: 1px solid #cfcfcf !important;
+    border-radius: 2px !important;
+    background: #fff !important;
+    color: #333 !important;
+    font-size: 16px !important;
+    padding: 9px 16px !important;
+  }
+  .admin-stock-list-page .admin-stock-search-filters input[type="text"]:first-child {
+    width: 253px !important;
+    flex: 0 0 253px !important;
+  }
+  .admin-stock-list-page .admin-stock-search-filters input[placeholder="jj/mm/aaaa"] {
+    width: 253px !important;
+    flex: 0 0 253px !important;
+  }
+  .admin-stock-list-page .admin-stock-search-filters select {
+    width: 255px !important;
+    flex: 0 0 255px !important;
+  }
+  .admin-stock-list-page .admin-stock-search-filters button {
+    width: 61px !important;
+    min-width: 61px !important;
+    height: 47px !important;
+    padding: 0 !important;
+    border-radius: 0 !important;
+    background: #3f88bd !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    color: #fff !important;
+  }
+
+  .admin-stock-list-page .admin-stock-table-wrap {
+    margin-top: 0 !important;
+    background: #fff !important;
+    border: 1px solid #ddd !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    overflow-x: auto !important;
+  }
+  .admin-stock-list-page .admin-stock-table-wrap table {
+    width: 100% !important;
+    min-width: 980px !important;
+    border-collapse: collapse !important;
+    table-layout: auto !important;
+  }
+  .admin-stock-list-page .admin-stock-table-wrap th {
+    height: 72px !important;
+    padding: 12px 10px !important;
+    background: #fafafa !important;
+    color: #111 !important;
+    border: 1px solid #ddd !important;
+    font-size: 16px !important;
+    font-weight: 700 !important;
+    white-space: nowrap !important;
+    text-align: left !important;
+  }
+  .admin-stock-list-page .admin-stock-table-wrap td {
+    height: 62px !important;
+    padding: 9px 10px !important;
+    background: #fff !important;
+    color: #111 !important;
+    border-bottom: 1px solid #ddd !important;
+    border-left: 1px solid #eee !important;
+    font-size: 16px !important;
+    vertical-align: middle !important;
+    white-space: nowrap !important;
+  }
+  .admin-stock-list-page .admin-stock-table-wrap tbody tr:hover td {
+    background: #f8fbfd !important;
+  }
+  .admin-stock-list-page .admin-stock-table-wrap th:first-child,
+  .admin-stock-list-page .admin-stock-table-wrap td:first-child {
+    width: 74px !important;
+    text-align: center !important;
+  }
+  .admin-stock-list-page .admin-stock-table-wrap th:last-child,
+  .admin-stock-list-page .admin-stock-table-wrap td:last-child {
+    min-width: 275px !important;
+  }
+  .admin-stock-list-page .admin-stock-table-wrap button {
+    box-sizing: border-box !important;
+    height: 47px !important;
+    min-width: 59px !important;
+    padding: 5px 13px !important;
+    border: 1px solid #d1d1d1 !important;
+    border-radius: 5px !important;
+    background: #fff !important;
+    color: #333 !important;
+    font-size: 16px !important;
+    cursor: pointer !important;
+    vertical-align: middle !important;
+  }
+  .admin-stock-list-page .admin-stock-table-wrap td:last-child button + button {
+    margin-left: 5px !important;
+  }
+  .admin-stock-list-page .admin-stock-pagination {
+    display: flex !important;
+    justify-content: flex-end !important;
+    align-items: center !important;
+    gap: 0 !important;
+    margin: -48px 0 8px !important;
+    position: relative !important;
+    z-index: 2 !important;
+    pointer-events: none !important;
+  }
+  .admin-stock-list-page .admin-stock-pagination button {
+    pointer-events: auto !important;
+    min-width: 37px !important;
+    height: 35px !important;
+    padding: 0 11px !important;
+    border: 1px solid #ddd !important;
+    border-radius: 0 !important;
+    background: #fff !important;
+    color: #477da4 !important;
+    font-size: 14px !important;
+  }
+  .admin-stock-list-page .admin-stock-pagination button:first-of-type,
+  .admin-stock-list-page .admin-stock-pagination button:nth-of-type(2) {
+    color: #aaa !important;
+  }
+  .admin-stock-list-page .admin-stock-pagination button:nth-of-type(3) {
+    background: #3f88bd !important;
+    color: #fff !important;
+    border-color: #3f88bd !important;
+  }
+}

@@ -359,7 +359,7 @@ export function VisualisationPage() {
             ));
             const modeCell = noms.join(', ') || 'BON D’ASSURANCE';
             return mkRow(`ass-${v.id}`, [
-              v.client || '', fmtMontant(montantVente(v)), fmtMontant(montantVente(v)),
+              `${magU(v.magasin_id)}\n${v.client || ''}`, fmtMontant(montantVente(v)), fmtMontant(montantVente(v)),
               numDoc(v), '', modeCell,
             ]);
           });
@@ -377,7 +377,7 @@ export function VisualisationPage() {
           const v = vById.get(r.vente_id);
           const totalNet = v ? montantVente(v) : 0;
           return mkRow(r.id, [
-            v?.client || '', fmtMontant(totalNet), fmtMontant(num(r.montant)),
+            `${magU(v?.magasin_id)}\n${v?.client || ''}`, fmtMontant(totalNet), fmtMontant(num(r.montant)),
             v ? numDoc(v) : '', r.recu || '', modePaiementAffiche(r.mode_paiement, v),
           ], r.date, num(r.montant));
         });
@@ -390,7 +390,7 @@ export function VisualisationPage() {
           .filter(v => num((v.recap as any)?.acompte) > 0)
           .filter(v => modePaiement === OPTION_TOUS_MODES ? true : ((v.recap as any)?.modePaiement || '').toLowerCase() === modePaiement.toLowerCase());
         const acompteRows = filteredV.map(v => mkRow(`acompte-${v.id}`, [
-          v.client || '', fmtMontant(montantVente(v)), fmtMontant(num((v.recap as any)?.acompte)),
+          `${magU(v.magasin_id)}\n${v.client || ''}`, fmtMontant(montantVente(v)), fmtMontant(num((v.recap as any)?.acompte)),
           numDoc(v), '', modePaiementAffiche((v.recap as any)?.modePaiement || '', v),
         ], v.date, num((v.recap as any)?.acompte)));
 
@@ -409,7 +409,7 @@ export function VisualisationPage() {
               const assurance = String(b?.assurance || '').trim();
               const numeroBon = String(b?.numeroBon || '').trim();
               return mkRow(`assurance-${v.id}-${bi}`, [
-                v.client || '', fmtMontant(montantVente(v)), fmtMontant(montantAss),
+                `${magU(v.magasin_id)}\n${v.client || ''}`, fmtMontant(montantVente(v)), fmtMontant(montantAss),
                 numDoc(v), '', assurance || 'BON D’ASSURANCE',
               ], v.date, montantAss);
             }))
@@ -497,7 +497,7 @@ export function VisualisationPage() {
       case 'inventaires': {
         const filtered = inventaires.filter(iv => dansIntervalle(iv.date_inventaire)).filter(iv => magasinOk(iv.magasin_id));
         const rows = filtered.map(iv => mkRow(iv.id, [
-          fmtDate(iv.date_inventaire), imagU(v.magasin_id), iv.responsable || '',
+          fmtDate(iv.date_inventaire), magU(iv.magasin_id), iv.responsable || '',
           String((Array.isArray(iv.items) ? iv.items.length : 0)), String(num(iv.total_ecarts)),
         ]));
         return build('ÉTAT INVENTAIRES', 'Inventaires',
@@ -697,7 +697,7 @@ export function VisualisationPage() {
   const fieldStyle: React.CSSProperties = { border: '1px solid #d1d5db', borderRadius: '6px', padding: '9px 10px', fontSize: '15px', backgroundColor: '#fff', outline: 'none', width: '100%', boxSizing: 'border-box' };
   const labelStyle: React.CSSProperties = { fontSize: '12px', fontWeight: 700, marginBottom: '5px', display: 'block', color: '#374151', textTransform: 'uppercase', letterSpacing: '0.03em' };
   const thStyle: React.CSSProperties = { padding: '9px 10px', fontWeight: 700, fontSize: '12px', borderBottom: '2px solid #0891b2', whiteSpace: 'nowrap', background: '#06b6d4', color: '#fff' };
-  const tdStyle: React.CSSProperties = { padding: '8px 10px', borderBottom: '1px solid #e5e7eb', verticalAlign: 'top', whiteSpace: 'nowrap', fontSize: '13px' };
+  const tdStyle: React.CSSProperties = { padding: '8px 10px', borderBottom: '1px solid #e5e7eb', verticalAlign: 'top', whiteSpace: 'pre-line', fontSize: '13px' };
 
   const isReglements = activeReport === 'mouvements' || activeReport === 'reglements';
 
