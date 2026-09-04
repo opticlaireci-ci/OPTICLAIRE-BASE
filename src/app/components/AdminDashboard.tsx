@@ -538,53 +538,104 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
         </Panel>
       </div>
 
-      {/* 2bis ── ACTIVITÉ MENSUELLE — DESKTOP */}
-      <section className="hidden lg:block bg-white border border-gray-200" style={{ minHeight: 620, boxSizing: 'border-box', width: '100%', overflow: 'hidden' }}>
+      <style>{`
+        /* La largeur du dashboard est celle qui reste réellement après le menu latéral.
+           Les container queries rendent le rendu identique quelle que soit la largeur
+           du navigateur et que le drawer soit ouvert ou replié. */
+        .monthly-activity-desktop { container-name: monthly-dashboard; }
+        @container monthly-dashboard (max-width: 1180px) {
+          .monthly-activity-desktop .monthly-top-layout { grid-template-columns: 1fr !important; row-gap: 12px !important; }
+          .monthly-activity-desktop .monthly-controls { padding-top: 0 !important; grid-template-columns: minmax(260px, 1fr) minmax(300px, 1fr) !important; }
+          .monthly-activity-desktop .monthly-cards { grid-template-columns: repeat(4, minmax(115px, 1fr)) minmax(135px, 1fr) minmax(150px, 1.08fr) !important; }
+          .monthly-activity-desktop .monthly-chart { width: 100% !important; }
+        }
+        @container monthly-dashboard (max-width: 820px) {
+          .monthly-activity-desktop .monthly-controls { grid-template-columns: 1fr !important; }
+          .monthly-activity-desktop .monthly-cards { grid-template-columns: repeat(2, minmax(140px, 1fr)) !important; height: auto !important; }
+          .monthly-activity-desktop .monthly-avoir { height: 136px !important; }
+        }
+      `}</style>
+
+      {/* 2bis ── ACTIVITÉ MENSUELLE — DESKTOP
+          IMPORTANT : le bandeau est construit en 2 zones indépendantes.
+          La zone KPI ne partage jamais sa grille avec les filtres. Cela évite
+          que l'ouverture du menu latéral écrase les cartes. */}
+      <section className="monthly-activity-desktop hidden lg:block bg-white border border-gray-200" style={{ minHeight: 620, boxSizing: 'border-box', width: '100%', containerType: 'inline-size' }}>
         <div style={{ padding: '12px 10px 0', width: '100%', boxSizing: 'border-box' }}>
-          {/* En-tête indépendant : les filtres ne réduisent JAMAIS la largeur des cartes. */}
-          <div style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 24,
-            width: '100%', minWidth: 0, boxSizing: 'border-box', marginBottom: 8
+          <div className="monthly-top-layout" style={{
+            display: 'grid',
+            gridTemplateColumns: 'minmax(0, 2.2fr) minmax(390px, 1fr)',
+            columnGap: 20,
+            alignItems: 'start',
+            width: '100%',
+            boxSizing: 'border-box'
           }}>
-            <h2 style={{ margin: 0, fontWeight: 700, fontSize: 18, lineHeight: '22px', color: '#111827', flex: '1 1 auto', minWidth: 0 }}>
-              ACTIVITÉ MENSUELLE
-            </h2>
-            <div style={{
-              display: 'grid', gridTemplateColumns: 'minmax(280px, 1fr) minmax(300px, 1fr)',
-              gap: 16, width: 'min(660px, 52%)', minWidth: 520, flex: '0 1 660px', boxSizing: 'border-box'
-            }}>
+            {/* Zone gauche : titre + cartes. Elle occupe la partie disponible
+                après le retrait réel du menu latéral Desktop. */}
+            <div style={{ minWidth: 0 }}>
+              <h2 style={{ margin: '0 0 8px', fontWeight: 700, fontSize: 18, lineHeight: '22px', color: '#111827' }}>
+                ACTIVITÉ MENSUELLE
+              </h2>
+              <div className="monthly-cards" style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(4, minmax(0, 1fr)) minmax(135px, 1fr) minmax(150px, 1.08fr)',
+                width: '100%',
+                height: 136,
+                minWidth: 0,
+                boxSizing: 'border-box'
+              }}>
+                {[
+                  { value: fmtInt(d.objectif), label: 'Objectif', bg: C_OBJECTIF },
+                  { value: fmtInt(d.caMonth), label: "Chiffre\nd'Affaires", bg: C_CA },
+                  { value: fmtInt(d.payMonth), label: 'Paiements\nClients', bg: C_PAY },
+                  { value: fmtInt(d.bonsMonth), label: 'Bons\nAssurance', bg: C_BONS },
+                ].map((c, i) => (
+                  <div key={i} style={{ backgroundColor: c.bg, color: '#fff', padding: '8px 10px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minWidth: 0, boxSizing: 'border-box' }}>
+                    <div style={{ fontWeight: 700, fontSize: 'clamp(16px, 1.25vw, 18px)', lineHeight: '20px', textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.value}</div>
+                    <div style={{ fontWeight: 700, fontSize: 'clamp(16px, 1.25vw, 18px)', lineHeight: '23px', whiteSpace: 'pre-line', overflow: 'hidden' }}>{c.label}</div>
+                  </div>
+                ))}
+
+                <div className="monthly-avoir" style={{ display: 'flex', flexDirection: 'column', minWidth: 0, height: 136 }}>
+                  <div style={{ flex: 1, backgroundColor: C_AVOIR_P, color: '#111827', padding: '6px 10px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: 0, boxSizing: 'border-box' }}>
+                    <div style={{ fontWeight: 700, fontSize: 'clamp(16px, 1.25vw, 18px)', lineHeight: '20px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{fmtInt(Math.max(0, d.payMonth + d.bonsMonth - d.caMonth))}</div>
+                    <div style={{ fontWeight: 700, fontSize: 'clamp(15px, 1.15vw, 17px)', lineHeight: '20px' }}>AVOIR-CLIENT<br/>+</div>
+                  </div>
+                  <div style={{ flex: 1, backgroundColor: C_AVOIR_M, color: '#111827', padding: '6px 10px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: 0, boxSizing: 'border-box' }}>
+                    <div style={{ fontWeight: 700, fontSize: 'clamp(16px, 1.25vw, 18px)', lineHeight: '20px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{fmtInt(Math.max(0, d.caMonth - d.payMonth - d.bonsMonth))}</div>
+                    <div style={{ fontWeight: 700, fontSize: 'clamp(15px, 1.15vw, 17px)', lineHeight: '20px' }}>AVOIR-CLIENT<br/>-</div>
+                  </div>
+                </div>
+
+                <div style={{ backgroundColor: C_RESTANT, color: '#fff', padding: '8px 10px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minWidth: 0, boxSizing: 'border-box' }}>
+                  <div style={{ fontWeight: 700, fontSize: 'clamp(16px, 1.25vw, 18px)', lineHeight: '20px', textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{fmtInt(d.montantRestantTotal)}</div>
+                  <div style={{ fontWeight: 700, fontSize: 'clamp(16px, 1.25vw, 18px)', lineHeight: '23px' }}>Montant<br/>Restant</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Zone droite : filtres indépendants. Leur largeur ne participe
+                jamais au calcul des largeurs des cartes. */}
+            <div className="monthly-controls" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.08fr) minmax(0, 1fr)', gap: 16, paddingTop: 26, minWidth: 0, boxSizing: 'border-box' }}>
               <div style={{ position: 'relative', minWidth: 0 }}>
                 <select value={magasin} onChange={e => setMagasin(e.target.value)} aria-label="Magasin"
-                  style={{
-                    width: '100%', height: 46, boxSizing: 'border-box', border: '1px solid #cfcfcf', borderRadius: 7,
-                    padding: '0 42px 0 16px', fontSize: 18, fontWeight: 500, color: '#374151', background: '#fff',
-                    appearance: 'none', WebkitAppearance: 'none', MozAppearance: 'none', outline: 'none', cursor: 'pointer'
-                  }}>
+                  style={{ width: '100%', height: 46, boxSizing: 'border-box', border: '1px solid #cfcfcf', borderRadius: 7, padding: '0 42px 0 16px', fontSize: 18, fontWeight: 500, color: '#374151', background: '#fff', appearance: 'none', WebkitAppearance: 'none', MozAppearance: 'none', outline: 'none', cursor: 'pointer' }}>
                   <option value="__TOUS__">Tous les Magasins</option>
                   {magasins.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
                 </select>
                 <span aria-hidden="true" style={{ position: 'absolute', right: 14, top: 0, height: 46, display: 'flex', alignItems: 'center', pointerEvents: 'none', color: '#4b5563', fontSize: 16 }}>⌄</span>
               </div>
-              <div style={{
-                display: 'grid', gridTemplateColumns: '1fr 92px', minWidth: 0, height: 46,
-                border: '1px solid #cfcfcf', borderRadius: 7, overflow: 'hidden', background: '#fff', boxSizing: 'border-box'
-              }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 82px', minWidth: 0, height: 46, border: '1px solid #cfcfcf', borderRadius: 7, overflow: 'hidden', background: '#fff', boxSizing: 'border-box' }}>
                 <div style={{ position: 'relative', minWidth: 0 }}>
                   <select value={mois} onChange={e => setMois(Number(e.target.value))} aria-label="Mois"
-                    style={{
-                      width: '100%', height: '44px', border: 0, padding: '0 36px 0 16px', fontSize: 18, color: '#4b5563',
-                      background: '#fff', appearance: 'none', WebkitAppearance: 'none', MozAppearance: 'none', outline: 'none', cursor: 'pointer', boxSizing: 'border-box'
-                    }}>
+                    style={{ width: '100%', height: '44px', border: 0, padding: '0 32px 0 16px', fontSize: 18, color: '#4b5563', background: '#fff', appearance: 'none', WebkitAppearance: 'none', MozAppearance: 'none', outline: 'none', cursor: 'pointer', boxSizing: 'border-box' }}>
                     {MOIS_LONG.map((m, i) => <option key={m} value={i}>{m}</option>)}
                   </select>
                   <span aria-hidden="true" style={{ position: 'absolute', right: 10, top: 0, height: 44, display: 'flex', alignItems: 'center', pointerEvents: 'none', color: '#6b7280', fontSize: 16 }}>⌄</span>
                 </div>
                 <div style={{ position: 'relative', borderLeft: '1px solid #e5e7eb', minWidth: 0 }}>
                   <select value={annee} onChange={e => setAnnee(Number(e.target.value))} aria-label="Année"
-                    style={{
-                      width: '100%', height: '44px', border: 0, padding: '0 22px 0 12px', fontSize: 18, color: '#4b5563',
-                      background: '#fff', appearance: 'none', WebkitAppearance: 'none', MozAppearance: 'none', outline: 'none', cursor: 'pointer', boxSizing: 'border-box'
-                    }}>
+                    style={{ width: '100%', height: '44px', border: 0, padding: '0 18px 0 10px', fontSize: 18, color: '#4b5563', background: '#fff', appearance: 'none', WebkitAppearance: 'none', MozAppearance: 'none', outline: 'none', cursor: 'pointer', boxSizing: 'border-box' }}>
                     {years.map(y => <option key={y} value={y}>{y}</option>)}
                   </select>
                   <span aria-hidden="true" style={{ position: 'absolute', right: 6, top: 0, height: 44, display: 'flex', alignItems: 'center', pointerEvents: 'none', color: '#6b7280', fontSize: 15 }}>⌄</span>
@@ -593,43 +644,9 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
             </div>
           </div>
 
-          {/* Cartes : pleine largeur disponible. Les filtres ci-dessus ne peuvent plus les écraser. */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(4, minmax(92px, 1fr)) minmax(145px, 1.12fr) minmax(160px, 1.28fr)',
-            width: '100%', minWidth: 0, height: 136, overflow: 'hidden', boxSizing: 'border-box'
-          }}>
-            {[
-              { value: fmtInt(d.objectif), label: 'Objectif', bg: C_OBJECTIF },
-              { value: fmtInt(d.caMonth), label: "Chiffre\nd'Affaires", bg: C_CA },
-              { value: fmtInt(d.payMonth), label: 'Paiements\nClients', bg: C_PAY },
-              { value: fmtInt(d.bonsMonth), label: 'Bons\nAssurance', bg: C_BONS },
-            ].map((c, i) => (
-              <div key={i} style={{ backgroundColor: c.bg, color: '#fff', padding: '8px 10px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minWidth: 0, boxSizing: 'border-box' }}>
-                <div style={{ fontWeight: 700, fontSize: 18, lineHeight: '20px', textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.value}</div>
-                <div style={{ fontWeight: 700, fontSize: 18, lineHeight: '23px', whiteSpace: 'pre-line', overflow: 'hidden' }}>{c.label}</div>
-              </div>
-            ))}
-
-            <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, height: 136 }}>
-              <div style={{ flex: 1, backgroundColor: C_AVOIR_P, color: '#111827', padding: '6px 10px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: 0, boxSizing: 'border-box' }}>
-                <div style={{ fontWeight: 700, fontSize: 18, lineHeight: '20px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{fmtInt(Math.max(0, d.payMonth + d.bonsMonth - d.caMonth))}</div>
-                <div style={{ fontWeight: 700, fontSize: 17, lineHeight: '20px' }}>AVOIR-CLIENT<br/>+</div>
-              </div>
-              <div style={{ flex: 1, backgroundColor: C_AVOIR_M, color: '#111827', padding: '6px 10px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: 0, boxSizing: 'border-box' }}>
-                <div style={{ fontWeight: 700, fontSize: 18, lineHeight: '20px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{fmtInt(Math.max(0, d.caMonth - d.payMonth - d.bonsMonth))}</div>
-                <div style={{ fontWeight: 700, fontSize: 17, lineHeight: '20px' }}>AVOIR-CLIENT<br/>-</div>
-              </div>
-            </div>
-
-            <div style={{ backgroundColor: C_RESTANT, color: '#fff', padding: '8px 10px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minWidth: 0, boxSizing: 'border-box' }}>
-              <div style={{ fontWeight: 700, fontSize: 18, lineHeight: '20px', textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{fmtInt(d.montantRestantTotal)}</div>
-              <div style={{ fontWeight: 700, fontSize: 18, lineHeight: '23px' }}>Montant<br/>Restant</div>
-            </div>
-          </div>
-
-          {/* Graphique : même largeur que les cartes, sans largeur fixe dépendante du navigateur. */}
-          <div style={{ marginTop: 6, width: '100%', height: 430, padding: '0 24px 0 72px', boxSizing: 'border-box' }}>
+          {/* Graphique : même largeur que la zone KPI, donc il suit le menu
+              latéral sans être écrasé par les filtres. */}
+          <div className="monthly-chart" style={{ marginTop: 6, width: 'calc(100% * 2.22 / 3.22)', height: 430, padding: '0 24px 0 72px', boxSizing: 'border-box' }}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={d.dayData} margin={{ top: 0, right: 0, left: 0, bottom: 20 }}>
                 <CartesianGrid strokeDasharray="0" vertical={false} stroke="#eeeeee" />
