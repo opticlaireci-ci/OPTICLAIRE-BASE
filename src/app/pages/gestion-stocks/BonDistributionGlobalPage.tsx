@@ -523,7 +523,6 @@ export function BonDistributionGlobalPage() {
                 <input type="checkbox" />
               </th>
               <th style={{ padding: '12px', width: '40px', textAlign: 'center', fontSize: '14px', fontWeight: '600' }}>#</th>
-              <th style={{ padding: '12px', width: '60px' }}></th>
               <th style={{ padding: '12px', textAlign: 'left', fontSize: '14px', fontWeight: '600' }}>
                 N° Bon de Distribution
               </th>
@@ -547,7 +546,7 @@ export function BonDistributionGlobalPage() {
           <tbody>
             {filteredBons.length === 0 ? (
               <tr>
-                <td colSpan={9} style={{ padding: '40px', textAlign: 'center', color: '#9ca3af' }}>
+                <td colSpan={8} style={{ padding: '40px', textAlign: 'center', color: '#9ca3af' }}>
                   Aucun bon de distribution trouvé
                 </td>
               </tr>
@@ -558,23 +557,9 @@ export function BonDistributionGlobalPage() {
                     <input type="checkbox" />
                   </td>
                   <td style={{ padding: '12px', textAlign: 'center', fontSize: '12px', color: '#9ca3af', fontWeight: 500 }}>{idx + 1}</td>
-                  <td style={{ padding: '12px' }}>
-                    <button
-                      onClick={() => handleDelete(bon.id)}
-                      style={{
-                        padding: '8px',
-                        backgroundColor: '#dc2626',
-                        border: 'none',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      <Trash2 size={16} color="#fff" />
-                    </button>
-                  </td>
                   <td style={{ padding: '12px', fontSize: '14px' }}>{bon.reference}</td>
-                  <td style={{ padding: '12px', fontSize: '14px' }}>-</td>
-                  <td style={{ padding: '12px', fontSize: '14px' }}>{bon.magasinRecepteur}</td>
+                  <td style={{ padding: '12px', fontSize: '14px' }}>{bon.magasinRecepteur || '-'}</td>
+                  <td style={{ padding: '12px', fontSize: '14px' }}>{'-'}</td>
                   <td style={{ padding: '12px', fontSize: '14px' }}>{bon.statut}</td>
                   <td style={{ padding: '12px', fontSize: '12px', color: '#6b7280' }}>
                     {bon.createdBy ? (
@@ -584,20 +569,11 @@ export function BonDistributionGlobalPage() {
                       </div>
                     ) : '-'}
                   </td>
-                  <td style={{ padding: '12px', fontSize: '14px' }}>
-                    <button
-                      style={{
-                        padding: '4px 12px',
-                        backgroundColor: '#3b82f6',
-                        color: '#fff',
-                        border: 'none',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
-                        fontSize: '12px',
-                      }}
-                    >
-                      Éditer
-                    </button>
+                  <td className="stock-edition-actions" style={{ padding: '8px', fontSize: '14px' }}>
+                    <button title="Imprimer">🖨️</button>
+                    <button title="Format B5">B5</button>
+                    <button title="Format A5">A5</button>
+                    <button title="Éditer">✏️</button>
                   </td>
                 </tr>
               ))

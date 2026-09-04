@@ -238,6 +238,7 @@ export function BonRetourGlobalPage() {
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ backgroundColor: '#f9fafb', borderBottom: '2px solid #e5e7eb' }}>
+              <th className="stock-select-col" style={{ padding: '12px', width: '40px', textAlign: 'center' }}><input type="checkbox" /></th>
               <th style={{ padding: '12px', width: '40px', textAlign: 'center', fontSize: '14px', fontWeight: '600' }}>#</th>
               <th style={{ padding: '12px', textAlign: 'left', fontSize: '14px', fontWeight: '600' }}>
                 N° Bon de Retour
@@ -272,6 +273,7 @@ export function BonRetourGlobalPage() {
             ) : (
               sortedBons.map((bon, idx) => (
                 <tr key={bon.id} style={{ borderBottom: '1px solid #e5e7eb', backgroundColor: idx % 2 === 0 ? '#fff' : '#fafafa' }}>
+                  <td className="stock-select-col" style={{ padding: '12px', textAlign: 'center' }}><input type="checkbox" /></td>
                   <td style={{ padding: '12px', textAlign: 'center', fontSize: '12px', color: '#9ca3af', fontWeight: 500 }}>{idx + 1}</td>
                   <td style={{ padding: '12px', fontSize: '14px', fontWeight: '600' }}>{bon.numero || '-'}</td>
                   <td style={{ padding: '12px', fontSize: '14px' }}>

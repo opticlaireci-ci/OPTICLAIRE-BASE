@@ -167,3 +167,424 @@
     border-color: #3f88bd !important;
   }
 }
+
+/* Reproduction stricte du tableau de référence — Desktop uniquement.
+   Le mobile n'est volontairement pas concerné. */
+@media (min-width: 768px) {
+  .admin-stock-list-page {
+    width: 100%;
+    max-width: none !important;
+    padding: 16px !important;
+    background: #fff !important;
+    overflow-x: hidden;
+  }
+  .admin-stock-list-page > div:first-child {
+    min-height: 40px;
+    margin-bottom: 22px !important;
+  }
+  .admin-stock-list-page > h1 {
+    font-size: 24px !important;
+    font-weight: 400 !important;
+    margin: 10px 0 28px !important;
+    padding-bottom: 12px !important;
+    border-bottom: 1px solid #ddd !important;
+  }
+  .admin-stock-search-filters {
+    width: 100%;
+    margin-bottom: 0 !important;
+    padding-top: 0 !important;
+  }
+  .admin-stock-search-filters > p {
+    font-size: 15px !important;
+    margin-bottom: 5px !important;
+    color: #111 !important;
+  }
+  .admin-stock-search-filters > div {
+    display: grid !important;
+    grid-template-columns: 253px 253px 255px 61px 1fr !important;
+    gap: 44px !important;
+    align-items: stretch !important;
+    width: 100%;
+    margin-bottom: 0 !important;
+  }
+  .admin-stock-search-filters input,
+  .admin-stock-search-filters select {
+    width: 100% !important;
+    min-width: 0 !important;
+    height: 47px !important;
+    min-height: 47px !important;
+    padding: 9px 16px !important;
+    border: 1px solid #cfcfcf !important;
+    border-radius: 2px !important;
+    background: #fff !important;
+    font-size: 16px !important;
+    box-sizing: border-box !important;
+  }
+  .admin-stock-search-filters button {
+    width: 61px !important;
+    min-width: 61px !important;
+    height: 47px !important;
+    padding: 0 !important;
+    border-radius: 0 !important;
+    background: #3f88bd !important;
+    color: #fff !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+  .admin-stock-table-wrap {
+    width: 100% !important;
+    margin-top: 0 !important;
+    border: 1px solid #ddd !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    overflow-x: auto !important;
+    overflow-y: visible !important;
+  }
+  .admin-stock-table-wrap table {
+    width: 100% !important;
+    min-width: 1100px !important;
+    border-collapse: collapse !important;
+    table-layout: fixed !important;
+  }
+  .admin-stock-table-wrap th {
+    height: 72px !important;
+    padding: 12px 10px !important;
+    background: #fafafa !important;
+    color: #111 !important;
+    border: 1px solid #ddd !important;
+    font-size: 16px !important;
+    font-weight: 700 !important;
+    white-space: nowrap !important;
+    text-align: left !important;
+  }
+  .admin-stock-table-wrap td {
+    height: 62px !important;
+    padding: 9px 10px !important;
+    background: #fff !important;
+    color: #111 !important;
+    border-bottom: 1px solid #ddd !important;
+    border-left: 1px solid #eee !important;
+    font-size: 16px !important;
+    vertical-align: middle !important;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .admin-stock-table-wrap th:first-child,
+  .admin-stock-table-wrap td:first-child { width: 74px !important; text-align: center !important; }
+  .admin-stock-table-wrap .stock-select-col { width: 74px !important; text-align: center !important; }
+  .admin-stock-table-wrap th:last-child,
+  .admin-stock-table-wrap td:last-child { width: 275px !important; }
+  .admin-stock-table-wrap .stock-edition-actions,
+  .admin-stock-table-wrap td:last-child { white-space: nowrap !important; overflow: visible !important; }
+  .admin-stock-table-wrap td:last-child button,
+  .admin-stock-table-wrap .stock-edition-actions button {
+    box-sizing: border-box !important;
+    height: 47px !important;
+    min-width: 59px !important;
+    padding: 5px 13px !important;
+    margin: 0 2px !important;
+    border: 1px solid #d1d1d1 !important;
+    border-radius: 5px !important;
+    background: #fff !important;
+    color: #333 !important;
+    font-size: 16px !important;
+    cursor: pointer !important;
+    vertical-align: middle !important;
+  }
+  .admin-stock-table-wrap tbody tr:hover td { background: #fff !important; }
+  .admin-stock-pagination {
+    display: flex !important;
+    justify-content: flex-end !important;
+    align-items: center !important;
+    gap: 0 !important;
+    margin: -48px 0 8px !important;
+    position: relative !important;
+    z-index: 3 !important;
+  }
+  .admin-stock-pagination button {
+    min-width: 37px !important;
+    height: 35px !important;
+    padding: 0 11px !important;
+    border: 1px solid #ddd !important;
+    border-radius: 0 !important;
+    background: #fff !important;
+    color: #477da4 !important;
+    font-size: 14px !important;
+  }
+  .admin-stock-pagination button:nth-of-type(3) { background: #3f88bd !important; color: #fff !important; border-color: #3f88bd !important; }
+}
+
+
+/* -------------------------------------------------------------------------
+   V16 — Mobile : même langage visuel que le tableau Desktop de référence.
+   Les cartes mobiles historiques sont remplacées par le tableau défilable :
+   toutes les colonnes restent lisibles sans écraser les informations.
+   ------------------------------------------------------------------------- */
+@media (max-width: 767px) {
+  .admin-stock-list-page {
+    width: 100% !important;
+    max-width: 100vw !important;
+    box-sizing: border-box !important;
+    padding: 10px !important;
+    background: #fff !important;
+    overflow-x: hidden !important;
+  }
+
+  .admin-stock-list-page > h1 {
+    font-size: 20px !important;
+    line-height: 1.25 !important;
+    font-weight: 400 !important;
+    margin: 8px 0 16px !important;
+    padding-bottom: 10px !important;
+    border-bottom: 1px solid #ddd !important;
+    color: #111 !important;
+  }
+
+  .admin-stock-list-page .admin-stock-search-filters {
+    width: 100% !important;
+    overflow: hidden !important;
+    margin-bottom: 8px !important;
+  }
+
+  .admin-stock-list-page .admin-stock-search-filters > p {
+    font-size: 13px !important;
+    margin: 0 0 6px !important;
+    color: #111 !important;
+  }
+
+  .admin-stock-list-page .admin-stock-search-filters > div {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    gap: 8px !important;
+    width: 100% !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    padding-bottom: 5px !important;
+    align-items: stretch !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: thin;
+  }
+
+  .admin-stock-list-page .admin-stock-search-filters input,
+  .admin-stock-list-page .admin-stock-search-filters select {
+    flex: 0 0 190px !important;
+    width: 190px !important;
+    min-width: 190px !important;
+    height: 42px !important;
+    min-height: 42px !important;
+    box-sizing: border-box !important;
+    padding: 8px 11px !important;
+    border: 1px solid #cfcfcf !important;
+    border-radius: 3px !important;
+    background: #fff !important;
+    color: #333 !important;
+    font-size: 14px !important;
+  }
+
+  .admin-stock-list-page .admin-stock-search-filters input[type="text"]:first-child,
+  .admin-stock-list-page .admin-stock-search-filters input[placeholder="jj/mm/aaaa"],
+  .admin-stock-list-page .admin-stock-search-filters select {
+    flex-basis: 190px !important;
+  }
+
+  .admin-stock-list-page .admin-stock-search-filters button {
+    flex: 0 0 52px !important;
+    width: 52px !important;
+    min-width: 52px !important;
+    height: 42px !important;
+    padding: 0 !important;
+    border-radius: 2px !important;
+    background: #3f88bd !important;
+    color: #fff !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+
+  /* On affiche le vrai tableau sur mobile et on le fait défiler horizontalement. */
+  .admin-stock-list-page .admin-stock-table-wrap {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    -webkit-overflow-scrolling: touch !important;
+    border: 1px solid #ddd !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    background: #fff !important;
+  }
+
+  .admin-stock-list-page .admin-stock-table-wrap table {
+    display: table !important;
+    width: max-content !important;
+    min-width: 920px !important;
+    table-layout: fixed !important;
+    border-collapse: collapse !important;
+  }
+
+  .admin-stock-list-page .admin-stock-table-wrap th {
+    height: 58px !important;
+    padding: 9px 10px !important;
+    background: #fafafa !important;
+    color: #111 !important;
+    border: 1px solid #ddd !important;
+    font-size: 14px !important;
+    font-weight: 700 !important;
+    white-space: nowrap !important;
+    text-align: left !important;
+  }
+
+  .admin-stock-list-page .admin-stock-table-wrap td {
+    height: 56px !important;
+    padding: 8px 10px !important;
+    background: #fff !important;
+    color: #111 !important;
+    border-bottom: 1px solid #ddd !important;
+    border-left: 1px solid #eee !important;
+    font-size: 14px !important;
+    vertical-align: middle !important;
+    white-space: nowrap !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+  }
+
+  .admin-stock-list-page .admin-stock-table-wrap th:first-child,
+  .admin-stock-list-page .admin-stock-table-wrap td:first-child {
+    width: 48px !important;
+    min-width: 48px !important;
+    text-align: center !important;
+  }
+
+  .admin-stock-list-page .admin-stock-table-wrap th:nth-child(2),
+  .admin-stock-list-page .admin-stock-table-wrap td:nth-child(2) {
+    width: 48px !important;
+    min-width: 48px !important;
+    text-align: center !important;
+  }
+
+  .admin-stock-list-page .admin-stock-table-wrap th:last-child,
+  .admin-stock-list-page .admin-stock-table-wrap td:last-child {
+    width: 255px !important;
+    min-width: 255px !important;
+  }
+
+  .admin-stock-list-page .admin-stock-table-wrap td:last-child,
+  .admin-stock-list-page .admin-stock-table-wrap .stock-edition-actions {
+    white-space: nowrap !important;
+    overflow: visible !important;
+  }
+
+  .admin-stock-list-page .admin-stock-table-wrap td:last-child button,
+  .admin-stock-list-page .admin-stock-table-wrap .stock-edition-actions button {
+    height: 40px !important;
+    min-width: 50px !important;
+    padding: 5px 9px !important;
+    margin: 0 2px !important;
+    border: 1px solid #d1d1d1 !important;
+    border-radius: 5px !important;
+    background: #fff !important;
+    color: #333 !important;
+    font-size: 14px !important;
+    vertical-align: middle !important;
+  }
+
+  /* Les cartes de liste mobiles sont masquées : le tableau de référence est
+     utilisé à la place, avec défilement horizontal. */
+  .admin-stock-list-page .admin-stock-table-wrap + .md\:hidden {
+    display: none !important;
+  }
+
+  .admin-stock-list-page .admin-stock-pagination {
+    display: flex !important;
+    justify-content: flex-end !important;
+    align-items: center !important;
+    gap: 0 !important;
+    margin: 8px 0 0 !important;
+    position: static !important;
+    overflow-x: auto !important;
+    pointer-events: auto !important;
+  }
+
+  .admin-stock-list-page .admin-stock-pagination button {
+    min-width: 34px !important;
+    height: 34px !important;
+    padding: 0 9px !important;
+    border: 1px solid #ddd !important;
+    border-radius: 0 !important;
+    background: #fff !important;
+    color: #477da4 !important;
+    font-size: 13px !important;
+  }
+
+  .admin-stock-list-page .admin-stock-pagination button:nth-of-type(3) {
+    background: #3f88bd !important;
+    color: #fff !important;
+    border-color: #3f88bd !important;
+  }
+}
+
+/* -------------------------------------------------------------------------
+   V16 — Tableau de bord général : adaptation mobile sans changer les données.
+   ------------------------------------------------------------------------- */
+@media (max-width: 767px) {
+  .admin-general-dashboard {
+    width: 100% !important;
+    max-width: 100vw !important;
+    box-sizing: border-box !important;
+    overflow-x: hidden !important;
+    padding: 8px !important;
+    gap: 10px !important;
+  }
+
+  .admin-general-dashboard .monthly-mobile-cards {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    width: 100% !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: thin;
+  }
+
+  .admin-general-dashboard .monthly-mobile-cards > div {
+    flex: 0 0 145px !important;
+    width: 145px !important;
+    min-width: 145px !important;
+    min-height: 100px !important;
+    box-sizing: border-box !important;
+  }
+
+  .admin-general-dashboard .monthly-mobile-cards > div:nth-child(5),
+  .admin-general-dashboard .monthly-mobile-cards > div:nth-child(6) {
+    flex-basis: 145px !important;
+    min-width: 145px !important;
+  }
+
+  .admin-general-dashboard .monthly-mobile-cards > div:nth-child(7) {
+    flex-basis: 155px !important;
+    min-width: 155px !important;
+  }
+
+  .admin-general-dashboard .bg-white {
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .admin-general-dashboard select,
+  .admin-general-dashboard input {
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .admin-general-dashboard .recharts-responsive-container {
+    max-width: 100% !important;
+  }
+
+  /* Les bandes KPI des autres sections défilent horizontalement plutôt que
+     d'être comprimées en colonnes illisibles. */
+  .admin-general-dashboard .grid[style*="grid-template-columns"] {
+    max-width: 100% !important;
+  }
+}

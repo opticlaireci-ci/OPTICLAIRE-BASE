@@ -418,7 +418,7 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
   ];
 
   return (
-    <div className="flex flex-col gap-4 p-4 md:p-6" style={{ backgroundColor: '#eef2f4', minHeight: '100vh' }}>
+    <div className="admin-general-dashboard flex flex-col gap-4 p-4 md:p-6" style={{ backgroundColor: '#eef2f4', minHeight: '100vh' }}>
       {/* 1 ── STATISTIQUES ─────────────────────────────────────────────────── */}
       <div id="stats-jour">
       <Panel title={`STATISTIQUES : ${todayStr} (chiffres du jour)`} controls={magSel}>
@@ -439,7 +439,7 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
           title="ACTIVITÉ MENSUELLE"
           controls={<div className="flex flex-wrap items-center gap-3">{magSel}{moisSel}{anneeSel}</div>}
         >
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-0 overflow-hidden rounded">
+          <div className="monthly-mobile-cards grid grid-cols-1 sm:grid-cols-2 gap-0 overflow-hidden rounded">
             {[
               { value: fmtInt(d.objectif), label: 'Objectif', bg: C_OBJECTIF },
               { value: fmtInt(d.caMonth), label: "Chiffre d'Affaires", bg: C_CA },
