@@ -19,7 +19,7 @@ import { TENANT } from '../config/tenant';
 
 // Option spéciale du filtre « mode de paiement » : sélectionne toutes les
 // factures réglées (partiellement ou totalement) par bon d'assurance.
-const OPTION_BON_ASSURANCE = "Bon d'assurance";
+const OPTION_BON_ASSURANCE = "Assurance";
 const OPTION_TOUS_MODES = 'Tous les modes de paiement';
 
 type ReportType =
@@ -175,7 +175,7 @@ export function VisualisationPage() {
   // - WAVE et ORANGE MONEY sont regroupés sous « Mobile Money ».
   // - CARTE VISA est regroupée sous « Carte bancaire ».
   // - les variantes d'ESPECE/ESPÈCES sont regroupées en une seule entrée.
-  // - ASSURANCE n'est pas un mode de paiement proposé dans le filtre.
+  // - ASSURANCE est regroupée dans le filtre « Assurance » et sélectionne tous les bons d'assurance.
   const normaliserModePaiement = (mode: string): string => {
     const m = String(mode || '').trim();
     const n = m.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
@@ -195,6 +195,7 @@ export function VisualisationPage() {
     const enregistre = normaliserModePaiement(modeEnregistre);
     if (filtre === 'Mobile Money') return estModeMobileMoney(modeEnregistre);
     if (filtre === 'Espèces') return enregistre === 'Espèces';
+    if (filtre === 'Assurance') return enregistre === 'Assurance' || /bon\s*(d[’']?assurance|assurance)/i.test(String(modeEnregistre || ''));
     return enregistre.toLowerCase() === filtre.toLowerCase();
   };
 
@@ -732,13 +733,13 @@ export function VisualisationPage() {
   // Modes de paiement disponibles dans le filtre Règlements.
   // Les anciennes variantes sont volontairement normalisées pour éviter les
   // doublons : WAVE/ORANGE MONEY -> Mobile Money, ESPECE/ESPÈCES -> Espèces,
-  // CARTE VISA est regroupée avec CARTE BANCAIRE ; ASSURANCE est masqué.
+  // CARTE VISA est regroupée avec CARTE BANCAIRE ; ASSURANCE est regroupée sous « Assurance ».
   const modesEnregistres = useModesPaiement();
   const modesDisponibles = useMemo(() => {
     const set = new Set<string>();
     const ajouter = (mode: string) => {
       const normalise = normaliserModePaiement(mode);
-      if (!normalise || normalise === 'Assurance') return;
+      if (!normalise) return;
       set.add(normalise);
     };
     modesEnregistres.forEach(ajouter);
@@ -749,13 +750,14 @@ export function VisualisationPage() {
     set.add('Mobile Money');
     set.add('Espèces');
     set.add('Carte bancaire');
-    const arr = Array.from(set).filter(m => m !== 'Assurance');
+    set.add('Assurance');
+    const arr = Array.from(set);
     arr.sort((a, b) => a.localeCompare(b, 'fr'));
     return arr;
   }, [modesEnregistres, ventes, reglements]);
 
-  // Si une ancienne valeur (Wave, Orange Money, Carte Visa, Assurance...) était
-  // encore sélectionnée lors d'une mise à jour, revenir proprement à « Tous ».
+  // Si une ancienne valeur (Wave, Orange Money, Carte Visa...) était encore
+  // sélectionnée lors d'une mise à jour, revenir proprement à « Tous ».
   useEffect(() => {
     if (!isReglements || modePaiement === OPTION_TOUS_MODES) return;
     if (!modesDisponibles.includes(modePaiement) && modePaiement !== OPTION_BON_ASSURANCE) {
