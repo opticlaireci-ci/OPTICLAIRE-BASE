@@ -193,78 +193,7 @@ export function BonTransfertGlobalPage() {
         </table>
       </div>
 
-      {/* Mobile Cards */}
-      <div className="stock-mobile-legacy-hidden" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-        {filteredBons.length === 0 ? (
-          <div style={{ padding: '40px', textAlign: 'center', color: '#9ca3af', backgroundColor: '#fff', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-            Aucun bon de transfert trouvé
-          </div>
-        ) : (
-          sortedBons.map((bon) => (
-            <div key={bon.id} style={{ backgroundColor: '#fff', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', overflow: 'hidden' }}>
-              {/* Card header */}
-              <div style={{ backgroundColor: '#6d28d9', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
-                <div>
-                  <div style={{ color: '#fff', fontWeight: '700', fontSize: '15px' }}>N° {bon.numeroBon}</div>
-                  {bon.dateTransfert && (
-                    <div style={{ color: '#ddd6fe', fontSize: '12px', marginTop: '2px' }}>
-                      {new Date(bon.dateTransfert).toLocaleDateString('fr-FR')}
-                    </div>
-                  )}
-                </div>
-                <span style={{
-                  backgroundColor: getStatutColor(bon.statut),
-                  color: '#fff',
-                  padding: '3px 10px',
-                  borderRadius: '12px',
-                  fontSize: '11px',
-                  fontWeight: '700',
-                  whiteSpace: 'nowrap',
-                  flexShrink: 0,
-                }}>
-                  {bon.statut || 'En attente'}
-                </span>
-              </div>
-              {/* Card body */}
-              <div style={{ padding: '12px 16px' }}>
-                <div style={{ marginBottom: '8px' }}>
-                  <div style={{ fontSize: '11px', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>Transfert</div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: '13px', fontWeight: '600', backgroundColor: '#f3f4f6', padding: '3px 8px', borderRadius: '4px' }}>
-                      {bon.magasinExpediteur || '-'}
-                    </span>
-                    <span style={{ fontSize: '14px', color: '#6b7280' }}>→</span>
-                    <span style={{ fontSize: '13px', fontWeight: '600', backgroundColor: '#eff6ff', color: '#1d4ed8', padding: '3px 8px', borderRadius: '4px' }}>
-                      {bon.magasinRecepteur || '-'}
-                    </span>
-                  </div>
-                </div>
-                {bon.recepteur && (
-                  <div style={{ fontSize: '13px', color: '#6b7280' }}>
-                    <span style={{ fontWeight: '500', color: '#374151' }}>Récepteur:</span> {bon.recepteur}
-                  </div>
-                )}
-              </div>
-              {/* Card footer */}
-              <div style={{ padding: '10px 16px', borderTop: '1px solid #f3f4f6' }}>
-                <button
-                  style={{
-                    padding: '6px 14px',
-                    backgroundColor: '#3b82f6',
-                    color: '#fff',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                    fontSize: '13px',
-                  }}
-                >
-                  Éditer
-                </button>
-              </div>
-            </div>
-          ))
-        )}
-      </div>
+      
 
       {/* Pagination */}
       <div className="admin-stock-pagination" style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '16px' }}>

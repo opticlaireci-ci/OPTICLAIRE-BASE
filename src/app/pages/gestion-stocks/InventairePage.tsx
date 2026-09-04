@@ -619,45 +619,7 @@ export function InventairePage() {
             </table>
           </div>
 
-          {/* Cartes articles — mobile */}
-          <div className="stock-mobile-legacy-hidden" style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '20px' }}>
-            {filteredItems.length === 0 ? (
-              <div style={{ padding: '24px', textAlign: 'center', color: '#9ca3af', fontSize: '13px', border: '1px solid #e5e7eb', borderRadius: '6px' }}>
-                Aucun article ajouté
-              </div>
-            ) : filteredItems.map((item, idx) => {
-              const neg = item.marge < 0;
-              return (
-                <div key={item.id} style={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '6px', padding: '12px 14px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '6px' }}>
-                    <span style={{ fontSize: 'clamp(12px, 3vw, 14px)', fontWeight: 600, color: '#111827', flex: 1, marginRight: '8px' }}>{item.produit}</span>
-                    <button onClick={() => handleRemoveItem(item.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626', display: 'flex', padding: '2px', flexShrink: 0 }} title="Supprimer">
-                      <X size={15} />
-                    </button>
-                  </div>
-                  {item.codeBarre && (
-                    <div style={{ fontSize: '11px', color: '#6b7280', marginBottom: '6px' }}>Code : {item.codeBarre}</div>
-                  )}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: '8px', marginTop: '8px' }}>
-                    <div style={{ backgroundColor: '#f3f4f6', borderRadius: '4px', padding: '6px 8px', textAlign: 'center' }}>
-                      <div style={{ fontSize: '10px', color: '#6b7280', fontWeight: 600, textTransform: 'uppercase' }}>Avant</div>
-                      <div style={{ fontSize: '15px', fontWeight: 700, color: '#374151' }}>{item.stockTheorique}</div>
-                    </div>
-                    <div style={{ backgroundColor: '#eff6ff', borderRadius: '4px', padding: '6px 8px', textAlign: 'center' }}>
-                      <div style={{ fontSize: '10px', color: '#1d4ed8', fontWeight: 600, textTransform: 'uppercase' }}>Après</div>
-                      <div style={{ fontSize: '15px', fontWeight: 700, color: '#1d4ed8' }}>{item.stockPhysique}</div>
-                    </div>
-                    <div style={{ backgroundColor: neg ? '#fef2f2' : item.marge > 0 ? '#d1fae5' : '#f3f4f6', borderRadius: '4px', padding: '6px 8px', textAlign: 'center' }}>
-                      <div style={{ fontSize: '10px', color: neg ? '#dc2626' : item.marge > 0 ? '#059669' : '#374151', fontWeight: 600, textTransform: 'uppercase' }}>Écart</div>
-                      <div style={{ fontSize: '15px', fontWeight: 700, color: neg ? '#dc2626' : item.marge > 0 ? '#059669' : '#374151' }}>
-                        {item.marge > 0 ? `+${item.marge}` : item.marge}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          
 
           {/* Actions bas */}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
@@ -878,50 +840,7 @@ export function InventairePage() {
         </table>
       </div>
 
-      {/* Cartes inventaires — mobile */}
-      <div className="stock-mobile-legacy-hidden" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-        {filteredInventaires.length === 0 ? (
-          <div style={{ padding: '32px', textAlign: 'center', color: '#9ca3af', fontSize: '14px', backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
-            Aucun inventaire trouvé
-          </div>
-        ) : filteredInventaires.map((inv, idx) => {
-          const audit = formatAuditInfo(inv);
-          return (
-            <div key={inv.id} style={{ backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e5e7eb', padding: '14px 16px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '6px', gap: '8px' }}>
-                <span style={{ fontSize: 'clamp(13px, 3.5vw, 15px)', fontWeight: 700, color: '#111827' }}>
-                  Magasin {magasinLabel(inv.magasin)}
-                </span>
-                <span style={{ fontSize: '12px', color: '#6b7280', fontWeight: 500, flexShrink: 0 }}>
-                  {formatDateFR(inv.dateInventaire)}
-                </span>
-              </div>
-              <div style={{ fontSize: '11px', color: '#6b7280', lineHeight: '1.8', marginBottom: '10px' }}>
-                {audit.created !== '-' && (
-                  <div><span style={{ color: '#059669', fontWeight: 600 }}>Créé :</span> {audit.created}</div>
-                )}
-                {audit.updated !== '-' && audit.updated !== audit.created && (
-                  <div><span style={{ color: '#f59e0b', fontWeight: 600 }}>Modifié :</span> {audit.updated}</div>
-                )}
-              </div>
-              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                <button onClick={() => imprimerGestionStock()} title="Imprimer" style={{ padding: '6px 10px', backgroundColor: '#fff', border: '1px solid #d1d5db', borderRadius: '5px', cursor: 'pointer', color: '#374151', display: 'flex', alignItems: 'center' }}>
-                  <Printer size={15} />
-                </button>
-                <button onClick={() => handleVoirManquants(inv)} style={{ padding: '6px 10px', backgroundColor: '#f59e0b', border: 'none', borderRadius: '5px', cursor: 'pointer', color: '#fff', fontSize: '11px', fontWeight: '700' }}>
-                  Pas Inventorier
-                </button>
-                <button onClick={() => handleEditerInventaire(inv)} title="Modifier" style={{ padding: '6px 10px', backgroundColor: '#fff', border: '1px solid #d1d5db', borderRadius: '5px', cursor: 'pointer', color: '#f59e0b', display: 'flex', alignItems: 'center' }}>
-                  <Pencil size={15} />
-                </button>
-                <button onClick={() => handleSupprimerInventaire(inv)} title="Supprimer" style={{ padding: '6px 10px', backgroundColor: '#fff', border: '1px solid #fca5a5', borderRadius: '5px', cursor: 'pointer', color: '#dc2626', display: 'flex', alignItems: 'center' }}>
-                  <Trash2 size={15} />
-                </button>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+      
 
       {/* Pagination */}
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '6px', marginTop: '14px' }}>

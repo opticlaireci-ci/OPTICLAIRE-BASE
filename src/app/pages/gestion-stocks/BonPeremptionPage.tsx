@@ -261,32 +261,7 @@ export function BonPeremptionPage() {
             </table>
           </div>
 
-          {/* Cartes articles — mobile */}
-          <div className="stock-mobile-legacy-hidden" style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '24px' }}>
-            {items.length === 0 ? (
-              <div style={{ padding: '20px', textAlign: 'center', color: '#9ca3af', border: '1px solid #e5e7eb', borderRadius: '6px' }}>
-                Aucun article ajouté
-              </div>
-            ) : items.map((item) => (
-              <div key={item.id} style={{ backgroundColor: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '6px', padding: '12px 14px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 'clamp(12px, 3vw, 14px)', fontWeight: 700, color: '#111827' }}>{item.designation}</div>
-                    <div style={{ fontSize: '11px', color: '#6b7280', marginTop: '2px' }}>
-                      {item.type === 'monture' ? '🔲 Monture' : '🔷 Accessoire'} · Stock initial : {item.stockInitial}
-                    </div>
-                  </div>
-                  <button onClick={() => handleRemoveItem(item.id)} style={{ padding: '6px', backgroundColor: '#ef4444', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center' }}>
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <label style={{ fontSize: '12px', color: '#374151', fontWeight: 600 }}>Quantité :</label>
-                  <input type="number" min="0" value={item.quantite} onChange={(e) => handleUpdateQuantite(item.id, parseInt(e.target.value) || 0)} style={{ width: '80px', padding: '6px 8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '14px' }} />
-                </div>
-              </div>
-            ))}
-          </div>
+          
 
           {/* Buttons */}
           <div style={{ display: 'flex', gap: '12px' }}>
@@ -501,48 +476,7 @@ export function BonPeremptionPage() {
         </table>
       </div>
 
-      {/* Cartes bons péremption — mobile */}
-      <div className="stock-mobile-legacy-hidden" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-        {filteredBons.length === 0 ? (
-          <div style={{ padding: '32px', textAlign: 'center', color: '#9ca3af', fontSize: '14px', backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
-            Aucun bon de péremption-casse trouvé
-          </div>
-        ) : (
-          [...filteredBons].sort((a, b) => (a.reference || '').localeCompare(b.reference || '', 'fr')).map((bon) => (
-            <div key={bon.id} style={{ backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e5e7eb', padding: '14px 16px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px', gap: '8px' }}>
-                <div>
-                  <div style={{ fontSize: 'clamp(13px, 3.5vw, 15px)', fontWeight: 700, color: '#111827' }}>
-                    N° {bon.reference}
-                  </div>
-                  {bon.commentaire && (
-                    <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '2px' }}>{bon.commentaire}</div>
-                  )}
-                </div>
-                <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
-                  <button
-                    style={{ padding: '6px 12px', backgroundColor: '#3b82f6', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' }}
-                  >
-                    Éditer
-                  </button>
-                  <button
-                    onClick={() => handleDelete(bon.id)}
-                    style={{ padding: '6px', backgroundColor: '#dc2626', border: 'none', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
-                  >
-                    <Trash2 size={14} color="#fff" />
-                  </button>
-                </div>
-              </div>
-              {bon.createdBy && (
-                <div style={{ fontSize: '11px', color: '#6b7280', borderTop: '1px solid #f3f4f6', paddingTop: '8px' }}>
-                  <span style={{ fontWeight: 600, color: '#374151' }}>{bon.createdBy}</span>
-                  {bon.createdAt && <span style={{ marginLeft: '6px' }}>{formatDate(bon.createdAt)}</span>}
-                </div>
-              )}
-            </div>
-          ))
-        )}
-      </div>
+      
 
       {/* Pagination */}
       <div className="admin-stock-pagination" style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '16px' }}>

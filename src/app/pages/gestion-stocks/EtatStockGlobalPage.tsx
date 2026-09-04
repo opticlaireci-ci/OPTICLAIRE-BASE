@@ -254,50 +254,7 @@ export function EtatStockGlobalPage() {
         </div>
       </div>
 
-      {/* Mobile Cards */}
-      <div className="stock-mobile-legacy-hidden" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-        {filteredStocks.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '40px', color: '#9ca3af', backgroundColor: '#fff', borderRadius: '8px' }}>Aucun article trouvé</div>
-        ) : filteredStocks.map((item, index) => {
-          const statut = getStatutStock(item.stock, item.seuil);
-          const valeur = item.stock * item.prix;
-          return (
-            <div key={item.id} style={{ backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e5e7eb', overflow: 'hidden' }}>
-              <div style={{ backgroundColor: item.type === 'monture' ? '#dbeafe' : '#fce7f3', padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '12px', color: '#6b7280' }}>#{index + 1}</span>
-                  <span style={{ fontSize: '12px', fontWeight: '700', color: item.type === 'monture' ? '#1e40af' : '#be185d' }}>
-                    {item.type === 'monture' ? 'Monture' : 'Accessoire'}
-                  </span>
-                </div>
-                <span style={{ display: 'inline-block', padding: '3px 10px', borderRadius: '10px', fontSize: '11px', fontWeight: '700', backgroundColor: `${getStatutColor(statut)}20`, color: getStatutColor(statut) }}>
-                  {getStatutLabel(statut)}
-                </span>
-              </div>
-              <div style={{ padding: '10px 14px' }}>
-                <div style={{ fontSize: '14px', fontWeight: '600', color: '#1f2937', marginBottom: '8px' }}>{item.designation}</div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
-                  <div style={{ textAlign: 'center', backgroundColor: '#f9fafb', borderRadius: '6px', padding: '6px' }}>
-                    <div style={{ fontSize: '11px', color: '#6b7280' }}>Stock</div>
-                    <div style={{ fontSize: '18px', fontWeight: '700', color: '#1f2937' }}>{item.stock}</div>
-                  </div>
-                  <div style={{ textAlign: 'center', backgroundColor: '#f9fafb', borderRadius: '6px', padding: '6px' }}>
-                    <div style={{ fontSize: '11px', color: '#6b7280' }}>Seuil</div>
-                    <div style={{ fontSize: '18px', fontWeight: '700', color: '#6b7280' }}>{item.seuil}</div>
-                  </div>
-                  <div style={{ textAlign: 'center', backgroundColor: '#f9fafb', borderRadius: '6px', padding: '6px' }}>
-                    <div style={{ fontSize: '11px', color: '#6b7280' }}>Prix</div>
-                    <div style={{ fontSize: '13px', fontWeight: '700', color: '#1f2937' }}>{item.prix.toLocaleString('fr-FR')} F</div>
-                  </div>
-                </div>
-                <div style={{ marginTop: '8px', textAlign: 'right', fontSize: '13px', color: '#374151' }}>
-                  Valeur: <strong>{valeur.toLocaleString('fr-FR')} F</strong>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+      
 
       {/* Desktop Table */}
       <div className="admin-stock-table-wrap" style={{ backgroundColor: '#fff', borderRadius: '8px', overflowX: 'auto', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>

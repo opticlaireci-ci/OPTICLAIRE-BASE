@@ -574,49 +574,7 @@ export function InventaireLentillesPage() {
             </table>
           </div>
 
-          {/* Cartes lignes — mobile */}
-          <div className="stock-mobile-legacy-hidden" style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: 20 }}>
-            {filteredItems.length === 0 ? (
-              <div style={{ padding: '24px', textAlign: 'center', color: '#9ca3af', fontSize: 13, border: '1px solid #e5e7eb', borderRadius: 6 }}>
-                Aucune ligne ajoutée — sélectionnez un SPH et un CYL puis cliquez sur le bouton d'ajout.
-              </div>
-            ) : filteredItems.map((item) => {
-              const neg = item.marge < 0;
-              return (
-                <div key={item.id} style={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: 6, padding: '12px 14px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                    <span style={{ backgroundColor: '#eff6ff', color: '#1d4ed8', padding: '2px 8px', borderRadius: 10, fontSize: 12, fontWeight: 600 }}>{item.tableLabel}</span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ display: 'inline-block', padding: '2px 10px', borderRadius: 12, fontWeight: 700, fontSize: 12, backgroundColor: neg ? '#fef2f2' : item.marge > 0 ? '#d1fae5' : '#f3f4f6', color: neg ? '#dc2626' : item.marge > 0 ? '#059669' : '#374151' }}>
-                        {item.marge > 0 ? `+${item.marge}` : item.marge}
-                      </span>
-                      <button onClick={() => handleSupprimerItem(item.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626', display: 'flex', padding: 2 }} title="Supprimer">
-                        <X size={15} />
-                      </button>
-                    </div>
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(90px, 1fr))', gap: '6px' }}>
-                    <div style={{ textAlign: 'center', backgroundColor: '#f9fafb', borderRadius: 4, padding: '6px' }}>
-                      <div style={{ fontSize: 10, color: '#6b7280', fontWeight: 600 }}>SPH</div>
-                      <div style={{ fontSize: 14, fontWeight: 700, color: '#111827' }}>{item.sph}</div>
-                    </div>
-                    <div style={{ textAlign: 'center', backgroundColor: '#f9fafb', borderRadius: 4, padding: '6px' }}>
-                      <div style={{ fontSize: 10, color: '#6b7280', fontWeight: 600 }}>CYL</div>
-                      <div style={{ fontSize: 14, fontWeight: 700, color: '#111827' }}>{item.cyl}</div>
-                    </div>
-                    <div style={{ textAlign: 'center', backgroundColor: '#f3f4f6', borderRadius: 4, padding: '6px' }}>
-                      <div style={{ fontSize: 10, color: '#6b7280', fontWeight: 600 }}>Théo.</div>
-                      <div style={{ fontSize: 14, fontWeight: 700, color: '#374151' }}>{item.stockTheorique}</div>
-                    </div>
-                    <div style={{ textAlign: 'center', backgroundColor: '#eff6ff', borderRadius: 4, padding: '6px' }}>
-                      <div style={{ fontSize: 10, color: '#1d4ed8', fontWeight: 600 }}>Phys.</div>
-                      <div style={{ fontSize: 14, fontWeight: 700, color: '#1d4ed8' }}>{item.stockPhysique}</div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
             <button onClick={() => setVue('liste')} style={{ padding: '9px 24px', backgroundColor: '#fff', color: '#374151', border: '1px solid #d1d5db', borderRadius: 6, cursor: 'pointer', fontSize: 14, fontWeight: 600 }}>
@@ -702,40 +660,7 @@ export function InventaireLentillesPage() {
           </table>
         </div>
 
-        {/* Cartes détail — mobile */}
-        <div className="stock-mobile-legacy-hidden" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          {detailInv.items.map((item) => {
-            const n = item.marge < 0;
-            return (
-              <div key={item.id} style={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, padding: '12px 14px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', gap: '8px' }}>
-                  <span style={{ backgroundColor: '#eff6ff', color: '#1d4ed8', padding: '2px 8px', borderRadius: 10, fontSize: 12, fontWeight: 600 }}>{item.tableLabel}</span>
-                  <span style={{ display: 'inline-block', padding: '2px 10px', borderRadius: 12, fontWeight: 700, fontSize: 12, backgroundColor: n ? '#fef2f2' : item.marge > 0 ? '#d1fae5' : '#f3f4f6', color: n ? '#dc2626' : item.marge > 0 ? '#059669' : '#374151' }}>
-                    {item.marge > 0 ? `+${item.marge}` : item.marge}
-                  </span>
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: '8px' }}>
-                  <div style={{ textAlign: 'center' }}>
-                    <div style={{ fontSize: 10, color: '#6b7280', fontWeight: 600, textTransform: 'uppercase' }}>SPH</div>
-                    <div style={{ fontSize: 15, fontWeight: 700, color: '#111827' }}>{item.sph}</div>
-                  </div>
-                  <div style={{ textAlign: 'center' }}>
-                    <div style={{ fontSize: 10, color: '#6b7280', fontWeight: 600, textTransform: 'uppercase' }}>CYL</div>
-                    <div style={{ fontSize: 15, fontWeight: 700, color: '#111827' }}>{item.cyl}</div>
-                  </div>
-                  <div style={{ backgroundColor: '#f3f4f6', borderRadius: 4, padding: '6px 8px', textAlign: 'center' }}>
-                    <div style={{ fontSize: 10, color: '#6b7280', fontWeight: 600, textTransform: 'uppercase' }}>Théo.</div>
-                    <div style={{ fontSize: 15, fontWeight: 700, color: '#374151' }}>{item.stockTheorique}</div>
-                  </div>
-                  <div style={{ backgroundColor: '#eff6ff', borderRadius: 4, padding: '6px 8px', textAlign: 'center' }}>
-                    <div style={{ fontSize: 10, color: '#1d4ed8', fontWeight: 600, textTransform: 'uppercase' }}>Phys.</div>
-                    <div style={{ fontSize: 15, fontWeight: 700, color: '#1d4ed8' }}>{item.stockPhysique}</div>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+        
       </div>
     );
   }
@@ -857,62 +782,7 @@ export function InventaireLentillesPage() {
         </table>
       </div>
 
-      {/* Cartes lentilles — mobile */}
-      <div className="stock-mobile-legacy-hidden" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-        {filteredListe.length === 0 ? (
-          <div style={{ padding: '32px', textAlign: 'center', color: '#9ca3af', fontSize: '14px', backgroundColor: '#fff', borderRadius: 8, border: '1px solid #e5e7eb' }}>
-            Aucun inventaire de lentilles trouvé
-          </div>
-        ) : filteredListe.map((inv) => {
-          const audit = formatAuditInfo(inv);
-          const negs = inv.items.filter(i => i.marge < 0).length;
-          const ecart = inv.items.reduce((s, i) => s + i.marge, 0);
-          return (
-            <div key={inv.id} style={{ backgroundColor: '#fff', borderRadius: 8, border: '1px solid #e5e7eb', padding: '14px 16px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px', gap: '8px' }}>
-                <span style={{ fontSize: 'clamp(13px, 3.5vw, 15px)', fontWeight: 700, color: '#111827' }}>
-                  🔬 {fmt(inv.dateInventaire)}
-                </span>
-                <span style={{ backgroundColor: '#eff6ff', color: '#1d4ed8', padding: '2px 10px', borderRadius: 10, fontWeight: 700, fontSize: 12, flexShrink: 0 }}>
-                  {inv.items.length} lignes
-                </span>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '8px', marginBottom: '10px' }}>
-                <div style={{ backgroundColor: negs > 0 ? '#fef2f2' : '#f3f4f6', borderRadius: 6, padding: '8px', textAlign: 'center' }}>
-                  <div style={{ fontSize: 10, fontWeight: 600, color: negs > 0 ? '#dc2626' : '#6b7280', textTransform: 'uppercase' }}>Écarts −</div>
-                  <div style={{ fontSize: 16, fontWeight: 700, color: negs > 0 ? '#dc2626' : '#374151' }}>{negs > 0 ? `${negs} ⚠️` : '—'}</div>
-                </div>
-                <div style={{ backgroundColor: ecart < 0 ? '#fef2f2' : ecart > 0 ? '#d1fae5' : '#f3f4f6', borderRadius: 6, padding: '8px', textAlign: 'center' }}>
-                  <div style={{ fontSize: 10, fontWeight: 600, color: ecart < 0 ? '#dc2626' : ecart > 0 ? '#059669' : '#6b7280', textTransform: 'uppercase' }}>Écart total</div>
-                  <div style={{ fontSize: 16, fontWeight: 700, color: ecart < 0 ? '#dc2626' : ecart > 0 ? '#059669' : '#374151' }}>
-                    {ecart > 0 ? `+${ecart}` : ecart}
-                  </div>
-                </div>
-              </div>
-              {(audit.created !== '-' || audit.updated !== '-') && (
-                <div style={{ fontSize: 11, color: '#6b7280', marginBottom: '10px' }}>
-                  {audit.created !== '-' && <div><span style={{ color: '#059669', fontWeight: 600 }}>Créé :</span> {audit.created}</div>}
-                  {audit.updated !== '-' && audit.updated !== audit.created && <div><span style={{ color: '#f59e0b', fontWeight: 600 }}>Modifié :</span> {audit.updated}</div>}
-                </div>
-              )}
-              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                <button onClick={() => { setDetailInv(inv); setVue('detail'); }} title="Voir le détail" style={{ padding: '6px 10px', backgroundColor: '#fff', border: '1px solid #d1d5db', borderRadius: 5, cursor: 'pointer', color: '#374151', display: 'flex', alignItems: 'center' }}>
-                  <Eye size={15} />
-                </button>
-                <button onClick={() => handleVoirManquants(inv)} title="Références manquantes" style={{ padding: '6px 10px', backgroundColor: '#fff', border: '1px solid #d1d5db', borderRadius: 5, cursor: 'pointer', color: '#0369a1', display: 'flex', alignItems: 'center' }}>
-                  <ListChecks size={15} />
-                </button>
-                <button onClick={() => ouvrirEdition(inv)} title="Modifier" style={{ padding: '6px 10px', backgroundColor: '#fff', border: '1px solid #d1d5db', borderRadius: 5, cursor: 'pointer', color: '#f59e0b', display: 'flex', alignItems: 'center' }}>
-                  <Pencil size={15} />
-                </button>
-                <button onClick={() => handleSupprimer(inv)} title="Supprimer" style={{ padding: '6px 10px', backgroundColor: '#fff', border: '1px solid #fca5a5', borderRadius: 5, cursor: 'pointer', color: '#dc2626', display: 'flex', alignItems: 'center' }}>
-                  <Trash2 size={15} />
-                </button>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+      
     </div>
   );
 }

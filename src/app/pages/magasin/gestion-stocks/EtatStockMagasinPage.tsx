@@ -261,7 +261,7 @@ export function EtatStockMagasinPage() {
   };
 
   return (
-    <Box sx={{ p: { xs: 2, md: 3 } }}>
+    <Box className="admin-stock-list-page" sx={{ p: { xs: 2, md: 3 } }}>
       <Typography
         variant="h4"
         style={{ fontSize: 'clamp(1.25rem, 4vw, 2rem)', marginBottom: '24px' }}
@@ -356,140 +356,9 @@ export function EtatStockMagasinPage() {
         </Box>
       </Paper>
 
-      {/* Mobile cards — visible uniquement sur petits écrans */}
-      <div className="stock-mobile-legacy-hidden" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-        {filteredMontures.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '32px', color: '#666', backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e0e0e0' }}>
-            Aucune monture/accessoire en stock distribué ou transféré dans ce magasin
-          </div>
-        ) : (
-          filteredMontures.map((monture) => {
-            const status = getStockStatus(monture.stock, monture.seuil);
-            const headerBg =
-              status.color === 'success' ? '#4caf50' :
-              status.color === 'warning' ? '#ff9800' :
-              '#f44336';
-            return (
-              <div
-                key={monture.id}
-                style={{
-                  border: '1px solid #e0e0e0',
-                  borderRadius: '8px',
-                  overflow: 'hidden',
-                  backgroundColor: '#fff',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
-                }}
-              >
-                {/* En-tête coloré : badges type + statut */}
-                <div
-                  style={{
-                    backgroundColor: headerBg,
-                    color: '#fff',
-                    padding: '10px 12px',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                  }}
-                >
-                  <span
-                    style={{
-                      fontSize: '0.72rem',
-                      backgroundColor: 'rgba(255,255,255,0.25)',
-                      padding: '2px 8px',
-                      borderRadius: '12px',
-                      fontWeight: 600,
-                    }}
-                  >
-                    {monture.type === 'accessoire' ? 'Accessoire' : 'Monture'}
-                  </span>
-                  <span style={{ fontSize: '0.75rem', fontWeight: 'bold' }}>{status.label}</span>
-                </div>
+      
 
-                {/* Corps de la carte */}
-                <div style={{ padding: '12px' }}>
-                  {/* Désignation */}
-                  <div style={{ fontWeight: 'bold', fontSize: '0.9rem', marginBottom: '2px' }}>
-                    {[monture.marque, monture.reference].filter(Boolean).join(' - ') || '-'}
-                  </div>
-                  {monture.codeBarre && (
-                    <div style={{ fontSize: '0.72rem', color: '#888', marginBottom: '10px' }}>
-                      {monture.codeBarre}
-                    </div>
-                  )}
-
-                  {/* Grille 3 colonnes : Stock / Seuil / Prix */}
-                  <div
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: 'repeat(3, 1fr)',
-                      gap: '8px',
-                      marginBottom: '10px',
-                    }}
-                  >
-                    <div
-                      style={{
-                        textAlign: 'center',
-                        backgroundColor: '#f5f5f5',
-                        borderRadius: '6px',
-                        padding: '6px 4px',
-                      }}
-                    >
-                      <div style={{ fontSize: '1.15rem', fontWeight: 'bold', color: '#1976d2' }}>
-                        {monture.stock || 0}
-                      </div>
-                      <div style={{ fontSize: '0.65rem', color: '#666' }}>Stock</div>
-                    </div>
-                    <div
-                      style={{
-                        textAlign: 'center',
-                        backgroundColor: '#f5f5f5',
-                        borderRadius: '6px',
-                        padding: '6px 4px',
-                      }}
-                    >
-                      <div style={{ fontSize: '1.15rem', fontWeight: 'bold', color: '#555' }}>
-                        {monture.seuil || 0}
-                      </div>
-                      <div style={{ fontSize: '0.65rem', color: '#666' }}>Seuil</div>
-                    </div>
-                    <div
-                      style={{
-                        textAlign: 'center',
-                        backgroundColor: '#f5f5f5',
-                        borderRadius: '6px',
-                        padding: '6px 4px',
-                      }}
-                    >
-                      <div style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#333' }}>
-                        {(monture.prix || 0).toLocaleString('fr-FR')}
-                      </div>
-                      <div style={{ fontSize: '0.65rem', color: '#666' }}>Prix FCFA</div>
-                    </div>
-                  </div>
-
-                  {/* Valeur totale */}
-                  <div
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      paddingTop: '8px',
-                      borderTop: '1px solid #f0f0f0',
-                    }}
-                  >
-                    <span style={{ fontSize: '0.75rem', color: '#666' }}>Valeur totale</span>
-                    <span style={{ fontWeight: 'bold', fontSize: '0.9rem', color: '#1976d2' }}>
-                      {((monture.prix || 0) * (monture.stock || 0)).toLocaleString('fr-FR')} FCFA
-                    </span>
-                  </div>
-                </div>
-              </div>
-            );
-          })
-        )}
-      </div>
-
-      {/* Tableau desktop — masqué sur petits écrans */}
+      {/* Tableau de gestion */}
       <div className="admin-stock-table-wrap">
         <TableContainer component={Paper}>
           <Table size="small">
