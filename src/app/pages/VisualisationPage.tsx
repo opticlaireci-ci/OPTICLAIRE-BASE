@@ -391,7 +391,7 @@ export function VisualisationPage() {
             // « Assurance », avec le nom de l’assurance en complément pour
             // conserver l’information du bon sans créer un format de rapport
             // différent pour ce filtre.
-            const modeCell = noms.length ? `Assurance — ${noms.join(', ')}` : 'Assurance';
+            const modeCell = noms.length ? noms.join(', ') : 'Assurance';
             const montantAssurance = (v.bons_assurance as any[]).reduce((s, b) => s + num(
               b?.montantPrisEnCharge ?? b?.montant ?? b?.total ?? b?.montantAssurance
             ), 0);
