@@ -433,9 +433,11 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
       </Panel>
       </div>
 
-      {/* 2 ── ACTIVITÉ MENSUELLE — MOBILE : rendu historique inchangé */}
-      <div className="md:hidden">
-        <Panel title="ACTIVITÉ MENSUELLE">
+      {/* 2 ── ACTIVITÉ MENSUELLE — MOBILE UNIQUEMENT
+          Reproduction du rendu mobile demandé : 5 cartes en haut,
+          Montant Restant sur toute la largeur, puis filtres, mois/année et graphique. */}
+      <div className="md:hidden monthly-mobile-reference">
+        <div className="monthly-mobile-frame">
           <div className="monthly-mobile-cards">
             <div className="monthly-mobile-kpi" style={{ backgroundColor: C_OBJECTIF, color: '#fff' }}>
               <div className="monthly-mobile-value">{fmtInt(d.objectif)}</div>
@@ -468,25 +470,50 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
               <div className="monthly-mobile-label">Montant Restant</div>
             </div>
           </div>
-          <div className="monthly-mobile-controls">{magSel}{moisSel}{anneeSel}</div>
-          <ResponsiveContainer width="100%" height={360}>
-            <BarChart data={d.dayData}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} />
-              <XAxis dataKey="jour" tick={{ fontSize: 10 }} interval={0} />
-              <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtAxis} />
-              <Tooltip formatter={(v: number) => fmtInt(v) + ' F CFA'} />
-              <Legend wrapperStyle={{ fontSize: 11 }} />
-              <Bar key="ca" dataKey="ca" name="Chiffre d'Affaires" fill={C_CA} />
-              <Bar key="paiements" dataKey="paiements" name="Paiements Clients" fill={C_PAY} />
-              <Bar key="bons" dataKey="bons" name="Bons Assurance" fill={C_BONS} />
-              <Bar key="restant" dataKey="restant" name="Montant Restant" fill={C_RESTANT} />
-            </BarChart>
-          </ResponsiveContainer>
-        </Panel>
+
+          <div className="monthly-mobile-store">{magSel}</div>
+
+          <div className="monthly-mobile-month-box">
+            <span>{MOIS_LONG[mois].toLowerCase()} {annee}</span>
+          </div>
+
+          <div className="monthly-mobile-chart">
+            <ResponsiveContainer width="100%" height={360}>
+              <BarChart data={d.dayData} margin={{ top: 12, right: 8, left: 0, bottom: 22 }}>
+                <CartesianGrid strokeDasharray="0" vertical={false} stroke="#eeeeee" />
+                <XAxis dataKey="jour" tick={{ fontSize: 11, fill: '#111827' }} interval={0} axisLine={{ stroke: '#111827' }} tickLine={{ stroke: '#111827' }} />
+                <YAxis tick={{ fontSize: 11, fill: '#111827' }} tickFormatter={fmtAxis} axisLine={{ stroke: '#111827' }} tickLine={{ stroke: '#111827' }} />
+                <Tooltip formatter={(v: number) => fmtInt(v) + ' F CFA'} />
+                <Legend wrapperStyle={{ fontSize: 11, paddingTop: 4 }} />
+                <Bar key="ca" dataKey="ca" name="Chiffre d'Affaires" fill={C_CA} />
+                <Bar key="paiements" dataKey="paiements" name="Paiements Clients" fill={C_PAY} />
+                <Bar key="bons" dataKey="bons" name="Bons Assurance" fill={C_BONS} />
+                <Bar key="avoirP" dataKey={() => 0} name="AVOIR-CLIENT +" fill={C_AVOIR_P} />
+                <Bar key="avoirM" dataKey={() => 0} name="AVOIR-CLIENT -" fill={C_AVOIR_M} />
+                <Bar key="restant" dataKey="restant" name="Montant Restant" fill={C_RESTANT} />
+                <Bar key="objectif" dataKey={() => d.objectif} name="Objectif" fill={C_OBJECTIF} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
       </div>
 
       <style>{`
+        /* Ce bloc ne s'applique qu'au rendu mobile de l'Activité mensuelle. */
         @media (max-width: 767px) {
+          .monthly-mobile-reference {
+            width: 100%;
+            min-width: 0;
+            margin: 0;
+          }
+          .monthly-mobile-frame {
+            width: 100%;
+            min-width: 0;
+            background: #fff;
+            border: 1px solid #d7d7d7;
+            box-sizing: border-box;
+            overflow: hidden;
+          }
           .monthly-mobile-cards {
             display: grid !important;
             grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
@@ -494,11 +521,13 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
             gap: 1px !important;
             width: 100% !important;
             min-width: 0 !important;
+            background: #fff;
             overflow: hidden !important;
-            border-radius: 2px !important;
             box-sizing: border-box !important;
           }
-          .monthly-mobile-kpi, .monthly-mobile-avoir, .monthly-mobile-restant {
+          .monthly-mobile-kpi,
+          .monthly-mobile-avoir,
+          .monthly-mobile-restant {
             min-width: 0 !important;
             width: auto !important;
             box-sizing: border-box !important;
@@ -506,10 +535,11 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
           }
           .monthly-mobile-kpi {
             grid-row: 1 !important;
-            padding: 12px 6px !important;
+            padding: 10px 6px !important;
             display: flex !important;
             flex-direction: column !important;
             justify-content: space-between !important;
+            text-align: center !important;
           }
           .monthly-mobile-avoir {
             grid-column: 5 !important;
@@ -517,7 +547,8 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
             display: flex !important;
             flex-direction: column !important;
           }
-          .monthly-mobile-avoir-plus, .monthly-mobile-avoir-minus {
+          .monthly-mobile-avoir-plus,
+          .monthly-mobile-avoir-minus {
             flex: 1 1 50% !important;
             min-height: 0 !important;
             padding: 8px 6px !important;
@@ -542,6 +573,7 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
             font-weight: 700 !important;
             overflow-wrap: anywhere !important;
             word-break: break-word !important;
+            text-align: center !important;
           }
           .monthly-mobile-label {
             font-size: clamp(12px, 3.5vw, 18px) !important;
@@ -549,42 +581,64 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
             font-weight: 700 !important;
             overflow-wrap: anywhere !important;
             word-break: break-word !important;
+            text-align: center !important;
           }
-          .monthly-mobile-restant .monthly-mobile-value { font-size: clamp(18px, 5vw, 24px) !important; }
-          .monthly-mobile-restant .monthly-mobile-label { font-size: clamp(16px, 4.5vw, 22px) !important; }
-          .monthly-mobile-controls {
-            display: grid !important;
-            grid-template-columns: 1fr !important;
-            gap: 4px !important;
-            width: 100% !important;
-            margin: 0 0 10px !important;
-            padding: 0 !important;
+          .monthly-mobile-restant .monthly-mobile-value {
+            font-size: clamp(18px, 5vw, 24px) !important;
           }
-          .monthly-mobile-controls > * {
+          .monthly-mobile-restant .monthly-mobile-label {
+            font-size: clamp(16px, 4.5vw, 22px) !important;
+          }
+          .monthly-mobile-store {
+            width: 100%;
+            min-width: 0;
+            padding: 0;
+            margin-top: 0;
+            box-sizing: border-box;
+          }
+          .monthly-mobile-store > * {
             width: 100% !important;
             min-width: 0 !important;
             box-sizing: border-box !important;
           }
-          .monthly-mobile-controls select, .monthly-mobile-controls input {
+          .monthly-mobile-store select {
             width: 100% !important;
+            height: 48px !important;
             min-height: 48px !important;
+            border: 1px solid #cfcfcf !important;
+            border-radius: 7px !important;
             box-sizing: border-box !important;
+            font-size: 18px !important;
+            font-weight: 600 !important;
+            padding-left: 14px !important;
+            background: #fff !important;
           }
-        }
-        /* La largeur du dashboard est celle qui reste réellement après le menu latéral.
-           Les container queries rendent le rendu identique quelle que soit la largeur
-           du navigateur et que le drawer soit ouvert ou replié. */
-        .monthly-activity-desktop { container-name: monthly-dashboard; }
-        @container monthly-dashboard (max-width: 1180px) {
-          .monthly-activity-desktop .monthly-top-layout { grid-template-columns: 1fr !important; row-gap: 12px !important; }
-          .monthly-activity-desktop .monthly-controls { padding-top: 0 !important; grid-template-columns: minmax(260px, 1fr) minmax(300px, 1fr) !important; }
-          .monthly-activity-desktop .monthly-cards { grid-template-columns: repeat(4, minmax(115px, 1fr)) minmax(135px, 1fr) minmax(150px, 1.08fr) !important; }
-          .monthly-activity-desktop .monthly-chart { width: 100% !important; }
-        }
-        @container monthly-dashboard (max-width: 820px) {
-          .monthly-activity-desktop .monthly-controls { grid-template-columns: 1fr !important; }
-          .monthly-activity-desktop .monthly-cards { grid-template-columns: repeat(2, minmax(140px, 1fr)) !important; height: auto !important; }
-          .monthly-activity-desktop .monthly-avoir { height: 136px !important; }
+          .monthly-mobile-month-box {
+            height: 80px;
+            width: 100%;
+            margin-top: 0;
+            border: 1px solid #cfcfcf;
+            border-radius: 7px;
+            background: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-sizing: border-box;
+            color: #4b5563;
+            font-size: 20px;
+            font-weight: 400;
+          }
+          .monthly-mobile-chart {
+            width: 100%;
+            min-width: 0;
+            padding: 0 4px;
+            box-sizing: border-box;
+            overflow: hidden;
+          }
+          .monthly-mobile-chart .recharts-wrapper,
+          .monthly-mobile-chart .recharts-surface {
+            max-width: 100%;
+          }
         }
       `}</style>
 
