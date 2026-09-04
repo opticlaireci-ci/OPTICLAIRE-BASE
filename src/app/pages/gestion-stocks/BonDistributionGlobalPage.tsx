@@ -2,7 +2,7 @@ import { logger } from '../../utils/logger';
 import { AddButton } from '../../components/AddButton';
 import { useState } from 'react';
 import { Search, Trash2, Edit2 } from 'lucide-react';
-import { addCreateAudit, formatDate, AuditInfo } from '../../utils/auditUtils';
+import { addCreateAudit, addUpdateAudit, formatDate, resolveUserName, AuditInfo } from '../../utils/auditUtils';
 import { getMagasins } from '../../constants/magasins';
 import { SelectionMonturesAccessoiresModal } from '../../components/SelectionMonturesAccessoiresModal';
 import { enregistrerDistribution } from '../../services/inventaireService';
@@ -24,6 +24,10 @@ interface BonDistribution extends AuditInfo {
     prixVente: number;
   }>;
   statut: string;
+  recepteur?: string;
+  receiver?: string;
+  valideePar?: string;
+  dateValidation?: string;
   dateCreation: string;
 }
 
@@ -83,9 +87,14 @@ export function BonDistributionGlobalPage() {
       date: new Date().toISOString(),
       magasinRecepteur,
       magasinDest: magasin.id,
-      responsable: localStorage.getItem('leclaire_current_user') || 'Administrateur',
+      responsable: resolveUserName(localStorage.getItem('leclaire_current_user')) || 'Administrateur',
+      // Le récepteur est renseigné au moment de l'acceptation par le magasin.
+      // On conserve aussi le champ receiver pour les anciens enregistrements.
+      recepteur: '',
+      receiver: '',
       items: items.map(item => ({
         id: item.id, // id catalogue : clé stable du stock (évite les décalages de désignation)
+        type: item.type === 'accessoire' ? 'accessoire' : 'monture',
         designation: item.designation,
         quantite: item.quantite,
         prixUnit: item.prixVente,
@@ -93,10 +102,17 @@ export function BonDistributionGlobalPage() {
       statut: editingId ? (bons.find(b => b.id === editingId)?.statut || 'En attente') : 'En attente',
     };
 
-    const bonWithAudit = addCreateAudit(newBon);
-    const updatedBons = editingId ? bons.map(b => b.id === editingId ? { ...b, ...bonWithAudit, id: editingId } : b) : [...bons, bonWithAudit];
+    const bonWithAudit = editingId
+      ? addUpdateAudit(newBon)
+      : addCreateAudit(newBon);
+    const updatedBons = editingId
+      ? bons.map(b => b.id === editingId
+          ? { ...b, ...bonWithAudit, recepteur: b.recepteur || (b as any).receiver || '', receiver: (b as any).receiver || b.recepteur || '' , id: editingId }
+          : b)
+      : [...bons, bonWithAudit];
     setBons(updatedBons);
-    upsertBon(distributionToRow(bonWithAudit)).catch(e => logger.error('❌ upsertBon distribution:', e));
+    const persistedBon = updatedBons.find(b => b.id === (editingId || bonWithAudit.id));
+    if (persistedBon) upsertBon(distributionToRow(persistedBon)).catch(e => logger.error('❌ upsertBon distribution:', e));
 
     // NE PAS enregistrer la distribution maintenant
     // Le stock sera mis à jour SEULEMENT quand le magasin ACCEPTE le bon
@@ -110,7 +126,7 @@ export function BonDistributionGlobalPage() {
     setEditingId(bon.id);
     setReference(bon.reference || '00001');
     setMagasinRecepteur(bon.magasinRecepteur || '');
-    setItems((bon.items || []).map(i => ({ ...i, prixVente: i.prixVente || 0 })));
+    setItems((bon.items || []).map(i => ({ ...i, type: i.type === 'accessoire' ? 'accessoire' : 'monture', prixVente: i.prixVente || 0 })));
     setShowModal(true);
   };
 
@@ -148,6 +164,16 @@ export function BonDistributionGlobalPage() {
   const handleRemoveItem = (itemId: string) => {
     setItems(items.filter(item => item.id !== itemId));
   };
+
+  const getReceiver = (bon: BonDistribution) => {
+    const direct = (bon.recepteur || (bon as any).receiver || '').trim();
+    if (direct) return resolveUserName(direct);
+    if (bon.statut === 'Validé' || bon.statut === 'Refusé') return resolveUserName(bon.valideePar) || '-';
+    return 'En attente';
+  };
+
+  const getRegisteredBy = (bon: BonDistribution) =>
+    resolveUserName(bon.createdBy || bon.responsable) || '-';
 
   const filteredBons = bons.filter(bon => {
     const matchSearch = searchTerm === '' ||
@@ -571,17 +597,17 @@ export function BonDistributionGlobalPage() {
                     <input type="checkbox" />
                   </td>
                   <td style={{ padding: '12px', textAlign: 'center', fontSize: '12px', color: '#9ca3af', fontWeight: 500 }}>{idx + 1}</td>
-                  <td style={{ padding: '12px', fontSize: '14px' }}>{bon.reference}</td>
-                  <td style={{ padding: '12px', fontSize: '14px' }}>{bon.magasinRecepteur || '-'}</td>
-                  <td style={{ padding: '12px', fontSize: '14px' }}>{(bon as any).recepteur || (bon as any).receiver || (bon as any).responsable || '-'}</td>
-                  <td style={{ padding: '12px', fontSize: '14px' }}>{bon.statut}</td>
+                  <td style={{ padding: '12px', fontSize: '14px', fontWeight: 600 }}>{bon.reference || (bon as any).numero || '-'}</td>
+                  <td style={{ padding: '12px', fontSize: '14px' }}>{bon.magasinRecepteur || (bon as any).magasinDest || '-'}</td>
+                  <td style={{ padding: '12px', fontSize: '14px' }}>{getReceiver(bon)}</td>
+                  <td style={{ padding: '12px', fontSize: '14px' }}>
+                    <span style={{ color: getStatutColor(bon.statut), fontWeight: 700 }}>{bon.statut || 'En attente'}</span>
+                  </td>
                   <td style={{ padding: '12px', fontSize: '12px', color: '#6b7280' }}>
-                    {bon.createdBy ? (
-                      <div>
-                        <div style={{ fontWeight: 600, color: '#374151' }}>{bon.createdBy}</div>
-                        <div style={{ color: '#9ca3af' }}>{formatDate(bon.createdAt)}</div>
-                      </div>
-                    ) : '-'}
+                    <div>
+                      <div style={{ fontWeight: 600, color: '#374151' }}>{getRegisteredBy(bon)}</div>
+                      <div style={{ color: '#9ca3af' }}>{formatDate(bon.createdAt || bon.dateCreation)}</div>
+                    </div>
                   </td>
                   <td className="stock-edition-actions" style={{ padding: '8px', fontSize: '14px' }}>
                     <button onClick={() => imprimerBonDistribution(bon)} title="Imprimer le bon et les montures/accessoires distribués">🖨️</button>
@@ -639,10 +665,14 @@ export function BonDistributionGlobalPage() {
                   </div>
                   {bon.magasinRecepteur && (
                     <div>
-                      <div style={{ fontSize: '11px', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Destination</div>
+                      <div style={{ fontSize: '11px', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Magasin</div>
                       <div style={{ fontSize: '13px', fontWeight: '500', color: '#374151' }}>{bon.magasinRecepteur}</div>
                     </div>
                   )}
+                  <div>
+                    <div style={{ fontSize: '11px', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Récepteur</div>
+                    <div style={{ fontSize: '13px', fontWeight: '500', color: '#374151' }}>{getReceiver(bon)}</div>
+                  </div>
                 </div>
                 {/* Preview first 3 items */}
                 {bon.items && bon.items.length > 0 && (

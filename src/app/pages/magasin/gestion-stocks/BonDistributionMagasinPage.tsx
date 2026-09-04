@@ -21,12 +21,14 @@ import {
   TextField,
 } from '@mui/material';
 import VisibilityIcon from '@mui/icons-material/Visibility';
+import PrintIcon from '@mui/icons-material/Print';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
 import { enregistrerDistribution } from '../../../services/inventaireService';
 import { upsertBon, distributionToRow } from '../../../services/bonsService';
 import { useLiveData } from '../../../hooks/useLiveData';
 import { getCurrentUser, resolveUserName, formatDate } from '../../../utils/auditUtils';
+import { imprimerBonDistribution } from '../../../utils/stockActions';
 
 const BON_DISTRIBUTION_KEY = 'leclaire_db_bon-distribution';
 
@@ -36,12 +38,16 @@ interface BonDistribution {
   date: string;
   magasinDest: string;
   responsable: string;
-  items: { designation: string; quantite: number; prixUnit: number }[];
+  recepteur?: string;
+  receiver?: string;
+  items: { id?: string; type?: 'monture' | 'accessoire'; designation: string; quantite: number; prixUnit: number }[];
   statut: string;
   observations?: string;
   createdAt?: string;
   valideePar?: string;
   dateValidation?: string;
+  createdBy?: string;
+
 }
 
 function getMagasinLabel(magasinId: string): string {
@@ -94,6 +100,10 @@ export function BonDistributionMagasinPage() {
           observations,
           dateValidation: new Date().toISOString(),
           valideePar: getCurrentUser(),
+          // La personne qui traite le bon est le récepteur/traitant visible
+          // dans la colonne « Récepteur » côté gestion globale.
+          recepteur: getCurrentUser(),
+          receiver: getCurrentUser(),
         };
       }
       return bon;
@@ -113,7 +123,7 @@ export function BonDistributionMagasinPage() {
       const items = selectedBon.items.map(item => ({
         // Clé de stock stable : id catalogue si présent, sinon désignation (bons anciens)
         id: item.id || item.designation,
-        type: 'monture' as const,
+        type: item.type === 'accessoire' ? 'accessoire' as const : 'monture' as const,
         designation: item.designation,
         quantite: item.quantite,
         prixVente: item.prixUnit || 0,
@@ -359,19 +369,18 @@ export function BonDistributionMagasinPage() {
             <TableHead>
               <TableRow sx={{ bgcolor: '#f5f5f5' }}>
                 <TableCell sx={{ fontWeight: 'bold' }}>#</TableCell>
-                <TableCell sx={{ fontWeight: 'bold' }}>Numéro</TableCell>
-                <TableCell sx={{ fontWeight: 'bold' }}>Date</TableCell>
-                <TableCell sx={{ fontWeight: 'bold' }}>Responsable</TableCell>
-                <TableCell sx={{ fontWeight: 'bold' }}>Articles</TableCell>
+                <TableCell sx={{ fontWeight: 'bold' }}>N° Bon de Distribution</TableCell>
+                <TableCell sx={{ fontWeight: 'bold' }}>Magasin</TableCell>
+                <TableCell sx={{ fontWeight: 'bold' }}>Récepteur</TableCell>
                 <TableCell sx={{ fontWeight: 'bold' }}>Statut</TableCell>
-                <TableCell sx={{ fontWeight: 'bold' }}>Traçabilité</TableCell>
-                <TableCell sx={{ fontWeight: 'bold' }}>Actions</TableCell>
+                <TableCell sx={{ fontWeight: 'bold' }}>Enregistré par</TableCell>
+                <TableCell sx={{ fontWeight: 'bold' }}>Édition</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {bons.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} align="center" sx={{ py: 4 }}>
+                  <TableCell colSpan={7} align="center" sx={{ py: 4 }}>
                     <Typography color="textSecondary">
                       Aucun bon de distribution pour ce magasin
                     </Typography>
@@ -381,12 +390,9 @@ export function BonDistributionMagasinPage() {
                 bons.map((bon, index) => (
                   <TableRow key={bon.id} hover>
                     <TableCell>{index + 1}</TableCell>
-                    <TableCell>{bon.numero || '-'}</TableCell>
-                    <TableCell>
-                      {bon.date ? new Date(bon.date).toLocaleDateString('fr-FR') : '-'}
-                    </TableCell>
-                    <TableCell>{bon.responsable || '-'}</TableCell>
-                    <TableCell>{bon.items?.length || 0} article(s)</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }}>{bon.numero || '-'}</TableCell>
+                    <TableCell>{getMagasinLabel(bon.magasinDest) || '-'}</TableCell>
+                    <TableCell>{resolveUserName(bon.recepteur || bon.receiver || bon.valideePar) || (bon.statut === 'En attente' ? 'En attente' : '-')}</TableCell>
                     <TableCell>
                       <Chip
                         label={bon.statut || 'En attente'}
@@ -395,27 +401,28 @@ export function BonDistributionMagasinPage() {
                       />
                     </TableCell>
                     <TableCell sx={{ fontSize: '0.75rem', lineHeight: 1.4 }}>
-                      <div><strong>Créé:</strong> {resolveUserName(bon.responsable)}</div>
+                      <div><strong>{resolveUserName(bon.createdBy || bon.responsable)}</strong></div>
                       <div style={{ color: '#888' }}>{formatDate(bon.createdAt || bon.date)}</div>
-                      {(bon.statut === 'Validé' || bon.statut === 'Refusé') ? (
-                        <div style={{ marginTop: 4, color: bon.statut === 'Validé' ? '#2e7d32' : '#c62828' }}>
-                          <strong>{bon.statut === 'Validé' ? 'Confirmé:' : 'Refusé:'}</strong> {resolveUserName(bon.valideePar)}
-                          <div style={{ color: '#888' }}>{formatDate(bon.dateValidation)}</div>
-                        </div>
-                      ) : (
-                        <div style={{ marginTop: 4, color: '#ed6c02' }}>En attente de confirmation</div>
-                      )}
                     </TableCell>
                     <TableCell>
                       <IconButton
                         size="small"
                         color="primary"
+                        title="Voir le bon"
                         onClick={() => {
                           setSelectedBon(bon);
                           setShowDetailDialog(true);
                         }}
                       >
                         <VisibilityIcon />
+                      </IconButton>
+                      <IconButton
+                        size="small"
+                        color="default"
+                        title="Imprimer le bon et les montures/accessoires"
+                        onClick={() => imprimerBonDistribution(bon)}
+                      >
+                        <PrintIcon />
                       </IconButton>
                     </TableCell>
                   </TableRow>
@@ -436,7 +443,8 @@ export function BonDistributionMagasinPage() {
                 <Typography><strong>Numéro:</strong> {selectedBon.numero}</Typography>
                 <Typography><strong>Date:</strong> {new Date(selectedBon.date).toLocaleDateString('fr-FR')}</Typography>
                 <Typography><strong>Magasin:</strong> {getMagasinLabel(selectedBon.magasinDest)}</Typography>
-                <Typography><strong>Enregistré par:</strong> {resolveUserName(selectedBon.responsable)} le {formatDate(selectedBon.createdAt || selectedBon.date)}</Typography>
+                <Typography><strong>Enregistré par:</strong> {resolveUserName(selectedBon.createdBy || selectedBon.responsable)} le {formatDate(selectedBon.createdAt || selectedBon.date)}</Typography>
+                <Typography><strong>Récepteur:</strong> {resolveUserName(selectedBon.recepteur || selectedBon.receiver || selectedBon.valideePar) || (selectedBon.statut === 'En attente' ? 'En attente' : '-')}</Typography>
                 <Typography><strong>Statut:</strong> <Chip label={selectedBon.statut || 'En attente'} color={getStatutColor(selectedBon.statut)} size="small" /></Typography>
                 {(selectedBon.statut === 'Validé' || selectedBon.statut === 'Refusé') && (
                   <Typography><strong>{selectedBon.statut === 'Validé' ? 'Confirmé par:' : 'Refusé par:'}</strong> {resolveUserName(selectedBon.valideePar)} le {formatDate(selectedBon.dateValidation)}</Typography>
@@ -473,6 +481,15 @@ export function BonDistributionMagasinPage() {
           )}
         </DialogContent>
         <DialogActions>
+          {selectedBon && (
+            <Button
+              variant="outlined"
+              startIcon={<PrintIcon />}
+              onClick={() => imprimerBonDistribution(selectedBon)}
+            >
+              Imprimer le bon
+            </Button>
+          )}
           <Button onClick={() => setShowDetailDialog(false)}>Fermer</Button>
           {selectedBon && (selectedBon.statut === 'En attente' || !selectedBon.statut) && (
             <>

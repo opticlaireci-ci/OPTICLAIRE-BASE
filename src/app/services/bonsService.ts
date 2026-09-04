@@ -68,9 +68,10 @@ export async function supprimerBon(id: string): Promise<void> {
 // ── Conversion camelCase ↔ BonRow ────────────────────────────────────────────
 
 export function distributionToRow(b: any): BonRow {
-  const { id, numero, date, magasinDest, responsable, items, statut, observations, valideePar, dateValidation, ...rest } = b;
+  const { id, numero, date, magasinDest, responsable, recepteur, receiver, items, statut, observations, valideePar, dateValidation, ...rest } = b;
   return { id: String(id), type: 'distribution', numero: numero || '', date: date || new Date().toISOString(),
     magasin_destination: (magasinDest || '').toUpperCase() || null, responsable: responsable || null,
+    recepteur: recepteur || receiver || null,
     items: items || [], statut: statut || 'En attente', observations: observations || null,
     valide_par: valideePar || null, data: { ...rest, dateValidation: dateValidation || null } };
 }
@@ -94,7 +95,8 @@ export function retourToRow(b: any): BonRow {
 
 export function rowToDistribution(r: BonRow): any {
   return { id: r.id, numero: r.numero, date: r.date, magasinDest: r.magasin_destination || '',
-    responsable: r.responsable || '', items: r.items || [], statut: r.statut || 'En attente',
+    responsable: r.responsable || '', recepteur: r.recepteur || '', receiver: r.recepteur || '',
+    items: r.items || [], statut: r.statut || 'En attente',
     observations: r.observations || '', valideePar: r.valide_par || '', ...(r.data || {}) };
 }
 

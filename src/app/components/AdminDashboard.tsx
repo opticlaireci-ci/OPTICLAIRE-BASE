@@ -434,7 +434,7 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
       </div>
 
       {/* 2 ── ACTIVITÉ MENSUELLE — MOBILE : rendu historique inchangé */}
-      <div className="lg:hidden">
+      <div className="md:hidden">
         <Panel title="ACTIVITÉ MENSUELLE">
           <div className="monthly-mobile-cards">
             <div className="monthly-mobile-kpi" style={{ backgroundColor: C_OBJECTIF, color: '#fff' }}>
@@ -592,7 +592,7 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
           IMPORTANT : le bandeau est construit en 2 zones indépendantes.
           La zone KPI ne partage jamais sa grille avec les filtres. Cela évite
           que l'ouverture du menu latéral écrase les cartes. */}
-      <section className="monthly-activity-desktop hidden lg:block bg-white border border-gray-200" style={{ minHeight: 620, boxSizing: 'border-box', width: '100%', containerType: 'inline-size' }}>
+      <section className="monthly-activity-desktop hidden md:block bg-white border border-gray-200" style={{ minHeight: 620, boxSizing: 'border-box', width: '100%', containerType: 'inline-size' }}>
         <div style={{ padding: '12px 10px 0', width: '100%', boxSizing: 'border-box' }}>
           <div className="monthly-top-layout" style={{
             display: 'grid',
