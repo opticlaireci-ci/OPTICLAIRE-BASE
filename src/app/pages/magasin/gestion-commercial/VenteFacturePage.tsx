@@ -4995,7 +4995,12 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
                   <div className="px-3 py-2 flex flex-col gap-2">
                     {/* Client */}
                     <div>
-                      <div className="font-semibold text-gray-800 text-sm">{v.client || '—'}</div>
+                      <div
+                        className="font-semibold text-gray-800 text-sm min-w-0 max-w-full"
+                        style={{ overflowWrap: 'anywhere', wordBreak: 'break-word', whiteSpace: 'normal' }}
+                      >
+                        {v.client || '—'}
+                      </div>
                       {v.telephone && <div className="text-xs text-gray-500">{v.telephone}</div>}
                     </div>
                     {/* Montants */}
@@ -5062,9 +5067,14 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
                       <tr key={`${v.id}-${i}`} className="border-b border-gray-200" style={{ backgroundColor: rowBgColor }}>
                         <td className="px-3 py-2 text-center text-sm border border-gray-300">{i + 1}</td>
                         <td className="px-3 py-2 font-mono font-semibold text-blue-700 text-sm border border-gray-300">{v.recap.numFacture || '—'}</td>
-                        <td className="px-3 py-2 text-sm border border-gray-300">
-                          <div className="font-medium text-gray-800">{v.client || '—'}</div>
-                          <div className="text-xs text-gray-500">{v.telephone || ''}</div>
+                        <td className="px-3 py-2 text-sm border border-gray-300 align-top" style={{ width: 190, maxWidth: 190, minWidth: 150, overflowWrap: 'anywhere', wordBreak: 'break-word' }}>
+                          <div
+                            className="font-medium text-gray-800 min-w-0 max-w-full"
+                            style={{ overflowWrap: 'anywhere', wordBreak: 'break-word', whiteSpace: 'normal' }}
+                          >
+                            {v.client || '—'}
+                          </div>
+                          <div className="text-xs text-gray-500 break-words" style={{ overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{v.telephone || ''}</div>
                         </td>
                         <td className="px-3 py-2 text-right text-sm border border-gray-300 font-semibold">{totalBrut.toLocaleString('fr-FR')}</td>
                         <td className="px-3 py-2 text-center text-sm border border-gray-300">{remisePct}%</td>
