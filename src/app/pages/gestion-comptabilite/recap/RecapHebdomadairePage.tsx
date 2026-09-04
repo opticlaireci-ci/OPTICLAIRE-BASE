@@ -6,6 +6,7 @@ import { useLiveData } from '../../../hooks/useLiveData';
 import { useAuth } from '../../../contexts/AuthContext';
 import { addCreateAudit, addUpdateAudit, AuditInfo } from '../../../utils/auditUtils';
 import { TENANT } from '../../../config/tenant';
+import { chargerToutesLesVentes, type VenteSupabase } from '../../../services/ventesService';
 import { afficherPdfBlob, imprimerPageCourante } from '../../../utils/inAppViewer';
 
 // Jours de la semaine (lundi → dimanche) tels qu'affichés dans le tableau.
@@ -53,26 +54,40 @@ function dateDuJour(semaine: string, index: number): string {
  * Calcule les recettes (ventes) par jour d'une semaine pour un magasin,
  * à partir des ventes stockées localement (`leclaire_ventes_{magasinId}`).
  */
-function recettesVentesParJour(magasinId: string, semaine: string): Record<Jour, number> {
+function montantAssuranceVente(v: any): number {
+  const bons = Array.isArray(v?.bons_assurance) ? v.bons_assurance : (Array.isArray(v?.bonsAssurance) ? v.bonsAssurance : []);
+  return bons.reduce((sum: number, b: any) => {
+    return sum + (Number(b?.montantPrisEnCharge ?? b?.montant ?? b?.total ?? b?.montantAssurance) || 0);
+  }, 0);
+}
+
+function montantRecetteVente(v: any): number {
+  const total = Number(v?.total_net ?? v?.total_brut ?? v?.totalNet ?? v?.totalAPayer ?? v?.montantTotal ?? v?.total ?? 0) || 0;
+  // La prise en charge assurance n'est pas une recette encaissée par le magasin.
+  return Math.max(0, total - montantAssuranceVente(v));
+}
+
+function dateMouvementISO(date: string): string {
+  if (!date) return '';
+  const parsed = new Date(date);
+  return Number.isNaN(parsed.getTime()) ? String(date).slice(0, 10) : parsed.toISOString().slice(0, 10);
+}
+
+/** Calcule les recettes réelles par jour : la part prise en charge par assurance est exclue. */
+function recettesVentesParJour(magasinId: string, semaine: string, ventesSource?: VenteSupabase[]): Record<Jour, number> {
   const result = Object.fromEntries(JOURS.map(j => [j, 0])) as Record<Jour, number>;
   try {
-    // Le cache des ventes est écrit avec une clé en MAJUSCULES
-    // (`leclaire_ventes_${magasinId.toUpperCase()}`, cf. ventesCacheKey).
-    // On doit donc lire avec la même casse, sinon aucune vente n'est trouvée.
-    const ventes = JSON.parse(localStorage.getItem(`leclaire_ventes_${magasinId.toUpperCase()}`) || '[]');
+    const ventes = ventesSource || JSON.parse(localStorage.getItem(`leclaire_ventes_${magasinId.toUpperCase()}`) || '[]');
     const jourDates = JOURS.map((_, i) => dateDuJour(semaine, i));
     ventes.forEach((v: any) => {
-      // Seules les VENTES réelles comptent comme recettes (pas les devis).
       if ((v.type || 'vente') !== 'vente') return;
+      if (magasinId && String(v.magasin_id || '').toUpperCase() !== String(magasinId).toUpperCase()) return;
       const brut = v.date || v.dateVente || v.created_at || v.createdAt;
       if (!brut) return;
-      const jourVente = new Date(brut).toISOString().slice(0, 10);
+      const jourVente = dateMouvementISO(brut);
       const idx = jourDates.indexOf(jourVente);
       if (idx === -1) return;
-      // Les ventes sont stockées avec `total_net` / `total_brut` (repli sur les
-      // anciens noms de champs éventuels pour compatibilité).
-      const montant = v.total_net ?? v.total_brut ?? v.totalNet ?? v.totalAPayer ?? v.montantTotal ?? v.total ?? 0;
-      result[JOURS[idx]] += Number(montant) || 0;
+      result[JOURS[idx]] += montantRecetteVente(v);
     });
   } catch (error) {
     logger.error(`Erreur calcul recettes ventes ${magasinId}:`, error);
@@ -83,15 +98,64 @@ function recettesVentesParJour(magasinId: string, semaine: string): Record<Jour,
 interface LigneRecap { jour: Jour; recettes: number; depenses: number; rd: number; }
 interface RecapMagasin { lignes: LigneRecap[]; totalR: number; totalD: number; }
 
+interface MouvementCaisseRecap {
+  id: string;
+  date: string;
+  magasinId: string;
+  type: 'entree' | 'sortie';
+  categorie: string;
+  montant: number;
+  libelle: string;
+  modePaiement: string;
+  reference?: string;
+  responsable?: string;
+}
+
+interface MouvementAdministrationRecap {
+  id: string;
+  reference: string;
+  magasin?: string;
+  dateMouvement: string;
+  heure?: string;
+  beneficiaire: string;
+  type: string;
+  nature: string;
+  montant: number;
+  modePaiement: string;
+  compteBanque: string;
+  commentaire: string;
+}
+
+function depensesMouvementsParJour(magasinId: string, semaine: string, mouvements: MouvementCaisseRecap[]): Record<Jour, number> {
+  const result = Object.fromEntries(JOURS.map(j => [j, 0])) as Record<Jour, number>;
+  const jourDates = JOURS.map((_, i) => dateDuJour(semaine, i));
+  mouvements.forEach(m => {
+    if (String(m.magasinId || '').toUpperCase() !== String(magasinId).toUpperCase()) return;
+    if (String(m.type || '').toLowerCase() !== 'sortie') return;
+    const idx = jourDates.indexOf(dateMouvementISO(m.date));
+    if (idx === -1) return;
+    result[JOURS[idx]] += Number(m.montant) || 0;
+  });
+  return result;
+}
+
 /** Construit les lignes recettes/dépenses/R-D + totaux d'un magasin pour une semaine. */
-function calcRecapMagasin(magasinId: string, semaine: string, entries: RecapEntry[]): RecapMagasin {
-  const recettesAuto = recettesVentesParJour(magasinId, semaine);
+function calcRecapMagasin(
+  magasinId: string,
+  semaine: string,
+  entries: RecapEntry[],
+  mouvementsCaisse: MouvementCaisseRecap[] = [],
+  ventesSource?: VenteSupabase[],
+): RecapMagasin {
+  const recettesAuto = recettesVentesParJour(magasinId, semaine, ventesSource);
+  const depensesAuto = depensesMouvementsParJour(magasinId, semaine, mouvementsCaisse);
   let totalR = 0, totalD = 0;
   const lignes = JOURS.map(jour => {
     const e = entries.find(x => x.jour === jour);
-    // La saisie manuelle prime ; sinon on affiche les ventes calculées.
-    const recettes = e && e.recettes !== undefined && e.recettes !== null ? e.recettes : (recettesAuto[jour] || 0);
-    const depenses = e?.depenses || 0;
+    const recettes = recettesAuto[jour] || 0;
+    // Les sorties enregistrées dans les mouvements de caisse deviennent les dépenses du récap.
+    // Les anciennes saisies manuelles restent utilisées uniquement lorsqu'aucune sortie n'est enregistrée ce jour-là.
+    const depenses = depensesAuto[jour] > 0 ? depensesAuto[jour] : (e?.depenses || 0);
     totalR += recettes; totalD += depenses;
     return { jour, recettes, depenses, rd: recettes - depenses };
   });
@@ -224,11 +288,124 @@ function TableauMagasin({
   );
 }
 
+
+function formatDateAffichage(date: string): string {
+  if (!date) return '—';
+  const d = new Date(date);
+  return Number.isNaN(d.getTime()) ? date : d.toLocaleDateString('fr-FR');
+}
+
+function TableauMouvementsSemaine({
+  titre,
+  mouvements,
+  administration = false,
+}: {
+  titre: string;
+  mouvements: Array<MouvementCaisseRecap | MouvementAdministrationRecap>;
+  administration?: boolean;
+}) {
+  const rows = [...mouvements].sort((a, b) => {
+    const da = administration
+      ? `${(a as MouvementAdministrationRecap).dateMouvement || ''} ${(a as MouvementAdministrationRecap).heure || ''}`
+      : (a as MouvementCaisseRecap).date || '';
+    const db = administration
+      ? `${(b as MouvementAdministrationRecap).dateMouvement || ''} ${(b as MouvementAdministrationRecap).heure || ''}`
+      : (b as MouvementCaisseRecap).date || '';
+    return db.localeCompare(da);
+  });
+
+  return (
+    <div className="border border-gray-300 rounded-lg overflow-hidden bg-white">
+      <div className="px-4 py-3 bg-white border-b border-gray-200 font-bold text-sm text-gray-800">
+        {titre} ({rows.length})
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm border-collapse" style={{ minWidth: 900 }}>
+          <thead>
+            <tr className="bg-gray-50 border-b border-gray-200 text-gray-700 font-semibold text-xs">
+              <th className="text-left px-2 py-2.5">N° Mouvement</th>
+              <th className="text-left px-2 py-2.5">Bénéficiaire</th>
+              <th className="text-left px-2 py-2.5">Type</th>
+              <th className="text-left px-2 py-2.5">Nature</th>
+              <th className="text-right px-2 py-2.5">Montant</th>
+              <th className="text-left px-2 py-2.5">Mode de Paiement</th>
+              <th className="text-left px-2 py-2.5">Compte Banque</th>
+              <th className="text-left px-2 py-2.5">Commentaire</th>
+              <th className="text-left px-2 py-2.5">Date</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 ? (
+              <tr><td colSpan={9} className="text-center py-8 text-gray-400">Aucun mouvement sur cette semaine</td></tr>
+            ) : rows.map((raw, idx) => {
+              if (administration) {
+                const m = raw as MouvementAdministrationRecap;
+                return (
+                  <tr key={m.id || idx} className="border-b border-gray-100 hover:bg-gray-50">
+                    <td className="px-2 py-2 font-mono text-blue-700">{m.reference || '—'}</td>
+                    <td className="px-2 py-2 font-semibold">{m.beneficiaire || '—'}</td>
+                    <td className="px-2 py-2">
+                      <span className="px-1.5 py-0.5 rounded text-xs font-semibold text-white" style={{ backgroundColor: String(m.type || '').toLowerCase() === 'entrée' ? '#16a34a' : '#dc2626' }}>{String(m.type || '').toLowerCase() === 'entrée' ? 'Entrée' : 'Sortie'}</span>
+                    </td>
+                    <td className="px-2 py-2 text-gray-600">{m.nature || '—'}</td>
+                    <td className="px-2 py-2 text-right font-semibold">{(Number(m.montant) || 0).toLocaleString('fr-FR')}</td>
+                    <td className="px-2 py-2 text-gray-600">{m.modePaiement || '—'}</td>
+                    <td className="px-2 py-2 text-gray-600 text-xs">{m.compteBanque || '—'}</td>
+                    <td className="px-2 py-2 text-gray-500">{m.commentaire || '—'}</td>
+                    <td className="px-2 py-2 text-gray-600">{formatDateAffichage(m.dateMouvement)}</td>
+                  </tr>
+                );
+              }
+              const m = raw as MouvementCaisseRecap;
+              return (
+                <tr key={m.id || idx} className="border-b border-gray-100 hover:bg-gray-50">
+                  <td className="px-2 py-2 font-mono text-blue-700">{m.reference || m.id || '—'}</td>
+                  <td className="px-2 py-2 font-semibold">{m.libelle || '—'}</td>
+                  <td className="px-2 py-2">
+                    <span className="px-1.5 py-0.5 rounded text-xs font-semibold text-white" style={{ backgroundColor: m.type === 'entree' ? '#16a34a' : '#dc2626' }}>{m.type === 'entree' ? 'Entrée' : 'Sortie'}</span>
+                  </td>
+                  <td className="px-2 py-2 text-gray-600">{m.categorie || '—'}</td>
+                  <td className="px-2 py-2 text-right font-semibold">{(Number(m.montant) || 0).toLocaleString('fr-FR')}</td>
+                  <td className="px-2 py-2 text-gray-600">{m.modePaiement || '—'}</td>
+                  <td className="px-2 py-2 text-gray-600 text-xs">—</td>
+                  <td className="px-2 py-2 text-gray-500">{m.responsable || '—'}</td>
+                  <td className="px-2 py-2 text-gray-600">{formatDateAffichage(m.date)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 export function RecapHebdomadairePage() {
   const { user } = useAuth();
   const editable = ROLES_ECRITURE.includes(user?.role || '');
   const [recaps, setRecaps] = useLiveData<RecapEntry>('leclaire_recap_hebdo', []);
+  const [mouvementsCaisse] = useLiveData<MouvementCaisseRecap>('leclaire_mouvements_caisse', []);
+  const [mouvementsAdministration] = useLiveData<MouvementAdministrationRecap>('leclaire_mouvements', []);
+  const [ventesAll, setVentesAll] = useState<VenteSupabase[] | null>(null);
   const [semaine, setSemaine] = useState<string>(() => lundiDeLaSemaine(new Date()));
+
+  // Les ventes sont rechargées directement pour que le récap reste exact même si
+  // le cache local du magasin n'a pas encore été rafraîchi.
+  useEffect(() => {
+    let annule = false;
+    const load = () => chargerToutesLesVentes().then(rows => {
+      if (!annule) setVentesAll(rows);
+    }).catch(() => {});
+    load();
+    const interval = setInterval(load, 15000);
+    const onUpdate = () => load();
+    window.addEventListener('ventes-updated', onUpdate);
+    return () => {
+      annule = true;
+      clearInterval(interval);
+      window.removeEventListener('ventes-updated', onUpdate);
+    };
+  }, []);
 
   // Liste des magasins réactive : un magasin ajouté apparaît automatiquement.
   const [magasins, setMagasins] = useState<Magasin[]>(() => getMagasins());
@@ -248,9 +425,15 @@ export function RecapHebdomadairePage() {
   const recapsParMagasin = useMemo(() => {
     return magasins.map(m => ({
       magasin: m,
-      recap: calcRecapMagasin(m.id, semaine, recaps.filter(r => r.magasinId === m.id && r.semaine === semaine)),
+      recap: calcRecapMagasin(
+        m.id,
+        semaine,
+        recaps.filter(r => r.magasinId === m.id && r.semaine === semaine),
+        mouvementsCaisse,
+        ventesAll === null ? undefined : ventesAll,
+      ),
     }));
-  }, [magasins, semaine, recaps]);
+  }, [magasins, semaine, recaps, mouvementsCaisse, ventesAll]);
 
   const handleSet = (magasinId: string) => (jour: Jour, champ: 'recettes' | 'depenses', valeur: number) => {
     const id = `${magasinId}_${semaine}_${jour}`;
@@ -269,7 +452,7 @@ export function RecapHebdomadairePage() {
     }
   };
 
-  const libelleSemaine = `Semaine du ${new Date(semaine + 'T00:00:00').toLocaleDateString('fr-FR')} au ${new Date(decalerSemaine(semaine, 0) + 'T00:00:00').toLocaleDateString('fr-FR')}`;
+  const libelleSemaine = `Semaine du ${new Date(semaine + 'T00:00:00').toLocaleDateString('fr-FR')} au ${new Date(dateDuJour(semaine, 6) + 'T00:00:00').toLocaleDateString('fr-FR')}`;
 
   const handleImprimer = () => imprimerPageCourante();
 
@@ -363,7 +546,7 @@ export function RecapHebdomadairePage() {
 
       <div className="text-xs text-gray-500 px-1 recap-no-print">
         {editable
-          ? 'Les recettes sont pré-remplies depuis les ventes de chaque magasin — vous pouvez les modifier ainsi que les dépenses.'
+          ? 'Les recettes sont calculées hors prise en charge assurance. Les dépenses proviennent automatiquement des sorties enregistrées dans les mouvements de caisse.'
           : 'Lecture seule — seuls les directeurs, comptables et administrateurs peuvent modifier les données.'}
         {' · '}{libelleSemaine}
       </div>
@@ -378,6 +561,32 @@ export function RecapHebdomadairePage() {
             recap={recap}
             onSet={handleSet(magasin.id)}
             editable={editable}
+          />
+        ))}
+      </div>
+
+
+      {/* Détail des mouvements sous les tableaux récapitulatifs. */}
+      <div className="flex flex-col gap-4">
+        <div className="text-base font-bold text-gray-800 border-b border-gray-300 pb-2">
+          MOUVEMENTS ENTRÉES / SORTIES — SEMAINE DU {new Date(semaine + 'T00:00:00').toLocaleDateString('fr-FR')}
+        </div>
+        <TableauMouvementsSemaine
+          titre="MOUVEMENTS DE L'ADMINISTRATION"
+          administration
+          mouvements={mouvementsAdministration.filter(m => {
+            const d = dateMouvementISO(m.dateMouvement);
+            return d >= semaine && d <= dateDuJour(semaine, 6);
+          })}
+        />
+        {recapsParMagasin.map(({ magasin }) => (
+          <TableauMouvementsSemaine
+            key={`mouvements-${magasin.id}`}
+            titre={`MOUVEMENTS DE L'OFFICINE ${magasin.label.replace(`${TENANT.nom} `, '')}`}
+            mouvements={mouvementsCaisse.filter(m => {
+              const d = dateMouvementISO(m.date);
+              return String(m.magasinId || '').toUpperCase() === String(magasin.id).toUpperCase() && d >= semaine && d <= dateDuJour(semaine, 6);
+            })}
           />
         ))}
       </div>
