@@ -30,7 +30,7 @@ type ReportType =
   | 'ca-ophtalmologues' | 'ca-cabinets' | 'clients';
 
 interface Column { label: string; align?: 'right' }
-interface Row { key: string; cells: string[]; search: string }
+interface Row { key: string; cells: string[]; search: string; groupDate?: string; groupTotal?: number }
 interface ReportView {
   title: string;
   fileName: string;
@@ -171,7 +171,7 @@ export function VisualisationPage() {
   };
   const modePaiementVente = (v: VenteSupabase): string => (v.recap as any)?.modePaiement || '';
 
-  const mkRow = (key: string, cells: string[]): Row => ({ key, cells, search: cells.join(' ').toLowerCase() });
+  const mkRow = (key: string, cells: string[], groupDate?: string, groupTotal?: number): Row => ({ key, cells, search: cells.join(' ').toLowerCase(), groupDate, groupTotal });
 
   // Explose les lignes verres/articles d'une vente pour les récapitulatifs.
   const lignesArticles = (v: VenteSupabase, type: string): { designation: string; qte: string; prix: string; total: string }[] => {
@@ -223,7 +223,7 @@ export function VisualisationPage() {
         const rows = filtered.map(v => mkRow(v.id, [
           fmtDate(v.date), numDoc(v), v.numero_client || '', v.client || '',
           v.telephone || '', magU(v.magasin_id), v.edite_par || '', fmtMontant(montantVente(v)),
-        ]));
+        ], v.date, montantVente(v)));
         const total = filtered.reduce((s, v) => s + montantVente(v), 0);
         return build(isDevis ? 'DEVIS | PROFORMA' : 'VENTES | FACTURES', isDevis ? 'Devis' : 'Ventes',
           [{ label: 'Date' }, { label: 'N° Doc' }, { label: 'N° Client' }, { label: 'Client' }, { label: 'Téléphone' }, { label: 'Magasin' }, { label: 'Édité par' }, { label: 'Total', align: 'right' }],
@@ -253,7 +253,7 @@ export function VisualisationPage() {
         const rows = filtered.map(v => mkRow(v.id, [
           fmtDate(v.date), numDoc(v), v.client || '', magU(v.magasin_id),
           modePaiementVente(v), v.edite_par || '', fmtMontant(montantVente(v)),
-        ]));
+        ], v.date, montantVente(v)));
         const total = filtered.reduce((s, v) => s + montantVente(v), 0);
         return build('RÉCAPITULATIF ACTIVITÉS', 'Recap_Activites',
           [{ label: 'Date' }, { label: 'N° Doc' }, { label: 'Client' }, { label: 'Magasin' }, { label: 'Paiement' }, { label: 'Édité par' }, { label: 'Total', align: 'right' }],
@@ -379,7 +379,7 @@ export function VisualisationPage() {
           return mkRow(r.id, [
             v?.client || '', fmtMontant(totalNet), fmtMontant(num(r.montant)),
             v ? numDoc(v) : '', r.recu || '', modePaiementAffiche(r.mode_paiement, v),
-          ]);
+          ], r.date, num(r.montant));
         });
 
         // Acomptes initiaux des ventes (paiement à la commande, stocké dans recap.acompte)
@@ -392,7 +392,7 @@ export function VisualisationPage() {
         const acompteRows = filteredV.map(v => mkRow(`acompte-${v.id}`, [
           v.client || '', fmtMontant(montantVente(v)), fmtMontant(num((v.recap as any)?.acompte)),
           numDoc(v), '', modePaiementAffiche((v.recap as any)?.modePaiement || '', v),
-        ]));
+        ], v.date, num((v.recap as any)?.acompte)));
 
         // Les bons d'assurance sont eux aussi des règlements. Ils ne sont pas
         // toujours enregistrés dans la collection `reglements`, donc ils doivent
@@ -411,7 +411,7 @@ export function VisualisationPage() {
               return mkRow(`assurance-${v.id}-${bi}`, [
                 v.client || '', fmtMontant(montantVente(v)), fmtMontant(montantAss),
                 numDoc(v), '', assurance || 'BON D’ASSURANCE',
-              ]);
+              ], v.date, montantAss);
             }))
           : [];
 
@@ -520,6 +520,53 @@ export function VisualisationPage() {
     }
   }, [activeReport, ventes, reglements, releves, facturesAss, clients, bons, bonsVerres, inventaires, stocks, recherche, dateDebut, dateFin, magasin, modePaiement]);
 
+  // Regroupe les rapports datés comme le PDF de référence : chaque changement
+  // de date commence par une ligne de synthèse colorée avec le total du jour.
+  const prepareDateGroups = (rows: Row[], headers: Column[]) => {
+    const dateHeaderIndex = headers.findIndex(h => /date/i.test(h.label));
+    const dated = rows.some(r => r.groupDate || (dateHeaderIndex >= 0 && r.cells[dateHeaderIndex]));
+    if (!dated) return null;
+
+    const parseGroupDate = (r: Row): Date | null => {
+      const raw = r.groupDate || (dateHeaderIndex >= 0 ? r.cells[dateHeaderIndex] : '');
+      if (!raw) return null;
+      const iso = String(raw).match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if (iso) return new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]));
+      return parseFiltreDate(String(raw)) || null;
+    };
+    const groups = new Map<string, { date: Date; rows: Row[]; total: number; hasTotal: boolean }>();
+    const undated: Row[] = [];
+    for (const r of rows) {
+      const d = parseGroupDate(r);
+      if (!d || isNaN(d.getTime())) { undated.push(r); continue; }
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      const g = groups.get(key) || { date: d, rows: [], total: 0, hasTotal: false };
+      g.rows.push(r);
+      if (typeof r.groupTotal === 'number' && !isNaN(r.groupTotal)) {
+        g.total += r.groupTotal; g.hasTotal = true;
+      } else {
+        const fallbackCol = groupTotalColumn(headers);
+        const rawTotal = fallbackCol >= 0 ? String(r.cells[fallbackCol] || '').replace(/[^0-9,.-]/g, '').replace(',', '.') : '';
+        const fallback = Number(rawTotal);
+        if (isFinite(fallback) && fallback > 0) { g.total += fallback; g.hasTotal = true; }
+      }
+      groups.set(key, g);
+    }
+    if (groups.size === 0) return null;
+    return [...groups.values()].sort((a, b) => b.date.getTime() - a.date.getTime()).concat(
+      undated.length ? [{ date: new Date(0), rows: undated, total: 0, hasTotal: false }] : []
+    );
+  };
+
+  const dateLabel = (d: Date) => d.toLocaleDateString('fr-FR', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' });
+  const groupTotalColumn = (headers: Column[]) => {
+    const preferred = headers.findIndex(h => /règlement|montant|total|ca$|part assurance|prix/i.test(h.label));
+    if (preferred >= 0) return preferred;
+    let last = -1;
+    headers.forEach((h, i) => { if (h.align === 'right') last = i; });
+    return last >= 0 ? last : Math.max(0, headers.length - 1);
+  };
+
   // ── Export PDF / Excel ──────────────────────────────────────────────────────
   const imprimer = async () => {
     // Imports paresseux : jsPDF + autoTable chargés uniquement à l'impression.
@@ -550,10 +597,33 @@ export function VisualisationPage() {
     }
     doc.setFont('helvetica', 'normal');
 
+    const groups = prepareDateGroups(view.rows, view.headers);
+    const pdfBody: any[][] = [];
+    if (groups) {
+      const totalCol = groupTotalColumn(view.headers);
+      for (const g of groups) {
+        let cells: any[];
+        const label = g.date.getTime() === 0 ? 'Sans date' : `Édition : ${dateLabel(g.date)}`;
+        if (g.hasTotal && totalCol > 0) {
+          cells = [
+            { content: label, colSpan: totalCol, styles: { fillColor: [198, 220, 92], textColor: [0, 0, 0], fontStyle: 'bold', halign: 'left' } },
+            { content: fmtMontant(g.total), styles: { fillColor: [198, 220, 92], textColor: [0, 0, 0], fontStyle: 'bold', halign: 'right' } },
+            ...Array.from({ length: Math.max(0, view.headers.length - totalCol - 1) }, () => ({ content: '', styles: { fillColor: [198, 220, 92] } })),
+          ];
+        } else {
+          cells = [{ content: label, colSpan: view.headers.length, styles: { fillColor: [198, 220, 92], textColor: [0, 0, 0], fontStyle: 'bold', halign: 'left' } }];
+        }
+        pdfBody.push(cells);
+        g.rows.forEach(r => pdfBody.push(r.cells));
+      }
+    } else {
+      pdfBody.push(...view.rows.map(r => r.cells));
+    }
+
     autoTable(doc, {
       startY: startY - 5 + boxH + 4,
       head: [view.headers.map(h => h.label)],
-      body: view.rows.map(r => r.cells),
+      body: pdfBody,
       foot: view.foot ? [view.foot] : undefined,
       styles: { fontSize: 8, lineColor: [0, 0, 0], lineWidth: 0.1 },
       headStyles: { fillColor: [230, 230, 230], textColor: [0, 0, 0], fontStyle: 'bold' },
@@ -582,10 +652,34 @@ export function VisualisationPage() {
     if (view.subtitle) aoa.push([view.subtitle]);
     aoa.push([]);
     aoa.push(headers);
-    aoa.push(...view.rows.map(r => r.cells));
+    const groups = prepareDateGroups(view.rows, view.headers);
+    const excelGroupRows: { row: any[]; group: boolean }[] = [];
+    if (groups) {
+      const totalCol = groupTotalColumn(view.headers);
+      for (const g of groups) {
+        const row = Array(view.headers.length).fill('');
+        row[0] = g.date.getTime() === 0 ? 'Sans date' : `Édition : ${dateLabel(g.date)}`;
+        if (g.hasTotal && totalCol >= 0) row[totalCol] = fmtMontant(g.total);
+        excelGroupRows.push({ row, group: true });
+        g.rows.forEach(r => excelGroupRows.push({ row: r.cells, group: false }));
+      }
+    } else {
+      view.rows.forEach(r => excelGroupRows.push({ row: r.cells, group: false }));
+    }
+    aoa.push(...excelGroupRows.map(x => x.row));
     if (view.foot) aoa.push(view.foot);
     else if (view.footer) aoa.push([view.footer]);
     const ws = XLSX.utils.aoa_to_sheet(aoa);
+    // Mise en forme Excel des séparateurs de date (ligne verte comme le PDF).
+    const headerOffset = excelHeaderRows().length + 3;
+    excelGroupRows.forEach((entry, idx) => {
+      if (!entry.group) return;
+      const r = headerOffset + idx;
+      for (let c = 0; c < view.headers.length; c++) {
+        const cell = ws[XLSX.utils.encode_cell({ r, c })];
+        if (cell) cell.s = { fill: { fgColor: { rgb: 'C6DC5C' } }, font: { bold: true, color: { rgb: '000000' } } };
+      }
+    });
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, view.fileName.slice(0, 30) || 'Rapport');
     XLSX.writeFile(wb, `${view.fileName}.xlsx`);

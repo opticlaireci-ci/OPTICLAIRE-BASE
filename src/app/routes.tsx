@@ -197,6 +197,7 @@ export const router = createBrowserRouter([
 
       // Paramétrage
       { path: "parametrage/configuration", lazy: lazyRoute(() => import("./pages/parametrage/ConfigurationPage"), "ConfigurationPage") },
+      { path: "parametrage/administration", lazy: lazyRoute(() => import("./pages/parametrage/AdministrationSettingsPage"), "AdministrationSettingsPage") },
       { path: "parametrage/enseigne", lazy: lazyRoute(() => import("./pages/parametrage/ConfigurationEnseignePage"), "ConfigurationEnseignePage") },
       { path: "parametrage/condition-commerciale", lazy: lazyRoute(() => import("./pages/parametrage/ConditionCommercialePage"), "ConditionCommercialePage") },
       { path: "parametrage/message-sms", lazy: lazyRoute(() => import("./pages/parametrage/MessageSmsPage"), "MessageSmsPage") },

@@ -359,6 +359,7 @@ const menuItems: MenuItemType[] = [
         icon: <Settings />,
         children: [
           { title: 'Configuration', icon: <Tune />, path: '/parametrage/configuration' },
+          { title: "Paramètres de l'administration", icon: <Settings />, path: '/parametrage/administration' },
           { title: "Configuration de l'enseigne", icon: <Business />, path: '/parametrage/enseigne' },
           { title: 'Condition Commerciale', icon: <AttachMoney />, path: '/parametrage/condition-commerciale' },
           { title: 'Message SMS', icon: <Message />, path: '/parametrage/message-sms' },
