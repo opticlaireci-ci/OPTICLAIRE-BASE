@@ -386,11 +386,19 @@ export function VisualisationPage() {
                 .filter(Boolean)
                 .map(n => n.toUpperCase()),
             ));
-            const modeCell = noms.join(', ') || 'BON D’ASSURANCE';
+            // Même structure d’affichage que tous les autres règlements :
+            // la colonne « Mode de Paiement » porte le mode générique
+            // « Assurance », avec le nom de l’assurance en complément pour
+            // conserver l’information du bon sans créer un format de rapport
+            // différent pour ce filtre.
+            const modeCell = noms.length ? `Assurance — ${noms.join(', ')}` : 'Assurance';
+            const montantAssurance = (v.bons_assurance as any[]).reduce((s, b) => s + num(
+              b?.montantPrisEnCharge ?? b?.montant ?? b?.total ?? b?.montantAssurance
+            ), 0);
             return mkRow(`ass-${v.id}`, [
-              `${magU(v.magasin_id)}\n${v.client || ''}`, fmtMontant(montantVente(v)), fmtMontant(montantVente(v)),
+              `${magU(v.magasin_id)}\n${v.client || ''}`, fmtMontant(montantVente(v)), fmtMontant(montantAssurance),
               numDoc(v), '', modeCell,
-            ]);
+            ], v.date, montantAssurance);
           });
           const totalAss = filteredAss.reduce((s, v) => s + montantVente(v), 0);
           return build(titre, nomFichier, headersReg, assRows,
