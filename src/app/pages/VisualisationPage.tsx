@@ -171,6 +171,33 @@ export function VisualisationPage() {
   };
   const modePaiementVente = (v: VenteSupabase): string => (v.recap as any)?.modePaiement || '';
 
+  // Normalisation des modes de règlement pour l'état PDF/Excel.
+  // - WAVE et ORANGE MONEY sont regroupés sous « Mobile Money ».
+  // - CARTE VISA est regroupée sous « Carte bancaire ».
+  // - les variantes d'ESPECE/ESPÈCES sont regroupées en une seule entrée.
+  // - ASSURANCE n'est pas un mode de paiement proposé dans le filtre.
+  const normaliserModePaiement = (mode: string): string => {
+    const m = String(mode || '').trim();
+    const n = m.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!n) return '';
+    if (/^(wave|orange money|orange-money|mobile money|mobilemoney)$/.test(n) || n.includes('wave') || n.includes('orange money')) return 'Mobile Money';
+    if (n === 'espece' || n === 'especes') return 'Espèces';
+    if (n === 'carte bancaire' || n === 'carte bancaire ') return 'Carte bancaire';
+    if (n === 'carte visa' || n.includes('visa')) return 'Carte bancaire';
+    if (n === 'assurance' || n.includes('bon assurance') || n.includes("bon d'assurance") || n.includes('bon d assurance')) return 'Assurance';
+    return m;
+  };
+
+  const estModeMobileMoney = (mode: string): boolean => normaliserModePaiement(mode) === 'Mobile Money';
+  const modePaiementCorrespond = (modeEnregistre: string, modeFiltre: string): boolean => {
+    if (modeFiltre === OPTION_TOUS_MODES) return true;
+    const filtre = normaliserModePaiement(modeFiltre);
+    const enregistre = normaliserModePaiement(modeEnregistre);
+    if (filtre === 'Mobile Money') return estModeMobileMoney(modeEnregistre);
+    if (filtre === 'Espèces') return enregistre === 'Espèces';
+    return enregistre.toLowerCase() === filtre.toLowerCase();
+  };
+
   const mkRow = (key: string, cells: string[], groupDate?: string, groupTotal?: number): Row => ({ key, cells, search: cells.join(' ').toLowerCase(), groupDate, groupTotal });
 
   // Explose les lignes verres/articles d'une vente pour les récapitulatifs.
@@ -252,7 +279,7 @@ export function VisualisationPage() {
         const filtered = ventes.filter(v => v.type !== 'devis').filter(v => dansIntervalle(v.date)).filter(v => magasinOk(v.magasin_id));
         const rows = filtered.map(v => mkRow(v.id, [
           fmtDate(v.date), numDoc(v), v.client || '', magU(v.magasin_id),
-          modePaiementVente(v), v.edite_par || '', fmtMontant(montantVente(v)),
+          normaliserModePaiement(modePaiementVente(v)), v.edite_par || '', fmtMontant(montantVente(v)),
         ], v.date, montantVente(v)));
         const total = filtered.reduce((s, v) => s + montantVente(v), 0);
         return build('RÉCAPITULATIF ACTIVITÉS', 'Recap_Activites',
@@ -333,7 +360,8 @@ export function VisualisationPage() {
             const assurance = v ? nomAssurance(v) : '';
             return assurance || m.replace(/^bon\s*(d[’']?assurance|assurance)\s*/i, '').trim() || 'BON D’ASSURANCE';
           }
-          return m;
+          const normalise = normaliserModePaiement(m);
+          return normalise === 'Assurance' ? (v ? nomAssurance(v) || '—' : '—') : normalise;
         };
         const vById = new Map(ventes.map(v => [v.id, v]));
         const titre = activeReport === 'mouvements' ? 'MOUVEMENTS FINANCIERS' : 'ÉTAT RÈGLEMENTS';
@@ -372,7 +400,7 @@ export function VisualisationPage() {
         const filteredR = reglements
           .filter(r => dansIntervalle(r.date))
           .filter(r => magasinOk(r.magasin_id))
-          .filter(r => modePaiement === OPTION_TOUS_MODES ? true : (r.mode_paiement || '').toLowerCase() === modePaiement.toLowerCase());
+          .filter(r => modePaiementCorrespond(r.mode_paiement || '', modePaiement));
         const regRows = filteredR.map(r => {
           const v = vById.get(r.vente_id);
           const totalNet = v ? montantVente(v) : 0;
@@ -388,7 +416,7 @@ export function VisualisationPage() {
           .filter(v => dansIntervalle(v.date))
           .filter(v => magasinOk(v.magasin_id))
           .filter(v => num((v.recap as any)?.acompte) > 0)
-          .filter(v => modePaiement === OPTION_TOUS_MODES ? true : ((v.recap as any)?.modePaiement || '').toLowerCase() === modePaiement.toLowerCase());
+          .filter(v => modePaiementCorrespond((v.recap as any)?.modePaiement || '', modePaiement));
         const acompteRows = filteredV.map(v => mkRow(`acompte-${v.id}`, [
           `${magU(v.magasin_id)}\n${v.client || ''}`, fmtMontant(montantVente(v)), fmtMontant(num((v.recap as any)?.acompte)),
           numDoc(v), '', modePaiementAffiche((v.recap as any)?.modePaiement || '', v),
@@ -701,19 +729,39 @@ export function VisualisationPage() {
 
   const isReglements = activeReport === 'mouvements' || activeReport === 'reglements';
 
-  // Modes de paiement disponibles dans le filtre : ceux enregistrés dans la
-  // configuration + ceux rencontrés dans les ventes et règlements chargés,
-  // plus l'option spéciale « Bon d'assurance ».
+  // Modes de paiement disponibles dans le filtre Règlements.
+  // Les anciennes variantes sont volontairement normalisées pour éviter les
+  // doublons : WAVE/ORANGE MONEY -> Mobile Money, ESPECE/ESPÈCES -> Espèces,
+  // CARTE VISA est regroupée avec CARTE BANCAIRE ; ASSURANCE est masqué.
   const modesEnregistres = useModesPaiement();
   const modesDisponibles = useMemo(() => {
     const set = new Set<string>();
-    modesEnregistres.forEach(m => { if (m && m.trim()) set.add(m.trim()); });
-    ventes.forEach(v => { const m = (v.recap as any)?.modePaiement; if (m && String(m).trim()) set.add(String(m).trim()); });
-    reglements.forEach(r => { if (r.mode_paiement && r.mode_paiement.trim()) set.add(r.mode_paiement.trim()); });
-    const arr = Array.from(set).filter(m => m.toLowerCase() !== OPTION_BON_ASSURANCE.toLowerCase());
+    const ajouter = (mode: string) => {
+      const normalise = normaliserModePaiement(mode);
+      if (!normalise || normalise === 'Assurance') return;
+      set.add(normalise);
+    };
+    modesEnregistres.forEach(ajouter);
+    ventes.forEach(v => ajouter((v.recap as any)?.modePaiement || ''));
+    reglements.forEach(r => ajouter(r.mode_paiement || ''));
+    // Mobile Money est un mode unique dans le filtre, même si aucune ligne
+    // récente ne porte encore exactement ce libellé.
+    set.add('Mobile Money');
+    set.add('Espèces');
+    set.add('Carte bancaire');
+    const arr = Array.from(set).filter(m => m !== 'Assurance');
     arr.sort((a, b) => a.localeCompare(b, 'fr'));
     return arr;
   }, [modesEnregistres, ventes, reglements]);
+
+  // Si une ancienne valeur (Wave, Orange Money, Carte Visa, Assurance...) était
+  // encore sélectionnée lors d'une mise à jour, revenir proprement à « Tous ».
+  useEffect(() => {
+    if (!isReglements || modePaiement === OPTION_TOUS_MODES) return;
+    if (!modesDisponibles.includes(modePaiement) && modePaiement !== OPTION_BON_ASSURANCE) {
+      setModePaiement(OPTION_TOUS_MODES);
+    }
+  }, [isReglements, modePaiement, modesDisponibles]);
 
   const btn = (r: ReportType, label: React.ReactNode) => (
     <button style={reportBtnStyle(activeReport === r)} onClick={() => setActiveReport(r)}>{label}</button>
@@ -798,7 +846,6 @@ export function VisualisationPage() {
               <select style={fieldStyle} value={modePaiement} onChange={e => setModePaiement(e.target.value)}>
                 <option value={OPTION_TOUS_MODES}>{OPTION_TOUS_MODES}</option>
                 {modesDisponibles.map(m => <option key={m} value={m}>{m}</option>)}
-                <option value={OPTION_BON_ASSURANCE}>{OPTION_BON_ASSURANCE}</option>
               </select>
             </div>
           )}
