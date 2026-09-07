@@ -13,7 +13,7 @@ import { logger } from '../utils/logger';
  * fonctionner. Cette béquille sera retirée quand les données passeront sur Convex.
  */
 
-import { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useRef, useCallback, ReactNode } from 'react';
 import { supabase, authHeaders, getValidAccessToken, refreshAccessToken, serverFetch, KV_TABLE_NAME } from '../utils/supabaseClient';
 import type { UserRole } from '../utils/permissions';
 import { isTransientNetworkError } from '../utils/networkErrors';
@@ -438,7 +438,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const logout = async () => {
+  const logout = useCallback(async () => {
     try {
       logger.log('👋 Déconnexion Supabase...');
       cleanupHydrationRef.current?.();
@@ -456,7 +456,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       logger.error('❌ Erreur déconnexion:', err);
     }
-  };
+  }, []);
+
+  // Déconnexion automatique après 10 minutes sans activité.
+  // Fonctionne sur desktop et mobile : clavier/souris/tactile/scroll.
+  useEffect(() => {
+    if (!user || typeof window === 'undefined') return;
+
+    const INACTIVITY_LIMIT_MS = 10 * 60 * 1000;
+    let lastActivity = Date.now();
+    let timer: ReturnType<typeof setInterval> | null = null;
+
+    const markActivity = () => {
+      lastActivity = Date.now();
+    };
+
+    const checkInactivity = () => {
+      if (Date.now() - lastActivity >= INACTIVITY_LIMIT_MS) {
+        logger.log('⏱️ 10 minutes d’inactivité : déconnexion automatique.');
+        if (timer) {
+          clearInterval(timer);
+          timer = null;
+        }
+        void logout();
+      }
+    };
+
+    const events: Array<keyof WindowEventMap> = [
+      'mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart', 'touchmove', 'pointerdown'
+    ];
+    events.forEach(event => window.addEventListener(event, markActivity, { passive: true }));
+    window.addEventListener('visibilitychange', checkInactivity);
+    timer = setInterval(checkInactivity, 30_000);
+
+    return () => {
+      if (timer) clearInterval(timer);
+      events.forEach(event => window.removeEventListener(event, markActivity));
+      window.removeEventListener('visibilitychange', checkInactivity);
+    };
+  }, [user, logout]);
 
   const setMagasinActuel = (magasinId: string) => {
     if (!user) return;

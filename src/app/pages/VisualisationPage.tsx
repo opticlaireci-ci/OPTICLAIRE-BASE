@@ -332,15 +332,14 @@ export function VisualisationPage() {
       // ── Règlements / Mouvements financiers ────────────────────────────────────
       case 'mouvements':
       case 'reglements': {
-        // Colonnes conformes au modèle de l'état RÈGLEMENTS fourni :
-        // Client, Total Net, Règlement, N° Facture, N° Reçu, Mode de Paiement.
-        // La colonne « Détails » est volontairement supprimée.
+        // État RÈGLEMENTS : le total encaissé doit apparaître directement
+        // dans la cellule « Règlement » du total, comme le Total Net.
+        // La colonne « N° Reçu » est supprimée de l'affichage PDF/Excel.
         const headersReg: Column[] = [
           { label: 'Client' },
           { label: 'Total Net', align: 'right' },
           { label: 'Règlement', align: 'right' },
           { label: 'N° Facture' },
-          { label: 'N° Reçu' },
           { label: 'Mode de Paiement' },
         ];
 
@@ -397,13 +396,13 @@ export function VisualisationPage() {
             ), 0);
             return mkRow(`ass-${v.id}`, [
               `${magU(v.magasin_id)}\n${v.client || ''}`, fmtMontant(montantVente(v)), fmtMontant(montantAssurance),
-              numDoc(v), '', modeCell,
+              numDoc(v), modeCell,
             ], v.date, montantAssurance);
           });
           const totalAss = filteredAss.reduce((s, v) => s + montantVente(v), 0);
           return build(titre, nomFichier, headersReg, assRows,
             `Total factures avec assurance : ${fmtMontant(totalAss)}`,
-            { foot: ['T O T A L', fmtMontant(totalAss), fmtMontant(totalAss), '', '', ''] });
+            { foot: ['T O T A L', fmtMontant(totalAss), fmtMontant(totalAss), '', ''] });
         }
 
         const filteredR = reglements
@@ -428,7 +427,7 @@ export function VisualisationPage() {
           .filter(v => modePaiementCorrespond((v.recap as any)?.modePaiement || '', modePaiement));
         const acompteRows = filteredV.map(v => mkRow(`acompte-${v.id}`, [
           `${magU(v.magasin_id)}\n${v.client || ''}`, fmtMontant(montantVente(v)), fmtMontant(num((v.recap as any)?.acompte)),
-          numDoc(v), '', modePaiementAffiche((v.recap as any)?.modePaiement || '', v),
+          numDoc(v), modePaiementAffiche((v.recap as any)?.modePaiement || '', v),
         ], v.date, num((v.recap as any)?.acompte)));
 
         // Les bons d'assurance sont eux aussi des règlements. Ils ne sont pas
@@ -444,10 +443,9 @@ export function VisualisationPage() {
           ? filteredAssVentes.flatMap(v => (v.bons_assurance as any[]).map((b, bi) => {
               const montantAss = num(b?.montantPrisEnCharge ?? b?.montant ?? b?.total ?? b?.montantAssurance);
               const assurance = String(b?.assurance || '').trim();
-              const numeroBon = String(b?.numeroBon || '').trim();
-              return mkRow(`assurance-${v.id}-${bi}`, [
+                return mkRow(`assurance-${v.id}-${bi}`, [
                 `${magU(v.magasin_id)}\n${v.client || ''}`, fmtMontant(montantVente(v)), fmtMontant(montantAss),
-                numDoc(v), '', assurance || 'BON D’ASSURANCE',
+                numDoc(v), assurance || 'BON D’ASSURANCE',
               ], v.date, montantAss);
             }))
           : [];
@@ -469,7 +467,7 @@ export function VisualisationPage() {
         const allRows = [...regRows, ...acompteRows, ...assuranceRows];
         return build(titre, nomFichier, headersReg, allRows,
           `Total encaissé : ${fmtMontant(totalEncaisse)}`,
-          { foot: ['T O T A L', fmtMontant(totalNetDistinct), fmtMontant(totalEncaisse), '', '', ''] });
+          { foot: ['T O T A L', fmtMontant(totalNetDistinct), fmtMontant(totalEncaisse), '', ''] });
       }
       // ── Assurances ────────────────────────────────────────────────────────────
       case 'recap-releves': {
