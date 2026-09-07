@@ -153,7 +153,7 @@ function useVentesMonture(reference: string, codeBarre: string, marque: string) 
   useEffect(() => {
     // Debounce : au chargement, l'hydratation Firebase émet une rafale
     // d'événements. Sans regroupement, chaque ligne recalcule des dizaines de
-    // fois (lecture localStorage × 7 magasins), ce qui gèle l'UI et fait perdre
+    // fois (lecture localStorage × 9 magasins), ce qui gèle l'UI et fait perdre
     // les clics. On regroupe donc les recalculs en un seul, 250 ms après la
     // dernière notification.
     let timer: ReturnType<typeof setTimeout> | null = null;

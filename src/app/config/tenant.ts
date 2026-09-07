@@ -121,6 +121,8 @@ const TENANT_DEFAUT: TenantConfig = {
     { id: 'yopougon',    label: 'YOPOUGON' },
     { id: 'bingerville', label: 'BINGERVILLE' },
     { id: 'man',         label: 'MAN' },
+    { id: 'cocody',      label: 'COCODY' },
+    { id: 'marcory',     label: 'MARCORY' },
   ],
 
   devise: 'FCFA',

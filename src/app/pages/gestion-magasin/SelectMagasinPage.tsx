@@ -24,11 +24,14 @@ export function SelectMagasinPage() {
     let mounted = true;
 
     const appliquerMagasins = (liste: Magasin[]) => {
-      // Source unique : le registre `leclaire_magasins`.
-      // Dédoublonnage par ID pour éviter qu'un même magasin apparaisse plusieurs fois.
+      // Une seule source logique : le registre local enrichi par le cloud.
+      // Toujours fusionner avec les magasins par défaut : un snapshot cloud
+      // ancien/incomplet ne doit jamais faire disparaître des magasins.
+      const local = getMagasins();
+      const sources = [local, Array.isArray(liste) ? liste : []];
       const uniques = Array.from(
         new Map(
-          (Array.isArray(liste) ? liste : [])
+          sources.flat()
             .filter(m => m && m.id)
             .map(m => [String(m.id).trim().toLowerCase(), m]),
         ).values(),

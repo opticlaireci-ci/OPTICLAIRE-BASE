@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import { TENANT } from '../../config/tenant';
+import { getAllMagasinIds } from '../../constants/magasins';
 import {
   envoyerSmsReel,
   loadRapportSms,
@@ -11,7 +12,7 @@ import {
   type SmsRapport,
 } from '../../services/smsService';
 
-const MAGASIN_IDS = ['abobo', 'faya', 'koumassi', 'palmeraie', 'yopougon'];
+const MAGASIN_IDS = getAllMagasinIds();
 
 interface Client {
   id: string;

@@ -6,6 +6,7 @@ import { addUpdateAudit, formatDate, AuditInfo } from '../utils/auditUtils';
 import { doc, onSnapshot, setDoc } from '../utils/firestoreCompat';
 import { db } from '../utils/firebaseClient';
 import { TENANT } from '../config/tenant';
+import { getAllMagasinIds } from '../constants/magasins';
 
 // ── types ─────────────────────────────────────────────────────────────────────
 interface RdvEnLigne extends AuditInfo {
@@ -21,7 +22,7 @@ interface RdvEnLigne extends AuditInfo {
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
-const MAGASIN_IDS = ['abobo', 'faya', 'koumassi', 'palmeraie', 'yopougon'];
+const MAGASIN_IDS = getAllMagasinIds();
 const LS_KEY = (id: string) => `leclaire_rdv_enligne_${id}`;
 const genRef = () => `RDV-${Date.now().toString().slice(-5)}`;
 

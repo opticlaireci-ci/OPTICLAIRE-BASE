@@ -5,7 +5,7 @@
 --  ⚠️  NORMALEMENT VOUS N'AVEZ PAS BESOIN DE CE FICHIER.
 --
 --  La méthode recommandée est l'écran de configuration de l'application, qui
---  crée le compte propriétaire et lui attribue les 7 magasins automatiquement
+--  crée le compte propriétaire et lui attribue les 9 magasins automatiquement
 --  (route POST /setup/bootstrap-owner). Ce script n'est là que si cet écran
 --  est inaccessible — par exemple si plus personne n'est administrateur et que
 --  vous êtes verrouillé hors de l'application.
@@ -27,7 +27,7 @@ order by created_at;
 
 
 -- ─────────────────────────────────────────────────────────────────────────────
---  ÉTAPE 2 — Attribuer le rôle super_admin sur les 7 magasins
+--  ÉTAPE 2 — Attribuer le rôle super_admin sur les 9 magasins
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Remplacez l'adresse e-mail ci-dessous par celle du compte à promouvoir.
 -- L'UUID est récupéré automatiquement depuis auth.users : c'est essentiel, car
@@ -49,7 +49,9 @@ select
       jsonb_build_object('magasin_id', 'palmeraie',   'role', 'super_admin'),
       jsonb_build_object('magasin_id', 'yopougon',    'role', 'super_admin'),
       jsonb_build_object('magasin_id', 'bingerville', 'role', 'super_admin'),
-      jsonb_build_object('magasin_id', 'man',         'role', 'super_admin')
+      jsonb_build_object('magasin_id', 'man',         'role', 'super_admin'),
+      jsonb_build_object('magasin_id', 'cocody',      'role', 'super_admin'),
+      jsonb_build_object('magasin_id', 'marcory',     'role', 'super_admin')
     ),
     -- Vides volontairement : le rôle super_admin donne accès à tout, les
     -- listes de permissions et de menus ne servent qu'aux rôles restreints.
@@ -64,7 +66,7 @@ on conflict (key) do update set value = excluded.value;
 -- ─────────────────────────────────────────────────────────────────────────────
 --  ÉTAPE 3 — Vérifier
 -- ─────────────────────────────────────────────────────────────────────────────
--- Doit renvoyer une ligne, avec le rôle super_admin sur 7 magasins.
+-- Doit renvoyer une ligne, avec le rôle super_admin sur 9 magasins.
 -- Si le résultat est VIDE : l'e-mail de l'étape 2 ne correspond à aucun
 -- compte Auth. Reprenez l'UUID exact via la requête de l'étape 1.
 select

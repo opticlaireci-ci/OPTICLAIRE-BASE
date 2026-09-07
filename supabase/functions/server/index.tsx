@@ -582,7 +582,7 @@ app.get(`/${ROUTE_PREFIX}/me`, async (c) => {
 //                    minuscules, ex. « cocody,marcory » — ils doivent être
 //                    identiques aux `id` de src/app/config/tenant.ts.
 const OWNER_EMAIL = (Deno.env.get('OWNER_EMAIL') ?? 'admin@leclaire.ci').toLowerCase();
-const OWNER_MAGASINS = (Deno.env.get('OWNER_MAGASINS') ?? 'abobo,faya,koumassi,palmeraie,yopougon,bingerville,man')
+const OWNER_MAGASINS = (Deno.env.get('OWNER_MAGASINS') ?? 'abobo,faya,koumassi,palmeraie,yopougon,bingerville,man,cocody,marcory')
   .split(',')
   .map((m) => m.trim().toLowerCase())
   .filter(Boolean);
@@ -636,7 +636,7 @@ app.get(`/${ROUTE_PREFIX}/setup/status`, async (c) => {
 });
 
 // POST /setup/bootstrap-owner — crée (ou rattache) le compte propriétaire
-// super_admin sur les 7 magasins. body: { password }
+// super_admin sur les magasins configurés. body: { password }
 app.post(`/${ROUTE_PREFIX}/setup/bootstrap-owner`, async (c) => {
   try {
     const body = await c.req.json().catch(() => ({}));
@@ -673,7 +673,7 @@ app.post(`/${ROUTE_PREFIX}/setup/bootstrap-owner`, async (c) => {
       ownerId = created.user.id;
     }
 
-    // 2) Assigner les 7 magasins en super_admin + profil (permissions/menu vides)
+    // 2) Assigner tous les magasins configurés en super_admin + profil (permissions/menu vides)
     await setUserMeta(ownerId!, {
       magasins: OWNER_MAGASINS.map((m) => ({ magasin_id: m, role: 'super_admin' })),
       permissions: [],

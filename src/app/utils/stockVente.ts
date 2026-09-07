@@ -138,7 +138,7 @@ export interface StockMagasinVente {
  * Stock réel de chaque magasin de l'enseigne.
  *
  * `loadStocksParMagasin` ne télécharge `mouvements_stock` QU'UNE fois puis
- * partitionne en mémoire : afficher les 7 magasins ne coûte donc pas plus cher
+ * partitionne en mémoire : afficher les 9 magasins ne coûte donc pas plus cher
  * qu'en afficher un seul. L'affichage démarre sur le cache localStorage (aucune
  * attente réseau) et se rafraîchit ensuite.
  */

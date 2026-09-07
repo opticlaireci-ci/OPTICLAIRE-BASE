@@ -402,7 +402,7 @@ export function VisualisationPage() {
           const totalAss = filteredAss.reduce((s, v) => s + montantVente(v), 0);
           return build(titre, nomFichier, headersReg, assRows,
             `Total factures avec assurance : ${fmtMontant(totalAss)}`,
-            { foot: ['T O T A L', '', fmtMontant(totalAss), '', ''] });
+            { foot: ['T O T A L', fmtMontant(totalAss), fmtMontant(totalAss), '', ''] });
         }
 
         const filteredR = reglements
@@ -461,13 +461,19 @@ export function VisualisationPage() {
         const facturesUniques = new Map<string, number>();
         filteredR.forEach(r => { const v = vById.get(r.vente_id); if (v) facturesUniques.set(v.id, montantVente(v)); });
         filteredV.forEach(v => facturesUniques.set(v.id, montantVente(v)));
-        filteredAssVentes.forEach(v => facturesUniques.set(v.id, montantVente(v)));
+        // Les bons d'assurance ne sont ajoutés au total net que lorsque
+        // l'état affiche réellement tous les modes de paiement. Pour un filtre
+        // précis (Espèces, Mobile Money, etc.), le Total Net doit correspondre
+        // uniquement aux factures représentées par les lignes affichées.
+        if (modePaiement === OPTION_TOUS_MODES) {
+          filteredAssVentes.forEach(v => facturesUniques.set(v.id, montantVente(v)));
+        }
         const totalNetDistinct = Array.from(facturesUniques.values()).reduce((s, n) => s + n, 0);
         const totalEncaisse = totalR + totalV + totalAssurance;
         const allRows = [...regRows, ...acompteRows, ...assuranceRows];
         return build(titre, nomFichier, headersReg, allRows,
           `Total encaissé : ${fmtMontant(totalEncaisse)}`,
-          { foot: ['T O T A L', '', fmtMontant(totalEncaisse), '', ''] });
+          { foot: ['T O T A L', fmtMontant(totalNetDistinct), fmtMontant(totalEncaisse), '', ''] });
       }
       // ── Assurances ────────────────────────────────────────────────────────────
       case 'recap-releves': {

@@ -15,7 +15,7 @@ import { auth } from './authCompat';
 import { db } from './firestoreCompat';
 import { kvSetDoc, kvDeleteDoc, kvGetDoc } from './supabaseDirect';
 
-// La synchro cloud (Supabase) est active : les 7 magasins partagent les données.
+// La synchro cloud (Supabase) est active : les 9 magasins partagent les données.
 export const FIREBASE_DATA_ENABLED = true;
 
 export { db, auth };

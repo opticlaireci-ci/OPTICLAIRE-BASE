@@ -4,6 +4,7 @@ import { Search, X, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight } from 
 import { doc, onSnapshot } from '../utils/firestoreCompat';
 import { db } from './../utils/firebaseClient';
 import { TENANT } from '../config/tenant';
+import { getAllMagasinIds } from '../constants/magasins';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 const fmt = (d: string) => d ? new Date(d).toLocaleDateString('fr-FR') : '';
@@ -210,7 +211,7 @@ function CalendarView({ ventes }: { ventes: any[] }) {
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 export function RdvRetraitGlobalPage() {
-  const MAGASIN_IDS = ['abobo', 'faya', 'koumassi', 'palmeraie', 'yopougon'];
+  const MAGASIN_IDS = getAllMagasinIds();
 
   // Ventes live par magasin (source de vérité Firestore, partagée entre navigateurs).
   const [byMagasin, setByMagasin] = useState<Record<string, any[]>>({});
