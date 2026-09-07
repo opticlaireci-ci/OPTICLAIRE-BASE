@@ -521,7 +521,7 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
         .monthly-mobile-reference { display: none !important; }
         .monthly-activity-desktop { display: block !important; }
 
-        @media (max-width: 768px) {
+        @media (max-width: 899px) {
           .monthly-mobile-reference { display: block !important; }
           .monthly-activity-desktop { display: none !important; }
 

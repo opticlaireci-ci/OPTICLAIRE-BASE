@@ -43,9 +43,9 @@ img, svg { max-width: 100%; height: auto; }
 .overflow-x-auto::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 2px; }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   MOBILE  ≤ 767 px
+   MOBILE  ≤ 899 px
    ═══════════════════════════════════════════════════════════════════════════ */
-@media (max-width: 767px) {
+@media (max-width: 899px) {
 
   /* ── 1. Tables sans wrapper → défilement horizontal ──────────────────── */
   /* Seulement les tables qui ne sont PAS déjà dans un overflow-x-auto       */
@@ -115,10 +115,10 @@ img, svg { max-width: 100%; height: auto; }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   TABLETTE  768 px – 1023 px
+   TABLETTE  900 px – 1023 px
    Règles minimales — les grilles gardent leurs colonnes sur tablette/desktop.
    ═══════════════════════════════════════════════════════════════════════════ */
-@media (min-width: 768px) and (max-width: 1023px) {
+@media (min-width: 900px) and (max-width: 1023px) {
   /* Tables sans wrapper → scroll horizontal */
   table:not(.no-mobile-scroll) {
     display: block;
@@ -157,7 +157,7 @@ main, main > *, .page-transition, .page-transition > *,
 
 /* Desktop : les tableaux s'adaptent à la largeur disponible et le texte
    revient à la ligne au lieu de provoquer un défilement horizontal. */
-@media (min-width: 768px) {
+@media (min-width: 900px) {
   .overflow-x-auto {
     overflow-x: hidden !important;
     max-width: 100%;
@@ -197,7 +197,7 @@ main, main > *, .page-transition, .page-transition > *,
   .page-transition .px-6 { padding-left: 1rem !important; padding-right: 1rem !important; }
 }
 
-@media (min-width: 768px) and (max-width: 1100px) {
+@media (min-width: 900px) and (max-width: 1100px) {
   /* Écrans 768–1100 : aucune largeur minimale ne doit imposer un scroll. */
   .page-transition * { min-width: 0 !important; }
   .page-transition input,
@@ -217,7 +217,7 @@ main, main > *, .page-transition, .page-transition > *,
 
 /* Empêche les éléments avec des largeurs/min-width inline de repousser toute
    la page sur les écrans desktop plus étroits. */
-@media (min-width: 768px) and (max-width: 1599px) {
+@media (min-width: 900px) and (max-width: 1599px) {
   .page-transition [style*="min-width"] { min-width: 0 !important; }
   .page-transition [style*="width: 1100px"],
   .page-transition [style*="width: 1000px"],
@@ -234,4 +234,66 @@ main, main > *, .page-transition, .page-transition > *,
 /* Les écrans très larges utilisent davantage l'espace disponible. */
 @media (min-width: 1600px) {
   .page-transition { width: 100%; }
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MOBILE UNIFIÉ — même comportement dans toutes les pages (≤ 899 px)
+   Le layout MUI utilise également le breakpoint md (900 px) : ainsi aucune
+   page ne bascule en mobile à une largeur différente des autres.
+   ═══════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 899px) {
+  .page-transition,
+  .page-transition > * {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  .page-transition {
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow-x: hidden !important;
+  }
+
+  /* Même rythme vertical pour les blocs de page. */
+  .page-transition > * + * {
+    margin-top: 10px;
+  }
+
+  /* Cartes et panneaux MUI occupent toujours toute la largeur disponible. */
+  .page-transition .MuiPaper-root,
+  .page-transition .MuiCard-root,
+  .page-transition .MuiAccordion-root {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  /* Barres d'actions : même comportement sur toutes les pages. */
+  .page-transition .MuiToolbar-root,
+  .page-transition .MuiStack-root {
+    max-width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  .page-transition button,
+  .page-transition .MuiButton-root {
+    max-width: 100%;
+  }
+
+  /* Les formulaires utilisent toute la largeur sur mobile. */
+  .page-transition .MuiFormControl-root,
+  .page-transition .MuiTextField-root,
+  .page-transition .MuiAutocomplete-root {
+    max-width: 100% !important;
+  }
+
+  /* Un seul système de débordement horizontal pour les tableaux. */
+  .page-transition .overflow-x-auto,
+  .page-transition [class*="overflow-x-auto"] {
+    max-width: 100% !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
 }
