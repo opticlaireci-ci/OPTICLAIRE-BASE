@@ -402,7 +402,7 @@ export function VisualisationPage() {
           const totalAss = filteredAss.reduce((s, v) => s + montantVente(v), 0);
           return build(titre, nomFichier, headersReg, assRows,
             `Total factures avec assurance : ${fmtMontant(totalAss)}`,
-            { foot: ['T O T A L', fmtMontant(totalAss), fmtMontant(totalAss), '', ''] });
+            { foot: ['T O T A L', '', fmtMontant(totalAss), '', ''] });
         }
 
         const filteredR = reglements
@@ -414,7 +414,7 @@ export function VisualisationPage() {
           const totalNet = v ? montantVente(v) : 0;
           return mkRow(r.id, [
             `${magU(v?.magasin_id)}\n${v?.client || ''}`, fmtMontant(totalNet), fmtMontant(num(r.montant)),
-            v ? numDoc(v) : '', r.recu || '', modePaiementAffiche(r.mode_paiement, v),
+            v ? numDoc(v) : '', modePaiementAffiche(r.mode_paiement, v),
           ], r.date, num(r.montant));
         });
 
@@ -467,7 +467,7 @@ export function VisualisationPage() {
         const allRows = [...regRows, ...acompteRows, ...assuranceRows];
         return build(titre, nomFichier, headersReg, allRows,
           `Total encaissé : ${fmtMontant(totalEncaisse)}`,
-          { foot: ['T O T A L', fmtMontant(totalNetDistinct), fmtMontant(totalEncaisse), '', ''] });
+          { foot: ['T O T A L', '', fmtMontant(totalEncaisse), '', ''] });
       }
       // ── Assurances ────────────────────────────────────────────────────────────
       case 'recap-releves': {
@@ -595,7 +595,13 @@ export function VisualisationPage() {
 
   const dateLabel = (d: Date) => d.toLocaleDateString('fr-FR', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' });
   const groupTotalColumn = (headers: Column[]) => {
-    const preferred = headers.findIndex(h => /règlement|montant|total|ca$|part assurance|prix/i.test(h.label));
+    // Pour l'état RÈGLEMENTS, le montant journalier est un total encaissé :
+    // il doit impérativement être affiché sous la colonne « Règlement »,
+    // et jamais sous « Total Net ». On privilégie donc l'en-tête exact.
+    const reglementCol = headers.findIndex(h => /^règlement$/i.test(h.label.trim()));
+    if (reglementCol >= 0) return reglementCol;
+
+    const preferred = headers.findIndex(h => /montant|total|ca$|part assurance|prix/i.test(h.label));
     if (preferred >= 0) return preferred;
     let last = -1;
     headers.forEach((h, i) => { if (h.align === 'right') last = i; });
