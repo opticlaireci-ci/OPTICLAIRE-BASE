@@ -685,9 +685,33 @@ export function VisualisationPage() {
       doc.setFontSize(11);
       doc.text(view.footer, marginX, y + 8);
     }
-    // Afficher d'abord toutes les pages du PDF dans l'aperçu intégré.
-    // L'utilisateur clique ensuite sur « Imprimer » quand il a vérifié le document.
-    await afficherPdfBlob(doc.output('blob'), { titre: view.title });
+    // Sur mobile, le bouton PDF doit télécharger directement le PDF :
+    // aucun aperçu intégré et aucune boîte d'impression ne sont ouverts.
+    // Sur ordinateur, on conserve l'aperçu/impression actuel.
+    const pdfBlob = doc.output('blob');
+    const isMobile = typeof window !== 'undefined' &&
+      (window.matchMedia?.('(max-width: 767px)').matches ||
+       /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent));
+
+    if (isMobile) {
+      const safeName = (view.fileName || view.title || 'rapport')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-zA-Z0-9_-]+/g, '_')
+        .replace(/^_+|_+$/g, '') || 'rapport';
+      const url = URL.createObjectURL(pdfBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${safeName}.pdf`;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+      return;
+    }
+
+    await afficherPdfBlob(pdfBlob, { titre: view.title, nomFichier: `${view.fileName || 'rapport'}.pdf` });
   };
 
   const exporterExcel = async () => {

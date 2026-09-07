@@ -46,17 +46,23 @@ function reconcilePulledValue(key: string, cloudValueStr: string): string {
     const localStr = localStorage.getItem(MAGASINS_KEY);
     const local = localStr ? JSON.parse(localStr) : [];
     if (!Array.isArray(cloud) || !Array.isArray(local)) return cloudValueStr;
-    // getMagasins() ajoute déjà les 9 magasins de base et conserve les ajouts
-    // utilisateur. On part du registre local, puis on ajoute les magasins cloud
-    // absents : aucun magasin ajouté ne peut être écrasé par un ancien snapshot.
+    const canonical = (m: any) => {
+      const oldId = String(m?.id || '').trim().toLowerCase();
+      if (oldId === 'cocody') return { ...m, id: 'bouake', label: 'BOUAKÉ' };
+      if (oldId === 'marcory') return { ...m, id: 'yopougon-gandi', label: 'YOPOUGON GANDI' };
+      return { ...m, id: oldId };
+    };
     const parId = new Map<string, any>();
-    for (const m of local) if (m && m.id) parId.set(String(m.id).trim().toLowerCase(), m);
-    for (const m of cloud) {
-      if (!m || !m.id) continue;
-      let id = String(m.id).trim().toLowerCase();
-      if (id === 'cocody') id = 'bouake';
-      if (id === 'marcory') id = 'yopougon-gandi';
-      if (!parId.has(id)) parId.set(id, { ...m, id });
+    // Base = cloud, puis on complète avec les magasins locaux absents du cloud.
+    // Les deux anciennes entrées sont normalisées avant fusion : elles ne peuvent
+    // donc plus réapparaître depuis un ancien snapshot Supabase.
+    for (const raw of cloud) {
+      if (!raw?.id) continue;
+      const m = canonical(raw); if (m.id) parId.set(m.id, m);
+    }
+    for (const raw of local) {
+      if (!raw?.id) continue;
+      const m = canonical(raw); if (m.id && !parId.has(m.id)) parId.set(m.id, m);
     }
     return JSON.stringify(Array.from(parId.values()));
   } catch {

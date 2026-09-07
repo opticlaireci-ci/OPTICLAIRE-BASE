@@ -33,12 +33,7 @@ export function SelectMagasinPage() {
         new Map(
           sources.flat()
             .filter(m => m && m.id)
-            .map(m => {
-              let id = String(m.id).trim().toLowerCase();
-              if (id === 'cocody') id = 'bouake';
-              if (id === 'marcory') id = 'yopougon-gandi';
-              return [id, { ...m, id }];
-            }),
+            .map(m => [String(m.id).trim().toLowerCase(), m]),
         ).values(),
       );
       if (mounted) setMagasins(uniques);
@@ -56,12 +51,7 @@ export function SelectMagasinPage() {
         const local = getMagasins();
         const parId = new Map<string, Magasin>();
         for (const m of local) if (m?.id) parId.set(String(m.id).trim().toLowerCase(), m);
-        for (const m of cloud) if (m?.id) {
-          let id = String(m.id).trim().toLowerCase();
-          if (id === 'cocody') id = 'bouake';
-          if (id === 'marcory') id = 'yopougon-gandi';
-          if (!parId.has(id)) parId.set(id, { ...m, id });
-        }
+        for (const m of cloud) if (m?.id) parId.set(String(m.id).trim().toLowerCase(), m);
         appliquerMagasins(Array.from(parId.values()));
       } catch (error) {
         logger.error('Erreur chargement magasins cloud:', error);

@@ -83,10 +83,19 @@ export function GestionMagasinsPage() {
     setShowForm(true);
   }
 
-  function handleSupprimer(id: string) {
-    if (confirm(`Voulez-vous vraiment supprimer ce magasin ?`)) {
-      deleteMagasin(id);
-      chargerMagasins();
+  async function handleSupprimer(id: string) {
+    if (!confirm(`Voulez-vous vraiment supprimer ce magasin ?`)) return;
+    deleteMagasin(id);
+    chargerMagasins();
+    // La suppression/modification de la liste doit suivre la même règle que
+    // l'ajout : la liste complète est sauvegardée dans le cloud pour rester
+    // durable sur tous les appareils et après reconnexion.
+    try {
+      const token = await getValidAccessToken();
+      if (token) await saveToSupabase('leclaire_magasins', getMagasins(), true);
+    } catch (err) {
+      logger.error('❌ Échec synchronisation après suppression magasin:', err);
+      alert('⚠️ Magasin supprimé localement, mais la synchronisation cloud a échoué. La liste sera réessayée automatiquement.');
     }
   }
 
