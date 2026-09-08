@@ -600,6 +600,48 @@ export function VisualisationPage() {
   };
 
   const dateLabel = (d: Date) => d.toLocaleDateString('fr-FR', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' });
+  // Quand « Tous les Magasins » est sélectionné, les exports doivent être
+  // structurés magasin par magasin : toutes les lignes de PALMERAIE ensemble,
+  // puis BINGERVILLE, puis le magasin suivant. Pour les règlements, le nom du
+  // magasin est intégré dans la première cellule (MAGASIN\nCLIENT), alors que
+  // les autres rapports possèdent une colonne « Magasin » dédiée.
+  const prepareMagasinGroups = (rows: Row[], headers: Column[]) => {
+    if (magasin !== 'Tous les Magasins') return null;
+
+    const magasinCol = headers.findIndex(h => /^magasin$/i.test(h.label.trim()));
+    const knownMagasins = new Set(getAllMagasinIds().map(id => id.toUpperCase()));
+
+    const extractMagasin = (r: Row): string => {
+      if (magasinCol >= 0) return magU(r.cells[magasinCol]);
+      const first = String(r.cells[0] || '');
+      const firstLine = first.split(/\r?\n/)[0].trim().toUpperCase();
+      return knownMagasins.has(firstLine) ? firstLine : '';
+    };
+
+    const groups = new Map<string, Row[]>();
+    const sansMagasin: Row[] = [];
+    rows.forEach(r => {
+      const m = extractMagasin(r);
+      if (!m) { sansMagasin.push(r); return; }
+      if (!groups.has(m)) groups.set(m, []);
+      groups.get(m)!.push(r);
+    });
+
+    if (groups.size === 0) return null;
+
+    // Ordre stable : même ordre que la liste officielle des magasins, puis
+    // éventuels magasins ajoutés qui n'existeraient pas encore dans la liste.
+    const order = getAllMagasinIds().map(id => id.toUpperCase());
+    const rank = new Map(order.map((id, i) => [id, i]));
+    const sorted = [...groups.entries()].sort((a, b) => {
+      const ra = rank.has(a[0]) ? rank.get(a[0])! : Number.MAX_SAFE_INTEGER;
+      const rb = rank.has(b[0]) ? rank.get(b[0])! : Number.MAX_SAFE_INTEGER;
+      return ra - rb || a[0].localeCompare(b[0], 'fr');
+    });
+
+    return sorted.concat(sansMagasin.length ? [['Sans magasin', sansMagasin] as [string, Row[]]] : []);
+  };
+
   const groupTotalColumn = (headers: Column[]) => {
     // Pour l'état RÈGLEMENTS, le montant journalier est un total encaissé :
     // il doit impérativement être affiché sous la colonne « Règlement »,
@@ -644,9 +686,19 @@ export function VisualisationPage() {
     }
     doc.setFont('helvetica', 'normal');
 
-    const groups = prepareDateGroups(view.rows, view.headers);
+    const magasinGroups = prepareMagasinGroups(view.rows, view.headers);
     const pdfBody: any[][] = [];
-    if (groups) {
+
+    // « Tous les Magasins » : un bloc complet par magasin. À l'intérieur de
+    // chaque bloc, on conserve le regroupement par date déjà utilisé par les
+    // rapports historiques. Ainsi les informations d'un magasin ne sont jamais
+    // mélangées avec celles du magasin suivant.
+    const appendDateGroups = (rows: Row[]) => {
+      const groups = prepareDateGroups(rows, view.headers);
+      if (!groups) {
+        pdfBody.push(...rows.map(r => r.cells));
+        return;
+      }
       const totalCol = groupTotalColumn(view.headers);
       for (const g of groups) {
         let cells: any[];
@@ -663,8 +715,19 @@ export function VisualisationPage() {
         pdfBody.push(cells);
         g.rows.forEach(r => pdfBody.push(r.cells));
       }
+    };
+
+    if (magasinGroups) {
+      for (const [nomMagasin, rowsMagasin] of magasinGroups) {
+        pdfBody.push([{
+          content: `MAGASIN : ${nomMagasin}`,
+          colSpan: view.headers.length,
+          styles: { fillColor: [55, 65, 81], textColor: [255, 255, 255], fontStyle: 'bold', halign: 'left', fontSize: 9 },
+        }]);
+        appendDateGroups(rowsMagasin);
+      }
     } else {
-      pdfBody.push(...view.rows.map(r => r.cells));
+      appendDateGroups(view.rows);
     }
 
     autoTable(doc, {
@@ -723,9 +786,15 @@ export function VisualisationPage() {
     if (view.subtitle) aoa.push([view.subtitle]);
     aoa.push([]);
     aoa.push(headers);
-    const groups = prepareDateGroups(view.rows, view.headers);
-    const excelGroupRows: { row: any[]; group: boolean }[] = [];
-    if (groups) {
+    const magasinGroups = prepareMagasinGroups(view.rows, view.headers);
+    const excelGroupRows: { row: any[]; group: boolean; magasin?: boolean }[] = [];
+
+    const appendExcelDateGroups = (rows: Row[]) => {
+      const groups = prepareDateGroups(rows, view.headers);
+      if (!groups) {
+        rows.forEach(r => excelGroupRows.push({ row: r.cells, group: false }));
+        return;
+      }
       const totalCol = groupTotalColumn(view.headers);
       for (const g of groups) {
         const row = Array(view.headers.length).fill('');
@@ -734,8 +803,17 @@ export function VisualisationPage() {
         excelGroupRows.push({ row, group: true });
         g.rows.forEach(r => excelGroupRows.push({ row: r.cells, group: false }));
       }
+    };
+
+    if (magasinGroups) {
+      for (const [nomMagasin, rowsMagasin] of magasinGroups) {
+        const row = Array(view.headers.length).fill('');
+        row[0] = `MAGASIN : ${nomMagasin}`;
+        excelGroupRows.push({ row, group: false, magasin: true });
+        appendExcelDateGroups(rowsMagasin);
+      }
     } else {
-      view.rows.forEach(r => excelGroupRows.push({ row: r.cells, group: false }));
+      appendExcelDateGroups(view.rows);
     }
     aoa.push(...excelGroupRows.map(x => x.row));
     if (view.foot) aoa.push(view.foot);
@@ -744,11 +822,13 @@ export function VisualisationPage() {
     // Mise en forme Excel des séparateurs de date (ligne verte comme le PDF).
     const headerOffset = excelHeaderRows().length + 3;
     excelGroupRows.forEach((entry, idx) => {
-      if (!entry.group) return;
+      if (!entry.group && !entry.magasin) return;
       const r = headerOffset + idx;
       for (let c = 0; c < view.headers.length; c++) {
         const cell = ws[XLSX.utils.encode_cell({ r, c })];
-        if (cell) cell.s = { fill: { fgColor: { rgb: 'C6DC5C' } }, font: { bold: true, color: { rgb: '000000' } } };
+        if (cell) cell.s = entry.magasin
+          ? { fill: { fgColor: { rgb: '374151' } }, font: { bold: true, color: { rgb: 'FFFFFF' } } }
+          : { fill: { fgColor: { rgb: 'C6DC5C' } }, font: { bold: true, color: { rgb: '000000' } } };
       }
     });
     const wb = XLSX.utils.book_new();
