@@ -1335,7 +1335,7 @@ function ListeDevis({ magasinId, onNouveau, onModifier }: { magasinId: string; o
   const { user } = useAuth();
   // Les conseillères et opticiens peuvent modifier les devis/proforma.
   // La suppression reste soumise au droit de suppression habituel.
-  const rolePeutModifierDevis = ['conseillere', 'opticien', 'assistante_administratif'].includes(user?.role || '');
+  const rolePeutModifierDevis = ['conseillere', 'opticien'].includes(user?.role || '');
   const peutModifier = rolePeutModifierDevis || canEdit(user);
   const peutSupprimer = canDelete(user);
   // Affichage INSTANTANÉ depuis le cache, puis rafraîchissement Firestore.

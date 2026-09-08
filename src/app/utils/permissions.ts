@@ -4,7 +4,7 @@
  * Gestion centralisée des permissions basée sur les rôles utilisateurs
  */
 
-export type UserRole = 'super_admin' | 'admin' | 'manager' | 'employee' | 'caissier' | 'conseillere' | 'responsable_call_center' | 'assistante_administratif' | 'guest';
+export type UserRole = 'super_admin' | 'admin' | 'manager' | 'employee' | 'caissier' | 'conseillere' | 'responsable_call_center' | 'guest';
 
 export type Permission =
   // Gestion Commerciale
@@ -130,15 +130,6 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'vente.read',
     'report.view', 'report.export',
     'magasin.read',
-  ],
-
-  assistante_administratif: [
-    // Assistante administrative : accès aux tableaux de bord, aux magasins et
-    // aux rapports, avec modification des ventes et devis existants.
-    'vente.read', 'vente.update',
-    'devis.read', 'devis.update',
-    'magasin.read',
-    'report.view', 'report.export',
   ],
 
   employee: [

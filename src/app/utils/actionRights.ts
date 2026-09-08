@@ -70,7 +70,6 @@ interface UserLike {
 }
 
 const ADMIN_ROLES = ['super_admin', 'admin', 'administrateur'];
-const EDIT_ROLES = [...ADMIN_ROLES, 'assistante_administratif'];
 
 /** Un droit d'action (add global/granulaire, edit ou delete) a-t-il été configuré ? */
 function aDesDroitsAction(access: string[]): boolean {
@@ -103,7 +102,7 @@ export function canAdd(user: UserLike | null | undefined, module?: string): bool
 /** L'utilisateur peut-il MODIFIER des données ? */
 export function canEdit(user: UserLike | null | undefined): boolean {
   if (!user) return false;
-  if (EDIT_ROLES.includes(user.role || '')) return true;
+  if (ADMIN_ROLES.includes(user.role || '')) return true;
   const access = user.menuAccess || [];
   // Rétro-compatibilité : si aucun droit d'action n'a jamais été configuré, historique.
   if (!aDesDroitsAction(access)) return true;

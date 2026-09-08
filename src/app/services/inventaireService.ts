@@ -46,62 +46,118 @@ export function readStockCache(magasinId: string): StockMagasin[] {
  * Le résultat est mis en cache localStorage + un événement 'leclaire-stock-updated'
  * est émis pour que les pages abonnées se rafraîchissent AUTOMATIQUEMENT.
  */
+/**
+ * Complément de fiabilité : certaines anciennes distributions validées peuvent
+ * exister dans `bons` sans leur mouvement correspondant (ancienne version /
+ * coupure réseau). On les considère comme entrées uniquement si aucun mouvement
+ * logique équivalent n'existe déjà. Cela rétablit le stock réel sans doubler les
+ * distributions déjà enregistrées.
+ */
+async function chargerMouvementsAvecBonsAcceptes(targets: string[]) {
+  const wanted = new Set(targets.map(v => String(v || '').trim().toUpperCase()).filter(Boolean));
+  const snapM = await getDocs(collection(db, 'mouvements_stock'));
+  const movements = snapM.docs.map((d: any) => ({ id: d.id, data: d.data() || {} }));
+  const norm = (v: any) => String(v ?? '').trim().toUpperCase();
+  const articleKey = (r: any) => norm(r.article_id || r.designation);
+  const logicalKey = (r: any, docId = '') =>
+    `${norm(r.type)}|${norm(r.bon_id || r.reference || docId)}|${articleKey(r)}`;
+  const movementKeys = new Set(movements.map(({ id, data }) => logicalKey(data, id)));
+
+  try {
+    const snapB = await getDocs(collection(db, 'bons'));
+    for (const d of snapB.docs as any[]) {
+      const b = d.data() || {};
+      const type = norm(b.type);
+      const statut = norm(b.statut);
+      if (!['DISTRIBUTION', 'TRANSFERT'].includes(type) || !['VALIDE', 'VALIDÉ'].includes(statut)) continue;
+      const source = norm(b.magasin_source);
+      const destination = norm(b.magasin_destination);
+      if (!wanted.has(source) && !wanted.has(destination)) continue;
+      for (const item of Array.isArray(b.items) ? b.items : []) {
+        const article = item.id || item.article_id || item.designation;
+        if (!article) continue;
+        const fake = {
+          type: type.toLowerCase(),
+          bon_id: b.numero || b.id || d.id,
+          article_id: article,
+          designation: item.designation || article,
+        };
+        const key = logicalKey(fake);
+        if (!movementKeys.has(key)) {
+          movements.push({
+            id: `fallback_${d.id}_${sanitizeIdPart(article)}`,
+            data: {
+              ...fake,
+              quantite: Number(item.quantite) || 0,
+              magasin_source: source || undefined,
+              magasin_destination: destination || undefined,
+              produit_type: item.type === 'accessoire' ? 'accessoire' : 'monture',
+              prix_vente: Number(item.prixUnit) || 0,
+              created_at: b.date || b.created_at || '',
+              _fromAcceptedBon: true,
+            },
+          });
+          movementKeys.add(key);
+        }
+      }
+    }
+  } catch (err) {
+    logger.warn('Impossible de vérifier les bons acceptés pour le stock:', err);
+  }
+  return movements;
+}
+
 export async function loadStockMagasin(magasinId: string): Promise<StockMagasin[]> {
   try {
-    // UN SEUL fetch de la collection (la couche KV récupère tout puis filtre
-    // côté client : deux requêtes = deux fois le même téléchargement complet).
-    // On partitionne ensuite entrées/sorties en mémoire.
-    const snapAll = await getDocs(collection(db, 'mouvements_stock'));
-    const snapDstDocs = snapAll.docs.filter((d: any) => d.data()?.magasin_destination === magasinId);
-    const snapSrcDocs = snapAll.docs.filter((d: any) => d.data()?.magasin_source === magasinId);
-
+    const target = String(magasinId || '').trim().toUpperCase();
+    if (!target) return [];
+    const docs = await chargerMouvementsAvecBonsAcceptes([target]);
     const stockMap = new Map<string, StockMagasin>();
-
-    // Anti-doublon : un même mouvement logique (type + bon + article) ne doit être
-    // compté QU'UNE fois, même si plusieurs documents existent (anciens retries /
-    // ré-acceptations avant que l'idempotence par id déterministe soit en place).
-    // → corrige rétroactivement les stocks gonflés (10 distribué affiché 60).
+    // Un mouvement est unique par opération + bon + article. Les anciens
+    // documents sans article_id utilisent la désignation comme repli.
     const seen = new Set<string>();
+    const norm = (v: any) => String(v ?? '').trim().toUpperCase();
+    const articleKey = (r: any) => norm(r.article_id || r.designation);
     const logicalKey = (r: any, docId: string) =>
-      r.bon_id ? `${r.type}|${r.bon_id}|${r.article_id}` : `doc|${docId}`;
+      `${norm(r.type)}|${norm(r.bon_id || r.reference || docId)}|${articleKey(r)}`;
 
-    // Entrées (distribution / transfert destination)
-    snapDstDocs.forEach(d => {
-      const r = d.data();
+    docs.forEach((d: any) => {
+      const r = d.data || {};
+      const destination = norm(r.magasin_destination);
+      const source = norm(r.magasin_source);
+      const isIncoming = destination === target && (r.type === 'distribution' || r.type === 'transfert');
+      const isOutgoing = source === target && (r.type === 'vente' || r.type === 'retour' || r.type === 'transfert');
+      if (!isIncoming && !isOutgoing) return;
+
       const lk = logicalKey(r, d.id);
       if (seen.has(lk)) return;
       seen.add(lk);
-      const key = r.article_id;
+
+      const key = articleKey(r);
+      if (!key) return;
       const existing = stockMap.get(key) || {
-        magasinId, produitId: key, produitType: r.produit_type || 'monture',
-        designation: r.designation || key, quantiteDisponible: 0,
-        prixVente: r.prix_vente || 0, derniereMiseAJour: '',
+        magasinId: target,
+        produitId: r.article_id || r.designation || key,
+        produitType: r.produit_type === 'accessoire' ? 'accessoire' : 'monture',
+        designation: r.designation || r.article_id || key,
+        quantiteDisponible: 0,
+        prixVente: Number(r.prix_vente) || 0,
+        derniereMiseAJour: r.created_at || '',
       };
-      existing.quantiteDisponible += Number(r.quantite) || 0;
-      stockMap.set(key, existing);
-    });
-
-    // Sorties (retour / transfert source / vente)
-    snapSrcDocs.forEach(d => {
-      const r = d.data();
-      const lk = logicalKey(r, d.id);
-      if (seen.has(lk)) return;
-      seen.add(lk);
-      const key = r.article_id;
-      if (!stockMap.has(key)) return;
-      const existing = stockMap.get(key)!;
-      existing.quantiteDisponible -= Number(r.quantite) || 0;
+      const q = Number(r.quantite) || 0;
+      if (isIncoming) existing.quantiteDisponible += q;
+      if (isOutgoing) existing.quantiteDisponible -= q;
+      if (r.created_at && r.created_at > existing.derniereMiseAJour) existing.derniereMiseAJour = r.created_at;
       stockMap.set(key, existing);
     });
 
     const result = Array.from(stockMap.values()).filter(s => s.quantiteDisponible > 0);
-    // Cache pour affichage instantané au prochain montage + notification live.
     try {
-      const prev = localStorage.getItem(stockCacheKey(magasinId));
+      const prev = localStorage.getItem(stockCacheKey(target));
       const next = JSON.stringify(result);
       if (prev !== next) {
-        localStorage.setItem(stockCacheKey(magasinId), next);
-        window.dispatchEvent(new CustomEvent('leclaire-stock-updated', { detail: { magasinId: magasinId.toUpperCase() } }));
+        localStorage.setItem(stockCacheKey(target), next);
+        window.dispatchEvent(new CustomEvent('leclaire-stock-updated', { detail: { magasinId: target } }));
       }
     } catch {}
     return result;
@@ -127,50 +183,47 @@ export async function loadStocksParMagasin(
 ): Promise<Record<string, StockMagasin[]>> {
   const result: Record<string, StockMagasin[]> = {};
   try {
-    const snapAll = await getDocs(collection(db, 'mouvements_stock'));
-    const docs = snapAll.docs.map((d: any) => ({ id: d.id, data: d.data() }));
+    const ids = magasinIds.map(id => String(id || '').trim().toUpperCase()).filter(Boolean);
+    const docs = await chargerMouvementsAvecBonsAcceptes(ids);
+    const norm = (v: any) => String(v ?? '').trim().toUpperCase();
+    const articleKey = (r: any) => norm(r.article_id || r.designation);
+    const logicalKey = (r: any, docId: string) =>
+      `${norm(r.type)}|${norm(r.bon_id || r.reference || docId)}|${articleKey(r)}`;
 
-    for (const magasinId of magasinIds) {
+    for (const target of ids) {
       const stockMap = new Map<string, StockMagasin>();
       const seen = new Set<string>();
-      const logicalKey = (r: any, docId: string) =>
-        r.bon_id ? `${r.type}|${r.bon_id}|${r.article_id}` : `doc|${docId}`;
-
-      // Entrées (distribution / transfert destination)
-      docs.filter(d => d.data?.magasin_destination === magasinId).forEach(({ id, data: r }) => {
+      for (const { id, data: r } of docs) {
+        const destination = norm(r.magasin_destination);
+        const source = norm(r.magasin_source);
+        const isIncoming = destination === target && (r.type === 'distribution' || r.type === 'transfert');
+        const isOutgoing = source === target && (r.type === 'vente' || r.type === 'retour' || r.type === 'transfert');
+        if (!isIncoming && !isOutgoing) continue;
         const lk = logicalKey(r, id);
-        if (seen.has(lk)) return;
+        if (seen.has(lk)) continue;
         seen.add(lk);
-        const key = r.article_id;
+        const key = articleKey(r);
+        if (!key) continue;
         const existing = stockMap.get(key) || {
-          magasinId, produitId: key, produitType: r.produit_type || 'monture',
-          designation: r.designation || key, quantiteDisponible: 0,
-          prixVente: r.prix_vente || 0, derniereMiseAJour: '',
+          magasinId: target, produitId: r.article_id || r.designation || key,
+          produitType: r.produit_type === 'accessoire' ? 'accessoire' : 'monture',
+          designation: r.designation || r.article_id || key, quantiteDisponible: 0,
+          prixVente: Number(r.prix_vente) || 0, derniereMiseAJour: r.created_at || '',
         };
-        existing.quantiteDisponible += Number(r.quantite) || 0;
+        const q = Number(r.quantite) || 0;
+        if (isIncoming) existing.quantiteDisponible += q;
+        if (isOutgoing) existing.quantiteDisponible -= q;
+        if (r.created_at && r.created_at > existing.derniereMiseAJour) existing.derniereMiseAJour = r.created_at;
         stockMap.set(key, existing);
-      });
-
-      // Sorties (retour / transfert source / vente)
-      docs.filter(d => d.data?.magasin_source === magasinId).forEach(({ id, data: r }) => {
-        const lk = logicalKey(r, id);
-        if (seen.has(lk)) return;
-        seen.add(lk);
-        const key = r.article_id;
-        if (!stockMap.has(key)) return;
-        const existing = stockMap.get(key)!;
-        existing.quantiteDisponible -= Number(r.quantite) || 0;
-        stockMap.set(key, existing);
-      });
-
+      }
       const rows = Array.from(stockMap.values()).filter(s => s.quantiteDisponible > 0);
-      result[magasinId] = rows;
+      result[target] = rows;
       try {
-        const prev = localStorage.getItem(stockCacheKey(magasinId));
+        const prev = localStorage.getItem(stockCacheKey(target));
         const next = JSON.stringify(rows);
         if (prev !== next) {
-          localStorage.setItem(stockCacheKey(magasinId), next);
-          window.dispatchEvent(new CustomEvent('leclaire-stock-updated', { detail: { magasinId: magasinId.toUpperCase() } }));
+          localStorage.setItem(stockCacheKey(target), next);
+          window.dispatchEvent(new CustomEvent('leclaire-stock-updated', { detail: { magasinId: target } }));
         }
       } catch {}
     }

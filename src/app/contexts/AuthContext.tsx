@@ -217,7 +217,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return null;
       }
 
-      const roleHierarchy: UserRole[] = ['super_admin', 'admin', 'manager', 'assistante_administratif', 'responsable_call_center', 'employee', 'caissier', 'guest'];
+      const roleHierarchy: UserRole[] = ['super_admin', 'admin', 'manager', 'responsable_call_center', 'employee', 'caissier', 'guest'];
       const highestRole = userMagasins.reduce((best, current) => {
         const ci = roleHierarchy.indexOf(current.role as UserRole);
         const bi = roleHierarchy.indexOf(best as UserRole);

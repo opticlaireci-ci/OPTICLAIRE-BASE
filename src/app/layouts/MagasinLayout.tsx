@@ -355,23 +355,6 @@ export function MagasinLayout() {
       return;
     }
 
-    // Assistante Administratif : dans un magasin, uniquement accueil,
-    // tableau de bord, devis/proforma et vente/facture (lecture/modification).
-    if (user.role === 'assistante_administratif') {
-      const path = location.pathname;
-      const allowed = [
-        `/magasin/${magasinId}`,
-        `/magasin/${magasinId}/accueil`,
-        `/magasin/${magasinId}/dashboard`,
-        `/magasin/${magasinId}/commercial/devis-proforma`,
-        `/magasin/${magasinId}/commercial/vente-facture`,
-      ];
-      if (!allowed.includes(path)) {
-        navigate(`/magasin/${magasinId}/accueil`, { replace: true });
-      }
-      return;
-    }
-
     const access = user.menuAccess || [];
     if (isAdmin || access.length === 0) return;
     const path = location.pathname;
@@ -465,20 +448,9 @@ export function MagasinLayout() {
 
   const isAdminRole = user?.role === 'super_admin' || user?.role === 'admin' || user?.role === 'administrateur';
   const menuAccess = user?.menuAccess || [];
-  const assistanteMenuItems = user?.role === 'assistante_administratif'
+  const visibleMenuItems = (isAdminRole || menuAccess.length === 0)
     ? menuItems
-        .filter(item => item.title === 'Accueil' || item.title === 'Tableau de Bord' || item.title === 'Gestion Commercial')
-        .map(item => item.title === 'Gestion Commercial'
-          ? { ...item, children: item.children?.filter(child =>
-              child.title === 'Devis/Proforma' || child.title === 'Vente/Facture'
-            ) }
-          : item)
-    : menuItems;
-  const visibleMenuItems = user?.role === 'assistante_administratif'
-    ? assistanteMenuItems
-    : (isAdminRole || menuAccess.length === 0)
-      ? menuItems
-      : filterByAccess(menuItems, menuAccess);
+    : filterByAccess(menuItems, menuAccess);
 
   const handleExpand = (title: string) => {
     // Accordéon : une seule rubrique ouverte à la fois. Ouvrir une rubrique
