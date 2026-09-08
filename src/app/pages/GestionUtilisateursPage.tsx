@@ -76,6 +76,7 @@ const ROLES: RoleOption[] = [
   { value: 'conseillere', label: 'Conseillère' },
   { value: 'caissier', label: 'Caissier' },
   { value: 'responsable_call_center', label: 'Responsable Call Center' },
+  { value: 'assistante_administratif', label: 'Assistante Administratif' },
   { value: 'opticien', label: 'Opticien' },
   { value: 'monteur', label: 'Monteur' },
 ];

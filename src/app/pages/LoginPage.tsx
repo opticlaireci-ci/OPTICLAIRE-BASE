@@ -340,7 +340,7 @@ function LoginForm() {
         if (currentUser) {
           // Administrateurs / directeurs / comptables → tableau de bord global
           // Conseillères / caissiers / employés → dashboard de leur magasin
-          const adminRoles = ['super_admin', 'admin', 'administrateur', 'manager', 'directeur', 'comptable'];
+          const adminRoles = ['super_admin', 'admin', 'administrateur', 'manager', 'directeur', 'comptable', 'assistante_administratif'];
           const isAdmin = adminRoles.includes(currentUser.role);
           const destination = currentUser.role === 'responsable_call_center'
             ? '/call-center/accueil'

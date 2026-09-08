@@ -556,6 +556,18 @@ function getFilteredMenuItems(role: string | undefined): MenuItemType[] {
     ];
   }
 
+  // Assistante Administratif : accès volontairement limité à l'accueil, au
+  // tableau de bord, à l'accès aux magasins et aux rapports PDF/Excel.
+  // Les ventes/devis se modifient depuis le magasin sélectionné.
+  if (normalizedRole === 'assistante_administratif') {
+    return menuItems.filter(item =>
+      item.title === 'Accueil' ||
+      item.title === 'Tableau de Bord' ||
+      item.title === 'Accès Magasins' ||
+      item.title === 'Visualisation PDF et Excel'
+    );
+  }
+
   // Conseillère : ne devrait pas arriver ici (redirigé vers magasin)
   return [];
 }
@@ -1331,6 +1343,18 @@ function MainLayoutContent() {
     if (!isAuthenticated) {
       navigate('/login', { replace: true });
       return;
+    }
+
+    // L'Assistante Administratif ne peut accéder qu'aux écrans globaux
+    // explicitement autorisés : accueil, dashboard, accès magasins et PDF/Excel.
+    // Toute URL globale saisie manuellement est redirigée vers l'accueil.
+    if (user?.role === 'assistante_administratif') {
+      const allowed = ['/accueil', '/', '/espace-administrateur', '/visualisation'];
+      const isAllowed = allowed.includes(location.pathname);
+      if (!isAllowed && !location.pathname.startsWith('/magasin/')) {
+        navigate('/accueil', { replace: true });
+        return;
+      }
     }
 
     // Rediriger les conseillers vers leur magasin (une seule fois)
