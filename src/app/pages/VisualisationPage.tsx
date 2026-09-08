@@ -16,6 +16,7 @@ import { pdfHeader, excelHeaderRows } from '../utils/documentHeader';
 import { afficherPdfBlob } from '../utils/inAppViewer';
 import { useModesPaiement, useMontures, getMontureLabel } from '../utils/venteLookups';
 import { TENANT } from '../config/tenant';
+import { useAuth } from '../contexts/AuthContext';
 
 // Option spéciale du filtre « mode de paiement » : sélectionne toutes les
 // factures réglées (partiellement ou totalement) par bon d'assurance.
@@ -44,7 +45,21 @@ interface ReportView {
 }
 
 export function VisualisationPage() {
+  const { user } = useAuth();
   const [activeReport, setActiveReport] = useState<ReportType>('ventes-factures');
+
+  // L'Assistante Administratif peut consulter uniquement les quatre états
+  // autorisés dans Visualisation PDF & EXCEL. Les autres boutons restent
+  // invisibles et une ancienne sélection est automatiquement corrigée.
+  const assistantReports: ReportType[] = ['devis-proforma', 'ventes-factures', 'sav', 'reglements'];
+  const reportAutorise = (r: ReportType) =>
+    user?.role !== 'assistante_administratif' || assistantReports.includes(r);
+
+  useEffect(() => {
+    if (user?.role === 'assistante_administratif' && !assistantReports.includes(activeReport)) {
+      setActiveReport('ventes-factures');
+    }
+  }, [user?.role, activeReport]);
 
   // Filtres généraux
   const [dateDebut, setDateDebut] = useState('');
@@ -939,9 +954,12 @@ export function VisualisationPage() {
     }
   }, [isReglements, modePaiement, modesDisponibles]);
 
-  const btn = (r: ReportType, label: React.ReactNode) => (
-    <button style={reportBtnStyle(activeReport === r)} onClick={() => setActiveReport(r)}>{label}</button>
-  );
+  const btn = (r: ReportType, label: React.ReactNode) => {
+    if (!reportAutorise(r)) return null;
+    return (
+      <button style={reportBtnStyle(activeReport === r)} onClick={() => setActiveReport(r)}>{label}</button>
+    );
+  };
 
   return (
     <div style={{ padding: 'clamp(12px,3vw,24px)', backgroundColor: '#f1f5f9', minHeight: '100vh' }}>
