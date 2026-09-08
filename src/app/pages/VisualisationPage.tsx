@@ -14,7 +14,7 @@ import { loadStocksParMagasin, type StockMagasin } from '../services/inventaireS
 import { getAllMagasinIds } from '../constants/magasins';
 import { pdfHeader, excelHeaderRows } from '../utils/documentHeader';
 import { afficherPdfBlob } from '../utils/inAppViewer';
-import { useModesPaiement } from '../utils/venteLookups';
+import { useModesPaiement, useMontures, getMontureLabel } from '../utils/venteLookups';
 import { TENANT } from '../config/tenant';
 
 // Option spéciale du filtre « mode de paiement » : sélectionne toutes les
@@ -64,6 +64,10 @@ export function VisualisationPage() {
   const [inventaires, setInventaires] = useState<InventaireRow[]>([]);
   const [stocks, setStocks] = useState<StockMagasin[]>([]);
   const [chargement, setChargement] = useState(false);
+  // Catalogue des montures : permet de rattacher les montures vendues à leur
+  // catégorie réelle dans les récapitulatifs (même si l'ancienne vente ne
+  // stocke que la désignation/code-barres).
+  const monturesCatalogue = useMontures();
 
   // À quelle source de données correspond chaque rapport.
   const sourceOf = (r: ReportType): string => {
@@ -208,14 +212,27 @@ export function VisualisationPage() {
       .filter(a => (a?.type || '') === type)
       .map(a => ({ designation: a.designation || '', qte: String(a.quantite || ''), prix: fmtMontant(num(a.prix)), total: fmtMontant(num(a.total)) }));
   };
-  const lignesVerres = (v: VenteSupabase): { designation: string; prix: string }[] => {
+  const lignesVerres = (v: VenteSupabase): { designation: string; qte: number; total: number }[] => {
     const vs = Array.isArray(v.verres) ? (v.verres as any[]) : [];
     return vs
       .filter(x => x && typeof x === 'object' && !('totalNet' in x)) // exclut propositions de devis
       .map(x => ({
-        designation: [x.typeVerre, x.verre, x.traitement, x.matiere].filter(Boolean).join(' · '),
-        prix: fmtMontant(num(x.total || x.totalVerres || x.oeilDroit?.prix)),
+        designation: [x.typeVerre, x.verre, x.traitement, x.matiere].filter(Boolean).join(' · ') || 'Verre non renseigné',
+        qte: Math.max(1, num(x.quantite || x.oeilDroit?.quantite || 1)),
+        total: num(x.total || x.totalVerres || x.oeilDroit?.prix),
       }));
+  };
+
+  const categorieMonture = (designation: string, codeBarre?: string): string => {
+    const q = String(designation || '').trim().toLowerCase();
+    const cb = String(codeBarre || '').trim().toLowerCase();
+    const m = monturesCatalogue.find(x =>
+      (cb && String(x.codeBarre || '').toLowerCase() === cb) ||
+      (q && (getMontureLabel(x) || '').toLowerCase() === q) ||
+      (q && String(x.reference || '').toLowerCase() === q) ||
+      (q && q.includes(String(x.reference || '').toLowerCase()) && String(x.reference || '').length >= 2)
+    );
+    return (m?.categorie || m?.famille || 'Non classée').trim() || 'Non classée';
   };
 
   // ── Construction de la vue selon le rapport ────────────────────────────────
@@ -292,23 +309,50 @@ export function VisualisationPage() {
       case 'recap-accessoires':
       case 'recap-traitements': {
         const filtered = ventes.filter(v => v.type !== 'devis').filter(v => dansIntervalle(v.date)).filter(v => magasinOk(v.magasin_id));
-        const rows: Row[] = [];
+
+        // Les récapitulatifs sont des états de synthèse : une même référence
+        // vendue plusieurs fois est regroupée sur une seule ligne avec quantité
+        // cumulée et chiffre d'affaires cumulé. Pour les montures, le niveau de
+        // regroupement demandé est la catégorie catalogue.
+        const agg = new Map<string, { magasin: string; categorie: string; qte: number; ca: number }>();
+        const add = (mag: string, categorie: string, qte: number, ca: number) => {
+          const m = magU(mag) || 'SANS MAGASIN';
+          const c = (categorie || 'Non classée').trim() || 'Non classée';
+          const key = `${m}\u0000${c.toLowerCase()}`;
+          const cur = agg.get(key) || { magasin: m, categorie: c, qte: 0, ca: 0 };
+          cur.qte += qte; cur.ca += ca;
+          agg.set(key, cur);
+        };
+
         if (activeReport === 'recap-verres') {
-          filtered.forEach(v => lignesVerres(v).forEach((l, i) => rows.push(mkRow(`${v.id}-${i}`, [
-            fmtDate(v.date), numDoc(v), v.client || '', magU(v.magasin_id), l.designation, l.prix,
-          ]))));
+          filtered.forEach(v => lignesVerres(v).forEach(l => add(v.magasin_id || '', l.designation, l.qte, l.total)));
+          const rows = [...agg.values()].sort((a,b) => a.magasin.localeCompare(b.magasin,'fr') || a.categorie.localeCompare(b.categorie,'fr'))
+            .map((x,i) => mkRow(String(i), [x.categorie, x.magasin, String(x.qte), fmtMontant(x.ca)], undefined, x.ca));
+          const total = [...agg.values()].reduce((s,x)=>s+x.ca,0);
+          const qte = [...agg.values()].reduce((s,x)=>s+x.qte,0);
           return build('RÉCAPITULATIF ACTIVITÉS VERRES', 'Recap_Verres',
-            [{ label: 'Date' }, { label: 'N° Doc' }, { label: 'Client' }, { label: 'Magasin' }, { label: 'Verre' }, { label: 'Prix', align: 'right' }],
-            rows);
+            [{ label: 'Verre' }, { label: 'Magasin' }, { label: 'Qté vendue' }, { label: 'CA', align: 'right' }],
+            rows, `Total : ${qte} verre(s) vendu(s) — ${fmtMontant(total)}`);
         }
+
         const type = activeReport === 'recap-montures' ? 'monture' : activeReport === 'recap-accessoires' ? 'accessoire' : 'traitement';
         const label = type === 'monture' ? 'MONTURES' : type === 'accessoire' ? 'ACCESSOIRES' : 'TRAITEMENTS';
-        filtered.forEach(v => lignesArticles(v, type).forEach((l, i) => rows.push(mkRow(`${v.id}-${i}`, [
-          fmtDate(v.date), numDoc(v), v.client || '', magU(v.magasin_id), l.designation, l.qte, l.prix, l.total,
-        ]))));
+        filtered.forEach(v => {
+          const arts = Array.isArray(v.articles) ? (v.articles as any[]) : [];
+          arts.filter(a => (a?.type || '') === type).forEach(a => {
+            const qte = Math.max(1, num(a.quantite || 1));
+            const ca = num(a.total) || (num(a.prix) * qte);
+            const cat = type === 'monture' ? categorieMonture(a.designation, a.codeBarre) : (a.designation || 'Non renseigné');
+            add(v.magasin_id || '', cat, qte, ca);
+          });
+        });
+        const rows = [...agg.values()].sort((a,b) => a.magasin.localeCompare(b.magasin,'fr') || a.categorie.localeCompare(b.categorie,'fr'))
+          .map((x,i) => mkRow(String(i), [x.categorie, x.magasin, String(x.qte), fmtMontant(x.ca)], undefined, x.ca));
+        const total = [...agg.values()].reduce((s,x)=>s+x.ca,0);
+        const qte = [...agg.values()].reduce((s,x)=>s+x.qte,0);
         return build(`RÉCAPITULATIF ACTIVITÉS ${label}`, `Recap_${label}`,
-          [{ label: 'Date' }, { label: 'N° Doc' }, { label: 'Client' }, { label: 'Magasin' }, { label: 'Désignation' }, { label: 'Qté' }, { label: 'Prix', align: 'right' }, { label: 'Total', align: 'right' }],
-          rows);
+          [{ label: type === 'monture' ? 'Catégorie' : 'Désignation' }, { label: 'Magasin' }, { label: 'Qté vendue' }, { label: 'CA', align: 'right' }],
+          rows, `Total : ${qte} article(s) vendu(s) — ${fmtMontant(total)}`);
       }
       case 'ca-ophtalmologues':
       case 'ca-cabinets': {
@@ -488,14 +532,22 @@ export function VisualisationPage() {
       }
       case 'ca-assurances': {
         const filtered = facturesAss.filter(f => dansIntervalle(f.date_facture)).filter(f => magasinOk(f.magasin_id));
-        const rows = filtered.map(f => mkRow(f.id, [
-          fmtDate(f.date_facture), f.numero || '', f.client_nom || '', f.assurance || '',
-          magU(f.magasin_id), fmtMontant(num(f.part_assurance)), fmtMontant(num(f.montant_total)),
-        ]));
-        const total = filtered.reduce((s, f) => s + num(f.part_assurance), 0);
+        const agg = new Map<string, { assurance: string; magasin: string; nb: number; part: number; total: number }>();
+        filtered.forEach(f => {
+          const assurance = (f.assurance || 'Sans assurance').trim() || 'Sans assurance';
+          const magasinNom = magU(f.magasin_id) || 'SANS MAGASIN';
+          const key = `${magasinNom}\u0000${assurance.toLowerCase()}`;
+          const cur = agg.get(key) || { assurance, magasin: magasinNom, nb: 0, part: 0, total: 0 };
+          cur.nb += 1; cur.part += num(f.part_assurance); cur.total += num(f.montant_total);
+          agg.set(key, cur);
+        });
+        const rows = [...agg.values()].sort((a,b) => a.magasin.localeCompare(b.magasin,'fr') || a.assurance.localeCompare(b.assurance,'fr'))
+          .map((x,i) => mkRow(String(i), [x.assurance, x.magasin, String(x.nb), fmtMontant(x.part), fmtMontant(x.total)]));
+        const totalPart = [...agg.values()].reduce((s,x)=>s+x.part,0);
+        const totalCA = [...agg.values()].reduce((s,x)=>s+x.total,0);
         return build("CHIFFRE D'AFFAIRES ASSURANCES", 'CA_Assurances',
-          [{ label: 'Date' }, { label: 'N° Facture' }, { label: 'Client' }, { label: 'Assurance' }, { label: 'Magasin' }, { label: 'Part assurance', align: 'right' }, { label: 'Total', align: 'right' }],
-          rows, `Total part assurance : ${fmtMontant(total)}`);
+          [{ label: 'Assurance' }, { label: 'Magasin' }, { label: 'Nb factures' }, { label: 'CA Assurance', align: 'right' }, { label: 'CA Total', align: 'right' }],
+          rows, `Total CA assurance : ${fmtMontant(totalPart)} — CA total : ${fmtMontant(totalCA)}`);
       }
       // ── Clients ────────────────────────────────────────────────────────────────
       case 'clients': {
@@ -559,7 +611,7 @@ export function VisualisationPage() {
       default:
         return build('', '', [], []);
     }
-  }, [activeReport, ventes, reglements, releves, facturesAss, clients, bons, bonsVerres, inventaires, stocks, recherche, dateDebut, dateFin, magasin, modePaiement]);
+  }, [activeReport, ventes, reglements, releves, facturesAss, clients, bons, bonsVerres, inventaires, stocks, monturesCatalogue, recherche, dateDebut, dateFin, magasin, modePaiement]);
 
   // Regroupe les rapports datés comme le PDF de référence : chaque changement
   // de date commence par une ligne de synthèse colorée avec le total du jour.
