@@ -3536,7 +3536,7 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
                     const totalAssurance = detail.bonsAssurance.reduce((s, b) => s + (parseFloat(b.montantPrisEnCharge) || 0), 0);
                     // Déduction EN DIRECT de l'acompte en cours de saisie.
                     const acompteEnCours = parseFloat(nouveauReglement.acompte) || 0;
-                    const reste = detail.totalNet - acompteInitial - totalAssurance - totalReglements - acompteEnCours;
+                    const reste = normaliserTotauxVente(detail).totalNet - acompteInitial - totalAssurance - totalReglements - acompteEnCours;
                     const totalementRegle = reste <= 0;
                     return (
                       <div
@@ -3589,7 +3589,7 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
                   {(() => {
                     const acompte = parseFloat(detail.recap.acompte) || 0;
                     const totalAssurance = detail.bonsAssurance.reduce((s, b) => s + (parseFloat(b.montantPrisEnCharge) || 0), 0);
-                    return (detail.totalNet - acompte - totalAssurance).toLocaleString('fr-FR');
+                    return (normaliserTotauxVente(detail).totalNet - acompte - totalAssurance).toLocaleString('fr-FR');
                   })()}
                 </div>
               </div>
@@ -4049,7 +4049,7 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
                       </div>
                       <div className="p-2">
                         <div className="opacity-80">Total Net</div>
-                        <div className="text-base font-bold">{detail.totalNet.toLocaleString('fr-FR')}</div>
+                        <div className="text-base font-bold">{normaliserTotauxVente(detail).totalNet.toLocaleString('fr-FR')}</div>
                       </div>
                       <div className="p-2">
                         <div className="opacity-80">Acompte</div>
@@ -4059,7 +4059,7 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
                         const acompte = parseFloat(detail.recap.acompte) || 0;
                         const totalAssurance = detail.bonsAssurance.reduce((s, b) => s + (parseFloat(b.montantPrisEnCharge) || 0), 0);
                         const totalReglements = (reglementsSupabase || []).reduce((s, r) => s + (r.montant || 0), 0);
-                        const reste = detail.totalNet - acompte - totalAssurance - totalReglements;
+                        const reste = normaliserTotauxVente(detail).totalNet - acompte - totalAssurance - totalReglements;
                         const solde = reste <= 0;
                         return (
                           <div className="p-2" style={{ backgroundColor: solde ? '#43a047' : '#e53935' }}>
@@ -4394,7 +4394,7 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
                           </div>
                           <div className="p-3">
                             <div className="opacity-80">Total Net</div>
-                            <div className="text-base font-bold">{detail.totalNet.toLocaleString('fr-FR')}</div>
+                            <div className="text-base font-bold">{normaliserTotauxVente(detail).totalNet.toLocaleString('fr-FR')}</div>
                           </div>
                           <div className="p-3">
                             <div className="opacity-80">Acompte</div>
@@ -4408,7 +4408,7 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
                             const acompteInitial = parseFloat(detail.recap.acompte) || 0;
                             const totalReglements = reglementsSupabase.reduce((s, r) => s + r.montant, 0);
                             const totalAssurance = detail.bonsAssurance.reduce((s, b) => s + (parseFloat(b.montantPrisEnCharge) || 0), 0);
-                            const reste = detail.totalNet - acompteInitial - totalReglements - totalAssurance;
+                            const reste = normaliserTotauxVente(detail).totalNet - acompteInitial - totalReglements - totalAssurance;
                             const solde = reste <= 0;
                             return (
                               <div className="p-3" style={{ backgroundColor: solde ? '#43a047' : '#e53935' }}>
@@ -4974,6 +4974,13 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
             const reste = totaux.totalNet - acompte - totalAssurance - totalReglements;
             const remisePct = totaux.remisePct;
             const totalBrut = totaux.totalBrut;
+            // IMPORTANT : totalNet doit être calculé UNIQUEMENT depuis ce `totaux`
+            // (propre à CETTE vente `v`) et transporté explicitement dans l'objet
+            // de ligne ci-dessous. Ne jamais laisser le JSX référencer une variable
+            // `totaux` "ambiante" : dans une liste, ce nom est ré-attribué à chaque
+            // itération et une référence non déstructurée peut pointer vers la
+            // mauvaise vente (c'était la cause du bug TOTAL NET > TOTAL affiché).
+            const totalNet = totaux.totalNet;
             const rowBgColor = reste > 0 ? '#fee2e2' : '#dcfce7';
             const actions = (
               <div className="flex flex-col items-center justify-center gap-1">
@@ -4982,13 +4989,13 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
                 {peutSupprimer && onSupprimer && <button onClick={() => onSupprimer(v)} title="Supprimer" aria-label="Supprimer" className="flex items-center justify-center rounded text-white" style={{ width: 21, height: 21, backgroundColor: '#dc2626' }}><Trash2 size={10} /></button>}
               </div>
             );
-            return { v, i, acompte, totalAssurance, totalReglements, reste, remisePct, totalBrut, rowBgColor, actions };
+            return { v, i, acompte, totalAssurance, totalReglements, reste, remisePct, totalBrut, totalNet, rowBgColor, actions };
           });
 
           return <>
             {/* ── Cartes mobiles (< md) ── */}
             <div className="flex flex-col gap-3 md:hidden">
-              {rows.map(({ v, i, acompte, reste, remisePct, totalBrut, rowBgColor, actions }) => (
+              {rows.map(({ v, i, acompte, reste, remisePct, totalBrut, totalNet, rowBgColor, actions }) => (
                 <div key={`card-${v.id}-${i}`} className="rounded-xl border-2 overflow-hidden shadow-sm" style={{ borderColor: reste > 0 ? '#fca5a5' : '#86efac', backgroundColor: rowBgColor }}>
                   {/* En-tête carte */}
                   <div className="flex items-center justify-between px-3 py-2" style={{ backgroundColor: reste > 0 ? '#fca5a5' : '#86efac' }}>
@@ -5020,7 +5027,7 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
                       </div>
                       <div className="bg-white/70 rounded p-1">
                         <div className="text-xs text-gray-500">Net</div>
-                        <div className="text-xs font-bold text-gray-800">{totaux.totalNet.toLocaleString('fr-FR')}</div>
+                        <div className="text-xs font-bold text-gray-800">{totalNet.toLocaleString('fr-FR')}</div>
                       </div>
                     </div>
                     {/* Paiements */}
@@ -5068,7 +5075,7 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
                     </tr>
                   </thead>
                   <tbody>
-                    {rows.map(({ v, i, acompte, reste, remisePct, totalBrut, rowBgColor, actions }) => (
+                    {rows.map(({ v, i, acompte, reste, remisePct, totalBrut, totalNet, rowBgColor, actions }) => (
                       <tr key={`${v.id}-${i}`} className="border-b border-gray-200" style={{ backgroundColor: rowBgColor }}>
                         <td className="px-3 py-2 text-center text-sm border border-gray-300">{i + 1}</td>
                         <td className="px-3 py-2 font-mono font-semibold text-blue-700 text-sm border border-gray-300">{v.recap.numFacture || '—'}</td>
@@ -5083,7 +5090,7 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
                         </td>
                         <td className="px-3 py-2 text-right text-sm border border-gray-300 font-semibold">{totalBrut.toLocaleString('fr-FR')}</td>
                         <td className="px-3 py-2 text-center text-sm border border-gray-300">{remisePct}%</td>
-                        <td className="px-3 py-2 text-right text-sm border border-gray-300 font-semibold">{totaux.totalNet.toLocaleString('fr-FR')}</td>
+                        <td className="px-3 py-2 text-right text-sm border border-gray-300 font-semibold">{totalNet.toLocaleString('fr-FR')}</td>
                         <td className="px-3 py-2 text-sm border border-gray-300">
                           {acompte > 0 && <div className="text-xs mb-1"><span className="font-medium">Acompte: </span><span className="font-semibold">{acompte.toLocaleString('fr-FR')} F</span></div>}
                           {v.bonsAssurance.map((b, bi) => (
