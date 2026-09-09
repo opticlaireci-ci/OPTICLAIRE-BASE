@@ -5193,7 +5193,7 @@ function FormulaireVente({ magasinId, onRetour, onVenteEnregistree, venteInitial
     const recapAvecRecu = { ...recap, numRecu: (venteInitiale?.recap as any)?.numRecu || recap.numRecu || genNumRecu() };
 
     const vente = {
-      id: venteInitiale?.id || Date.now().toString(),
+      id: venteInitiale?.id || (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`),
       date: venteInitiale?.date || new Date().toISOString(),
       numeroClient: client.numeroClient,
       client: `${client.civilite} ${client.nom}`.trim(),
@@ -5287,7 +5287,7 @@ function FormulaireVente({ magasinId, onRetour, onVenteEnregistree, venteInitial
         if (!stockOk) {
           // La vente est bien dans la base, mais sa sortie de stock n'est pas
           // confirmée : on ne masque pas ce problème derrière l'écran succès.
-          const message = 'La vente est enregistrée, mais la sortie de stock n'a pas été confirmée. Réessayez la vente / vérifiez les mouvements avant de continuer.';
+          const message = "La vente est enregistrée, mais la sortie de stock n'a pas été confirmée. Réessayez la vente / vérifiez les mouvements avant de continuer.";
           logger.error('❌ Décrément stock vente non confirmé:', venteSupabase.id);
           reportFirebaseError('Mouvement de stock vente', new Error(message));
           alert(`⚠️ ${message}`);

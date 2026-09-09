@@ -195,7 +195,7 @@ function FormulaireVenteFlash({ magasinId, onRetour, onSaved }: { magasinId: str
     if (savingRef.current) return;
     savingRef.current = true;
     const vente: VenteFlash = {
-      id: Date.now().toString(), date: new Date().toISOString(),
+      id: (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`), date: new Date().toISOString(),
       numeroClient, client: `${civilite} ${client}`.trim(), civilite, telephone, soldeClient,
       profession, jourNaissance, moisNaissance, anneeNaissance,
       articles, bonsAssurance, total, remisePct, valeurRemise, totalNet,
@@ -224,11 +224,15 @@ function FormulaireVenteFlash({ magasinId, onRetour, onSaved }: { magasinId: str
         statut: 'en_cours',
       } as any);
     } catch (err) {
-      logger.error('❌ Push vente Supabase:', err);
+      logger.error('❌ Vente flash non confirmée dans la base:', err);
+      alert(`❌ LA VENTE N'A PAS ÉTÉ ENREGISTRÉE.\n\nLa base de données n'a pas confirmé l'enregistrement.\nVérifiez la connexion puis réessayez.\n\n${err instanceof Error ? err.message : String(err)}`);
+      savingRef.current = false;
+      return;
     }
 
-    // Décrémenter le stock réel du magasin EN ARRIÈRE-PLAN (pas d'await) pour
-    // que l'écran de succès s'affiche immédiatement sans attendre la mise à jour du stock.
+    // La vente cloud est confirmée. La sortie de stock est maintenant attendue
+    // elle aussi : une vente ne peut pas être déclarée terminée avec un stock
+    // incohérent. L'écriture est idempotente (id = facture + article).
     {
       const items = articles
         .filter(a => a.type === 'monture' || a.type === 'accessoire')
@@ -240,9 +244,13 @@ function FormulaireVenteFlash({ magasinId, onRetour, onSaved }: { magasinId: str
           prixVente: parseFloat(a.prix) || 0,
         }));
       if (items.length > 0) {
-        enregistrerVente({ magasinId: magasinId.toUpperCase(), bonReference: numFacture, items })
-          .then(() => window.dispatchEvent(new CustomEvent('leclaire-sync-update')))
-          .catch(err => logger.error('❌ Décrément stock vente flash:', err));
+        const stockOk = await enregistrerVente({ magasinId: magasinId.toUpperCase(), bonReference: numFacture, items });
+        if (!stockOk) {
+          alert("⚠️ LA VENTE EST ENREGISTRÉE, MAIS LA SORTIE DE STOCK N'A PAS ÉTÉ CONFIRMÉE.\n\nNe continuez pas avec une autre vente identique. Vérifiez la connexion puis contrôlez le stock.");
+          savingRef.current = false;
+          return;
+        }
+        window.dispatchEvent(new CustomEvent('leclaire-sync-update'));
       }
     }
 

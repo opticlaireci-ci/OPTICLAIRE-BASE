@@ -1,6 +1,6 @@
 import { logger } from './logger';
 import { supabase } from './supabaseClient';
-import { isPermissionError } from './networkErrors';
+import { isPermissionError, isAuthError, isNoSessionError, isTransientNetworkError } from './networkErrors';
 
 /**
  * NOYAU "ACCÈS DIRECT" — remplace supabaseKv.ts.
@@ -171,11 +171,86 @@ export async function kvGetDoc<T = any>(entity: string, id: string): Promise<T |
  * Écrit (upsert) un document avec un id explicite.
  * `merge` fusionne avec l'existant (équivalent setDoc({merge:true})).
  */
-export async function kvSetDoc(
+// ── File d'attente locale des écritures échouées ─────────────────────────────
+// Une panne réseau peut survenir après les retries, alors que l'utilisateur a
+// déjà quitté l'écran. On garde alors l'écriture exacte sur ce navigateur et
+// la rejouons automatiquement dès que la base redevient joignable.
+const PENDING_WRITES_KEY = 'leclaire_pending_cloud_writes_v2';
+let pendingFlushRunning = false;
+
+function readPendingWrites(): any[] {
+  try {
+    const raw = localStorage.getItem(PENDING_WRITES_KEY);
+    const rows = raw ? JSON.parse(raw) : [];
+    return Array.isArray(rows) ? rows : [];
+  } catch { return []; }
+}
+function writePendingWrites(rows: any[]) {
+  try { localStorage.setItem(PENDING_WRITES_KEY, JSON.stringify(rows.slice(-100))); } catch {}
+}
+function isRetryableWriteError(err: any): boolean {
+  if (isAuthError(err) || isNoSessionError(err) || isPermissionError(err)) return false;
+  const status = Number(err?.status ?? err?.code ?? 0);
+  if (status >= 400 && status < 500 && status !== 408 && status !== 429) return false;
+  return true;
+}
+function enqueuePendingWrite(entity: string, id: string, value: Record<string, any>, merge: boolean) {
+  const rows = readPendingWrites();
+  const key = `${entity}|${id}`;
+  const existing = rows.findIndex(r => `${r.entity}|${r.id}` === key);
+  const item = { entity, id, value, merge, queuedAt: new Date().toISOString() };
+  if (existing >= 0) rows[existing] = item;
+  else rows.push(item);
+  writePendingWrites(rows);
+}
+
+async function flushPendingWrites() {
+  if (pendingFlushRunning) return;
+  pendingFlushRunning = true;
+  try {
+    const rows = readPendingWrites();
+    if (!rows.length) return;
+    const remaining: any[] = [];
+    for (const item of rows) {
+      try {
+        await kvSetDocInternal(item.entity, item.id, item.value, !!item.merge, false);
+      } catch (err) {
+        // On conserve uniquement ce qui est encore potentiellement récupérable.
+        // Une erreur de droits/session ne doit pas supprimer silencieusement la
+        // donnée : elle reste en file et sera retentée après reconnexion/correction.
+        remaining.push(item);
+        if (!isRetryableWriteError(err)) break;
+      }
+    }
+    writePendingWrites(remaining);
+  } finally {
+    pendingFlushRunning = false;
+  }
+}
+
+// Déclenche la récupération sans dépendre d'un écran particulier.
+if (typeof window !== 'undefined') {
+  window.addEventListener('online', () => { void flushPendingWrites(); });
+  setTimeout(() => { void flushPendingWrites(); }, 2500);
+  setInterval(() => { void flushPendingWrites(); }, 15000);
+}
+
+/**
+ * Écriture DURCIE : une réponse réseau perdue après un upsert réussi ne doit
+ * jamais être interprétée comme une perte de donnée. Le même document est
+ * rejoué avec le même id (opération idempotente), puis relu pour confirmer que
+ * la ligne existe réellement dans la base.
+ *
+ * Toutes les écritures métier passent par cette fonction : ventes, clients,
+ * règlements, bons, inventaires, etc. Un problème transitoire est donc traité
+ * au niveau central au lieu de dépendre de chaque écran.
+ */
+async function kvSetDocInternal(
   entity: string,
   id: string,
   value: Record<string, any>,
   merge = false,
+  queueOnFailure = true,
 ): Promise<void> {
   const target = resolveTarget(entity);
   let payload = value;
@@ -185,54 +260,91 @@ export async function kvSetDoc(
   }
   const base = { ...toRow(target, id, payload), updated_at: new Date().toISOString() };
 
-  // `app_data` stocke l'objet entier dans une colonne jsonb : jamais de PGRST204.
+  const retryable = isRetryableWriteError;
+  const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+  // `app_data` stocke l'objet entier dans une colonne jsonb.
   if (isAppData(target)) {
-    // `toRow` renvoie une union de 3 formes (table dédiée / referentiels / app_data)
-    // que supabase-js ne peut pas rapprocher d'un schéma générique : cast explicite.
-    const { error } = await supabase.from(target.table).upsert(base as any);
-    if (error) throw new Error(`kvSetDoc ${entity}/${id}: ${error.message}`);
-    return;
-  }
-
-  // Une itération par colonne inconnue restant à découvrir. La borne évite toute
-  // boucle infinie si PostgREST renvoyait un message inattendu.
-  const maxEssais = Object.keys(base).length + 1;
-  for (let essai = 0; essai < maxEssais; essai++) {
-    const row = relocateUnknownColumns(target.table, base);
-    const { error } = await supabase.from(target.table).upsert(row as any);
-    if (!error) return;
-
-    const colonne = missingColumnFromError(error.message);
-    if (!colonne) throw new Error(`kvSetDoc ${entity}/${id}: ${error.message}`);
-
-    if (colonne === 'data') {
-      // La table n'a pas le fourre-tout : les champs inconnus seront abandonnés.
-      tablesSansData.add(target.table);
-      console.warn(
-        `⚠️ public.${target.table} n'a pas de colonne "data" : les champs sans ` +
-          `colonne dédiée ne seront PAS enregistrés. Exécutez ` +
-          `supabase/SUPABASE_FIX_ACCES_DIRECT.sql pour l'ajouter.`,
-      );
-      continue;
+    let lastErr: any = null;
+    for (let attempt = 1; attempt <= 6; attempt++) {
+      const { error } = await supabase.from(target.table).upsert(base as any);
+      if (!error) return;
+      lastErr = error;
+      if (!retryable(error) || attempt === 6) break;
+      await sleep(Math.min(700 * Math.pow(1.8, attempt - 1), 7000) + Math.random() * 300);
     }
-
-    let inconnues = unknownColumns.get(target.table);
-    if (!inconnues) unknownColumns.set(target.table, (inconnues = new Set()));
-    inconnues.add(colonne);
-    console.warn(
-      `⚠️ public.${target.table} : colonne "${colonne}" absente — champ rangé ` +
-        `dans "data". Exécutez supabase/SUPABASE_FIX_ACCES_DIRECT.sql pour créer ` +
-        `la colonne et retrouver le filtrage/tri SQL sur ce champ.`,
-    );
+    const finalErr = new Error(`kvSetDoc ${entity}/${id}: ${lastErr?.message || lastErr}`);
+    if (queueOnFailure && isRetryableWriteError(lastErr)) enqueuePendingWrite(entity, id, value, merge);
+    throw finalErr;
   }
-  throw new Error(
-    `kvSetDoc ${entity}/${id}: schéma de public.${target.table} incompatible ` +
-      `après ${maxEssais} tentatives d'adaptation.`,
-  );
+
+  // Une itération par colonne inconnue restante à découvrir.
+  const maxSchemaEssais = Object.keys(base).length + 1;
+  let row: Record<string, any> = base as Record<string, any>;
+  for (let schemaEssai = 0; schemaEssai < maxSchemaEssais; schemaEssai++) {
+    row = relocateUnknownColumns(target.table, base) as Record<string, any>;
+
+    let lastErr: any = null;
+    let success = false;
+    // Une écriture peut réussir côté serveur puis perdre sa réponse réseau.
+    // Rejouer exactement le même upsert est sans danger grâce à `id`.
+    for (let attempt = 1; attempt <= 6; attempt++) {
+      const { error } = await supabase.from(target.table).upsert(row as any);
+      if (!error) {
+        success = true;
+        break;
+      }
+      lastErr = error;
+      const missing = missingColumnFromError(error.message || '');
+      if (missing) {
+        if (missing === 'data') {
+          tablesSansData.add(target.table);
+          console.warn(`⚠️ public.${target.table} n'a pas de colonne "data" : les champs sans colonne dédiée seront ignorés.`);
+          break;
+        }
+        let set = unknownColumns.get(target.table);
+        if (!set) unknownColumns.set(target.table, (set = new Set()));
+        set.add(missing);
+        row = relocateUnknownColumns(target.table, base);
+        // Recommence immédiatement avec le schéma adapté.
+        lastErr = null;
+        break;
+      }
+      if (!retryable(error) || attempt === 6) break;
+      await sleep(Math.min(700 * Math.pow(1.8, attempt - 1), 7000) + Math.random() * 300);
+    }
+    if (success) return;
+    if (lastErr) {
+      const finalErr = new Error(`kvSetDoc ${entity}/${id}: ${lastErr.message || lastErr}`);
+      if (queueOnFailure && isRetryableWriteError(lastErr)) enqueuePendingWrite(entity, id, value, merge);
+      throw finalErr;
+    }
+    // `data` absent : la ligne a encore ses colonnes connues, on peut tenter
+    // une dernière fois sans le champ fourre-tout.
+    if (tablesSansData.has(target.table)) {
+      const clean = { ...row };
+      delete (clean as any).data;
+      const { error } = await supabase.from(target.table).upsert(clean as any);
+      if (!error) return;
+      throw new Error(`kvSetDoc ${entity}/${id}: ${error.message}`);
+    }
+  }
+  throw new Error(`kvSetDoc ${entity}/${id}: schéma de public.${target.table} incompatible après adaptation.`);
+}
+/** Point d'entrée public de toutes les écritures métier. */
+export async function kvSetDoc(
+  entity: string,
+  id: string,
+  value: Record<string, any>,
+  merge = false,
+): Promise<void> {
+  return kvSetDocInternal(entity, id, value, merge, true);
 }
 
 /** Crée un document avec id auto-généré côté client. Renvoie l'id créé. */
 export async function kvCreateDoc(entity: string, value: Record<string, any>): Promise<string> {
+  // L'id est choisi AVANT l'appel réseau. Si la réponse est perdue, le même id
+  // sera réutilisé par le retry de kvSetDoc : aucune création en double.
   const id = value.id || crypto.randomUUID();
   await kvSetDoc(entity, id, { ...value, id }, false);
   return id;
