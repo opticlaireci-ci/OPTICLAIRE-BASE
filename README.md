@@ -138,3 +138,11 @@ pnpm dev
 ---
 
 **🚀 PROFITEZ DE VOTRE APPLICATION !**
+
+## CORRECTION RLS — MOUVEMENTS DE STOCK
+
+Si Supabase affiche : `new row violates row-level security policy for table "mouvements_stock"`, exécuter une seule fois dans **Supabase → SQL Editor** :
+
+`supabase/FIX_RLS_MOUVEMENTS_STOCK_DEFINITIF.sql`
+
+Cette correction rend `mouvements_stock` compatible avec les anciennes et nouvelles structures (`magasin_id`, `magasin_source`, `magasin_destination` et `data`), migre les anciennes valeurs JSONB et recrée les policies RLS. L'application renseigne désormais aussi `magasin_id` sur chaque mouvement et conserve les colonnes source/destination lorsque disponibles.

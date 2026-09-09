@@ -144,6 +144,10 @@ begin
   raise notice 'public.bons : isolation STRICTE appliquée';
 end $$;
 
+-- Compatibilité RLS : les magasins peuvent être portés par des colonnes réelles.
+alter table public.mouvements_stock add column if not exists magasin_source text;
+alter table public.mouvements_stock add column if not exists magasin_destination text;
+
 -- ── Groupe 3 : mouvements_stock (source/destination dans data) ──────────────
 do $$
 declare

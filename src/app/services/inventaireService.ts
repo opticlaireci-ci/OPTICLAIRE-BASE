@@ -262,7 +262,8 @@ async function insertMouvements(rows: any[]): Promise<boolean> {
     try {
       await Promise.all(rows.map(r => {
         const { _docId, ...data } = r;
-        const payload = { ...data, user_id: userId, created_at: now };
+        const magasinId = data.magasin_id || data.magasin_source || data.magasin_destination || null;
+        const payload = { ...data, magasin_id: magasinId, user_id: userId, created_at: now };
         if (_docId) return setDoc(doc(db, 'mouvements_stock', _docId), payload, { merge: true });
         return addDoc(collection(db, 'mouvements_stock'), payload);
       }));
@@ -297,7 +298,7 @@ export async function enregistrerDistribution(params: {
   return insertMouvements(params.items.map(item => ({
     _docId: `dist_${sanitizeIdPart(params.bonReference)}_${sanitizeIdPart(item.id)}`,
     type: 'distribution', article_id: item.id, quantite: item.quantite,
-    magasin_destination: params.magasinId, bon_id: params.bonReference,
+    magasin_id: params.magasinId, magasin_destination: params.magasinId, bon_id: params.bonReference,
     designation: item.designation, produit_type: item.type, prix_vente: item.prixVente,
   })));
 }
@@ -311,7 +312,7 @@ export async function enregistrerTransfert(params: {
   return insertMouvements(params.items.map(item => ({
     _docId: `trf_${sanitizeIdPart(params.bonReference)}_${sanitizeIdPart(item.id)}`,
     type: 'transfert', article_id: item.id, quantite: item.quantite,
-    magasin_source: params.magasinSource, magasin_destination: params.magasinDestination,
+    magasin_id: params.magasinSource, magasin_source: params.magasinSource, magasin_destination: params.magasinDestination,
     bon_id: params.bonReference, designation: item.designation,
     produit_type: item.type, prix_vente: item.prixVente,
   })));
@@ -333,7 +334,7 @@ export async function enregistrerVente(params: {
   return insertMouvements(rows.map(item => ({
     _docId: `vte_${sanitizeIdPart(params.bonReference)}_${sanitizeIdPart(item.id)}`,
     type: 'vente', article_id: item.id, quantite: item.quantite,
-    magasin_source: params.magasinId, bon_id: params.bonReference,
+    magasin_id: params.magasinId, magasin_source: params.magasinId, bon_id: params.bonReference,
     designation: item.designation, produit_type: item.type, prix_vente: item.prixVente,
   })));
 }
@@ -346,7 +347,7 @@ export async function enregistrerRetour(params: {
   return insertMouvements(params.items.map(item => ({
     _docId: `ret_${sanitizeIdPart(params.bonReference)}_${sanitizeIdPart(item.id)}`,
     type: 'retour', article_id: item.id, quantite: item.quantite,
-    magasin_source: params.magasinId, bon_id: params.bonReference,
+    magasin_id: params.magasinId, magasin_source: params.magasinId, bon_id: params.bonReference,
     designation: item.designation, produit_type: item.type, prix_vente: item.prixVente,
   })));
 }

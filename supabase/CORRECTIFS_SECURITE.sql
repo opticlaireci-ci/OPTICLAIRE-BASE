@@ -257,13 +257,20 @@ begin
   raise notice 'public.bons : isolation source/destination (tolérante) appliquée';
 end $$;
 
+-- Compatibilité RLS : les magasins peuvent être portés par des colonnes réelles.
+alter table public.mouvements_stock add column if not exists magasin_source text;
+alter table public.mouvements_stock add column if not exists magasin_destination text;
+
 -- ── Groupe 3 : mouvements_stock (DEUX magasins DANS data jsonb) ─────────────
 -- Ces colonnes n'existent pas en dur : les services rangent magasin_source /
 -- magasin_destination dans le fourre-tout `data`.
 do $$
 declare
   cond text := '(public.est_admin() '
-            || 'or (data->>''magasin_source'' is null and data->>''magasin_destination'' is null) '
+            || 'or (coalesce(magasin_id, magasin_source, magasin_destination, data->>''magasin_source'', data->>''magasin_destination'') is null) '
+            || 'or public.norm_id(magasin_id) = any(public.mes_magasins_norm()) '
+            || 'or public.norm_id(magasin_source) = any(public.mes_magasins_norm()) '
+            || 'or public.norm_id(magasin_destination) = any(public.mes_magasins_norm()) '
             || 'or public.norm_id(data->>''magasin_source'') = any(public.mes_magasins_norm()) '
             || 'or public.norm_id(data->>''magasin_destination'') = any(public.mes_magasins_norm()))';
 begin

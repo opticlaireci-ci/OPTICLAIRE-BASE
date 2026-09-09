@@ -1,6 +1,6 @@
 import { logger } from './logger';
 import { supabase } from './supabaseClient';
-import { isPermissionError, isAuthError, isNoSessionError, isTransientNetworkError } from './networkErrors';
+import { isPermissionError, isAuthError, isNoSessionError } from './networkErrors';
 
 /**
  * NOYAU "ACCÈS DIRECT" — remplace supabaseKv.ts.
@@ -65,6 +65,24 @@ function appDataKey(target: Target, id: string) {
 function toRow(target: Target, id: string, value: Record<string, any>) {
   if (isRefTable(target)) return { ...value, id, type: target.refType };
   if (isAppData(target)) return { key: appDataKey(target, id), value: { id, ...value } };
+
+  // mouvements_stock peut exister avec magasin_source/destination en colonnes
+  // réelles (base existante) ou uniquement dans data (ancien schéma). Quand
+  // les deux sont présents, on garde les colonnes réelles ET data afin que la
+  // RLS et les anciennes versions de l'application restent compatibles.
+  if (target.table === 'mouvements_stock') {
+    const source = value.magasin_source ?? value.data?.magasin_source ?? null;
+    const destination = value.magasin_destination ?? value.data?.magasin_destination ?? null;
+    const magasinId = value.magasin_id ?? source ?? destination ?? null;
+    return {
+      ...value,
+      id,
+      magasin_id: magasinId,
+      ...(source ? { magasin_source: source } : {}),
+      ...(destination ? { magasin_destination: destination } : {}),
+    };
+  }
+
   return { ...value, id };
 }
 
