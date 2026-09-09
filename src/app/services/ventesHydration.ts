@@ -9,8 +9,10 @@ import { logger } from '../utils/logger';
 
 import { type VenteSupabase, chargerVentes, subscriberVentesMagasin } from './ventesService';
 import { safeReplaceLocalArray } from './safeHydrate';
+import { avecTotauxVenteNormalises } from '../utils/venteTotals';
 
 function snakeToCamel(v: VenteSupabase): any {
+  const n = avecTotauxVenteNormalises(v);
   return {
     id: v.id, magasinId: v.magasin_id, type: v.type, date: v.date,
     numeroClient: v.numero_client, client: v.client, civilite: v.civilite,
@@ -21,7 +23,7 @@ function snakeToCamel(v: VenteSupabase): any {
     telOphtalmologue: v.tel_ophtalmologue, cabinetOphtalmologue: v.cabinet_ophtalmologue,
     telCabinet: v.tel_cabinet, verres: v.verres || [], articles: v.articles || [],
     bonsAssurance: v.bons_assurance || [], recap: v.recap || {},
-    totalBrut: v.total_brut, totalNet: v.total_net,
+    totalBrut: n.total_brut, totalNet: n.total_net,
     editePar: v.edite_par, statut: v.statut,
     createdAt: v.created_at, updatedAt: v.updated_at,
   };

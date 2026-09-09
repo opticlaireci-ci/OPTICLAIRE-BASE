@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { normaliserTotauxVente } from '../utils/venteTotals';
 import {
   Box,
   Paper,
@@ -71,7 +72,7 @@ export function MouvementsCaisseGlobalPage() {
             magasinId: vente.magasin_id,
             type: 'entree',
             categorie: 'Vente',
-            montant: vente.total_net ?? vente.total_brut ?? 0,
+            montant: normaliserTotauxVente(vente).totalNet,
             libelle: `Vente ${numFacture} - ${vente.numero_client || 'Client'}`,
             modePaiement: (vente.recap && vente.recap.modePaiement) || 'Espèces',
             reference: numFacture,

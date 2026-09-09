@@ -7,6 +7,7 @@ import {
 import type { VenteSupabase } from '../services/ventesService';
 import type { ReglementSupabase } from '../services/reglementsService';
 import { TENANT } from '../config/tenant';
+import { normaliserTotauxVente } from '../utils/venteTotals';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 export interface MagasinRef { id: string; label: string }
@@ -43,8 +44,8 @@ const fmtAxis = (n: number) => (n >= 1_000_000 ? `${(n / 1_000_000).toFixed(0)}M
 const pct = (part: number, whole: number) => (whole > 0 ? (part / whole) * 100 : 0);
 
 const dateOf = (s: any) => { const d = new Date(s || 0); return isNaN(d.getTime()) ? null : d; };
-const venteBrut = (v: any) => Number(v?.total_brut ?? v?.total_net ?? 0) || 0;
-const venteNet = (v: any) => Number(v?.total_net ?? v?.total_brut ?? 0) || 0;
+const venteBrut = (v: any) => normaliserTotauxVente(v).totalBrut;
+const venteNet = (v: any) => normaliserTotauxVente(v).totalNet;
 const bonsAmount = (v: any) =>
   Array.isArray(v?.bons_assurance)
     ? v.bons_assurance.reduce((s: number, b: any) =>

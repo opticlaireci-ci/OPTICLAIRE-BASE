@@ -32,6 +32,7 @@ import { canEdit, canDelete } from '../../../utils/actionRights';
 import { useLiveData } from '../../../hooks/useLiveData';
 import { getMagasinLabel } from '../../../constants/magasins';
 import { TENANT } from '../../../config/tenant';
+import { normaliserTotauxVente } from '../../../utils/venteTotals';
 
 // ── Montant en toutes lettres (français) ─────────────────────────────────────
 function montantEnLettres(nombre: number): string {
@@ -220,18 +221,18 @@ async function telechargerFacturePDF(factureData: {
   // ── Totaux ─────────────────────────────────────────────────────────────────
   const acompte = parseFloat(factureData.acompte) || 0;
   const totalAssurance = factureData.bonsAssurance.reduce((s, b) => s + (parseFloat(b.montantPrisEnCharge) || 0), 0);
-  const totalBrutVerres = verres.reduce((s: number, v: any) => s + (parseFloat(v.totalVerres) || 0), 0);
-  const totalBrutArticles = articles.reduce((s, a) => s + (parseFloat(a.total) || 0), 0);
-  const totalBrut = totalBrutVerres + totalBrutArticles;
-  const remisePct = parseFloat(factureData.remisePct) || 0;
-  const remiseMontant = totalBrut - factureData.totalNet;
-  const reste = factureData.totalNet - totalAssurance - acompte;
+  const totaux = normaliserTotauxVente(factureData);
+  const totalBrut = totaux.totalBrut;
+  const totalNet = totaux.totalNet;
+  const remisePct = totaux.remisePct;
+  const remiseMontant = totaux.valeurRemise;
+  const reste = totalNet - totalAssurance - acompte;
 
   let ty = y + 12;
   const totalRows: Array<[string, string]> = [
     ['TOTAL', fmtF(totalBrut) + ' F CFA'],
     [`REMISE(${remisePct}%)`, fmtF(remiseMontant > 0 ? remiseMontant : 0) + ' F CFA'],
-    ['TOTAL NET', fmtF(factureData.totalNet) + ' F CFA'],
+    ['TOTAL NET', fmtF(totalNet) + ' F CFA'],
   ];
   if (totalAssurance > 0) totalRows.push(['PRISE EN CHARGE', fmtF(totalAssurance) + ' F CFA']);
   totalRows.push(['ACOMPTE', fmtF(acompte) + ' F CFA']);
@@ -265,7 +266,7 @@ async function telechargerFacturePDF(factureData: {
   doc.setTextColor(0);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(10);
-  const lettres = doc.splitTextToSize(`ARRÊTÉ LA PRÉSENTE FACTURE À LA SOMME DE: ${montantEnLettres(factureData.totalNet)}`, 182);
+  const lettres = doc.splitTextToSize(`ARRÊTÉ LA PRÉSENTE FACTURE À LA SOMME DE: ${montantEnLettres(totalNet)}`, 182);
   doc.text(lettres, 14, ty);
   ty += lettres.length * 5 + 14;
 
@@ -358,9 +359,11 @@ async function telechargerFactureExcel(factureData: {
   // Totals
   const acompte = parseFloat(factureData.acompte) || 0;
   const totalAssurance = factureData.bonsAssurance.reduce((s, b) => s + (parseFloat(b.montantPrisEnCharge) || 0), 0);
-  const reste = factureData.totalNet - totalAssurance - acompte;
+  const totauxExcel = normaliserTotauxVente(factureData);
+  const reste = totauxExcel.totalNet - totalAssurance - acompte;
 
-  wsData.push(['Total Net:', factureData.totalNet]);
+  wsData.push(['Total:', totauxExcel.totalBrut]);
+  wsData.push(['Total Net:', totauxExcel.totalNet]);
   if (totalAssurance > 0) wsData.push(['Prise en charge assurance:', -totalAssurance]);
   if (acompte > 0) wsData.push(['Acompte versé:', -acompte]);
   wsData.push(['Reste à payer:', reste]);
@@ -774,10 +777,11 @@ async function telechargerReglementPDF(reglement: any, vente: any, magasinId?: s
   y += 30;
 
   // Totaux
-  const totalNet = Number(vente.totalNet) || 0;
-  const remisePct = parseFloat(vente.recap?.remisePct) || 0;
-  const totalBrut = remisePct > 0 ? Math.round(totalNet / (1 - remisePct / 100)) : totalNet;
-  const remiseMontant = totalBrut - totalNet;
+  const totaux = normaliserTotauxVente(vente);
+  const totalNet = totaux.totalNet;
+  const remisePct = totaux.remisePct;
+  const totalBrut = totaux.totalBrut;
+  const remiseMontant = totaux.valeurRemise;
   // `acompte` = versement courant ; `totalPaye` = cumul déjà réglé (versement
   // inclus) → alimente la ligne ACOMPTE et le TOTAL RESTE (mise à jour au solde).
   const acompte = Number(reglement.montant) || 0;
@@ -1038,10 +1042,11 @@ function imprimerReglement(reglement: any, vente: any, magasinId?: string) {
   const dateReg = reglement.date || new Date().toISOString();
 
   // Totaux
-  const totalNet = Number(vente.totalNet) || 0;
-  const remisePct = parseFloat(vente.recap?.remisePct) || 0;
-  const totalBrut = remisePct > 0 ? Math.round(totalNet / (1 - remisePct / 100)) : totalNet;
-  const remiseMontant = totalBrut - totalNet;
+  const totaux = normaliserTotauxVente(vente);
+  const totalNet = totaux.totalNet;
+  const remisePct = totaux.remisePct;
+  const totalBrut = totaux.totalBrut;
+  const remiseMontant = totaux.valeurRemise;
   const acompte = Number(reglement.montant) || 0;
   const totalPaye = reglement.totalPaye != null ? Number(reglement.totalPaye) : acompte;
   const totalAssurance = Array.isArray(vente.bonsAssurance)
@@ -2307,10 +2312,10 @@ function imprimerFacture(f: FactureData, magasinId?: string) {
   const totalAssurance = f.bonsAssurance.reduce((s, b) => s + (parseFloat(b.montantPrisEnCharge) || 0), 0);
   const reste = f.totalNet - totalAssurance - acompte;
   const remisePct = parseFloat(f.remisePct) || 0;
-  const totalBrutVerres = (f.verres || []).reduce((s, v: any) => s + (parseFloat(v.totalVerres) || 0), 0);
-  const totalBrutArticles = f.articles.reduce((s, a) => s + (parseFloat(a.total) || 0), 0);
-  const totalBrut = totalBrutVerres + totalBrutArticles;
-  const remiseMontant = totalBrut - f.totalNet;
+  const totaux = normaliserTotauxVente(f);
+  const totalBrut = totaux.totalBrut;
+  const totalNet = totaux.totalNet;
+  const remiseMontant = totaux.valeurRemise;
 
   const verres = f.verres || [];
   const hasVerres = verres.length > 0;
@@ -4965,10 +4970,10 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
             const acompte = parseFloat(v.recap.acompte) || 0;
             const totalAssurance = v.bonsAssurance.reduce((s, b) => s + (parseFloat(b.montantPrisEnCharge) || 0), 0);
             const totalReglements = (reglementsParVente[v.id] || []).reduce((s, r) => s + r.montant, 0);
-            const reste = v.totalNet - acompte - totalAssurance - totalReglements;
-            const remisePct = parseFloat(v.recap.remisePct) || 0;
-            const totalBrut = v.articles.reduce((s, a) => s + (parseFloat(a.total) || 0), 0) +
-              (v.verres?.reduce((s: number, vr: any) => s + (parseFloat(vr.totalVerres) || 0), 0) || 0);
+            const totaux = normaliserTotauxVente(v);
+            const reste = totaux.totalNet - acompte - totalAssurance - totalReglements;
+            const remisePct = totaux.remisePct;
+            const totalBrut = totaux.totalBrut;
             const rowBgColor = reste > 0 ? '#fee2e2' : '#dcfce7';
             const actions = (
               <div className="flex flex-col items-center justify-center gap-1">
@@ -5476,6 +5481,7 @@ function FormulaireVente({ magasinId, onRetour, onVenteEnregistree, venteInitial
 
 /** Convertit une vente Firestore (snake_case) en VenteSauvegardee (camelCase). */
 function venteSupabaseToSauvegardee(v: VenteSupabase): VenteSauvegardee {
+  const totaux = normaliserTotauxVente(v);
   return {
     id: v.id,
     date: v.date,
@@ -5498,8 +5504,8 @@ function venteSupabaseToSauvegardee(v: VenteSupabase): VenteSauvegardee {
     verres: v.verres || [],
     articles: v.articles || [],
     bonsAssurance: v.bons_assurance || [],
-    totalBrut: v.total_brut,
-    totalNet: v.total_net,
+    totalBrut: totaux.totalBrut,
+    totalNet: totaux.totalNet,
     recap: v.recap || {},
     observation: (v as any).observation || '',
     createdBy: v.edite_par || '',

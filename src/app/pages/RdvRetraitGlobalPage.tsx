@@ -1,4 +1,5 @@
 import { logger } from '../utils/logger';
+import { normaliserTotauxVente } from '../utils/venteTotals';
 import { useState, useMemo, useEffect } from 'react';
 import { Search, X, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight } from 'lucide-react';
 import { doc, onSnapshot } from '../utils/firestoreCompat';
@@ -296,7 +297,7 @@ export function RdvRetraitGlobalPage() {
             ) : pageData.map(v => {
               const rdvDate = v.recap?.rdvRetrait || v.rdvRetrait || '';
               const acompte = parseFloat(v.recap?.acompte || '0');
-              const totalReste = v.totalNet - acompte;
+              const totalReste = normaliserTotauxVente(v).totalNet - acompte;
               return (
                 <div key={v.id} className="rounded-lg p-3 text-xs" style={{ backgroundColor: '#fca5a5', color: '#7f1d1d' }}>
                   <div className="flex items-start gap-2">

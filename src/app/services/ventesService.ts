@@ -14,6 +14,7 @@ import {
 import { db } from '../utils/firebaseClient';
 import { journaliserSuppression } from './auditLogService';
 import { logNetworkAware, isAuthError, isNoSessionError } from '../utils/networkErrors';
+import { avecTotauxVenteNormalises } from '../utils/venteTotals';
 
 export interface VenteSupabase {
   id: string;
@@ -62,7 +63,7 @@ export function readVentesCache(magasinId: string): VenteSupabase[] {
   try {
     const raw = localStorage.getItem(ventesCacheKey(magasinId));
     const p = raw ? JSON.parse(raw) : [];
-    return Array.isArray(p) ? p : [];
+    return Array.isArray(p) ? p.map(v => avecTotauxVenteNormalises(v)) : [];
   } catch { return []; }
 }
 
@@ -85,9 +86,10 @@ function writeVentesCache(magasinId: string, ventes: VenteSupabase[]) {
 function upsertVenteCache(vente: VenteSupabase) {
   const apply = (key: string) => {
     const list = readVentesCache(key);
-    const idx = list.findIndex(v => v.id === vente.id);
-    if (idx >= 0) list[idx] = vente;
-    else list.unshift(vente);
+    const venteNorm = avecTotauxVenteNormalises(vente);
+    const idx = list.findIndex(v => v.id === venteNorm.id);
+    if (idx >= 0) list[idx] = venteNorm;
+    else list.unshift(venteNorm);
     writeVentesCache(key, sortByDateDesc(list));
   };
   if (vente.magasin_id) apply(vente.magasin_id);
@@ -108,7 +110,7 @@ export async function chargerVentes(magasinId: string): Promise<VenteSupabase[]>
   try {
     const q = query(collection(db, COLLECTION), where('magasin_id', '==', magasinId));
     const snap = await getDocs(q);
-    const ventes = sortByDateDesc(snap.docs.map(d => ({ id: d.id, ...d.data() } as VenteSupabase)));
+    const ventes = sortByDateDesc(snap.docs.map(d => avecTotauxVenteNormalises({ id: d.id, ...d.data() }) as VenteSupabase));
     writeVentesCache(magasinId, ventes);
     return ventes;
   } catch (err) {
@@ -121,7 +123,7 @@ export async function chargerVentes(magasinId: string): Promise<VenteSupabase[]>
 export async function chargerToutesLesVentes(): Promise<VenteSupabase[]> {
   try {
     const snap = await getDocs(collection(db, COLLECTION));
-    const ventes = sortByDateDesc(snap.docs.map(d => ({ id: d.id, ...d.data() } as VenteSupabase)));
+    const ventes = sortByDateDesc(snap.docs.map(d => avecTotauxVenteNormalises({ id: d.id, ...d.data() }) as VenteSupabase));
     writeVentesCache('ALL', ventes);
     return ventes;
   } catch (err) {
@@ -134,7 +136,7 @@ export async function chargerToutesLesVentes(): Promise<VenteSupabase[]> {
 export async function chargerVenteParId(venteId: string): Promise<VenteSupabase | null> {
   try {
     const snap = await getDoc(doc(db, COLLECTION, venteId));
-    return snap.exists() ? ({ id: snap.id, ...snap.data() } as VenteSupabase) : null;
+    return snap.exists() ? (avecTotauxVenteNormalises({ id: snap.id, ...snap.data() }) as VenteSupabase) : null;
   } catch (err) {
     logger.error('Erreur chargerVenteParId (Firestore):', err);
     return null;
@@ -147,7 +149,7 @@ export async function ajouterVente(
 ): Promise<VenteSupabase | null> {
   try {
     const now = new Date().toISOString();
-    const data = { ...vente, created_at: now, updated_at: now } as VenteSupabase;
+    const data = { ...avecTotauxVenteNormalises(vente), created_at: now, updated_at: now } as VenteSupabase;
     // Écriture OPTIMISTE : on met le cache local à jour immédiatement pour que
     // l'interface affiche la vente sans attendre l'aller-retour réseau.
     upsertVenteCache(data);
@@ -269,7 +271,7 @@ function subscribeVentesDiff(
     buildQuery(),
     (snap: any) => {
       snap.docChanges().forEach((change: any) => {
-        const v = { id: change.doc.id, ...change.doc.data() } as VenteSupabase;
+        const v = avecTotauxVenteNormalises({ id: change.doc.id, ...change.doc.data() }) as VenteSupabase;
         if (change.type === 'added') onInsert(v);
         else if (change.type === 'modified') onUpdate(v);
         else if (change.type === 'removed') onDelete(v.id);

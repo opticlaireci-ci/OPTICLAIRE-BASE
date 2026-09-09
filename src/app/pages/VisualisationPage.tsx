@@ -16,6 +16,7 @@ import { pdfHeader, excelHeaderRows } from '../utils/documentHeader';
 import { afficherPdfBlob } from '../utils/inAppViewer';
 import { useModesPaiement, useMontures, getMontureLabel } from '../utils/venteLookups';
 import { TENANT } from '../config/tenant';
+import { normaliserTotauxVente } from '../utils/venteTotals';
 
 // Option spéciale du filtre « mode de paiement » : sélectionne toutes les
 // factures réglées (partiellement ou totalement) par bon d'assurance.
@@ -164,8 +165,8 @@ export function VisualisationPage() {
 
   // Montant total d'une vente/devis (gère devis à propositions).
   const montantVente = (v: VenteSupabase): number => {
-    if (num(v.total_net) > 0) return num(v.total_net);
-    if (num(v.total_brut) > 0) return num(v.total_brut);
+    const t = normaliserTotauxVente(v);
+    if (t.totalNet > 0) return t.totalNet;
     const props = Array.isArray(v.verres) ? (v.verres as any[]) : [];
     return props.reduce((s, p) => s + (p && typeof p === 'object' && 'totalNet' in p ? num(p.totalNet) : 0), 0);
   };

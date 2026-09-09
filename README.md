@@ -146,3 +146,10 @@ Si Supabase affiche : `new row violates row-level security policy for table "mou
 `supabase/FIX_RLS_MOUVEMENTS_STOCK_DEFINITIF.sql`
 
 Cette correction rend `mouvements_stock` compatible avec les anciennes et nouvelles structures (`magasin_id`, `magasin_source`, `magasin_destination` et `data`), migre les anciennes valeurs JSONB et recrée les policies RLS. L'application renseigne désormais aussi `magasin_id` sur chaque mouvement et conserve les colonnes source/destination lorsque disponibles.
+
+
+## CORRECTION DÉFINITIVE — TOTAL / TOTAL NET / BONS D’ASSURANCE
+
+Le fichier `supabase/FIX_TOTAUX_VENTES_ASSURANCE_DEFINITIF.sql` corrige les anciennes ventes où `TOTAL < TOTAL NET` (notamment les ventes avec bons d’assurance) et installe un trigger + une contrainte pour empêcher que cette incohérence réapparaisse.
+
+À exécuter une seule fois dans **Supabase → SQL Editor** sur la base existante. Le bon d’assurance reste un mode de prise en charge/règlement et ne diminue jamais le TOTAL ni le TOTAL NET.

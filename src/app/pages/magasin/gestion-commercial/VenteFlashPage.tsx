@@ -13,6 +13,7 @@ import { enregistrerVente } from '../../../services/inventaireService';
 import { verifierStockVente, messageRuptures } from '../../../utils/stockVente';
 import { StockParMagasin } from '../../../components/StockParMagasin';
 import { useAuth } from '../../../contexts/AuthContext';
+import { normaliserTotauxVente } from '../../../utils/venteTotals';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 const genNumClient = () => String(Math.floor(10000 + Math.random() * 90000));
@@ -21,10 +22,11 @@ const fmtN = (n: number) => n.toLocaleString('fr-FR');
 // Convertit une vente Firestore (snake_case) vers le type VenteFlash (camelCase) attendu par l'UI.
 const supabaseToVenteFlash = (v: VenteSupabase): VenteFlash => {
   const recap: any = v.recap || {};
-  const total = (v.articles || []).reduce((s: number, a: any) => s + (parseFloat(a.total) || 0), 0);
-  const remisePct = recap.remisePct || '';
-  const valeurRemise = total * (parseFloat(remisePct) || 0) / 100;
-  const totalNet = typeof v.total_net === 'number' && v.total_net > 0 ? v.total_net : total - valeurRemise;
+  const totaux = normaliserTotauxVente(v);
+  const total = totaux.totalBrut;
+  const remisePct = String(totaux.remisePct);
+  const valeurRemise = totaux.valeurRemise;
+  const totalNet = totaux.totalNet;
   const totalAssurance = (v.bons_assurance || []).reduce((s: number, b: any) => s + (parseFloat(b.montant) || 0), 0);
   const acompteN = parseFloat(recap.acompte || '0') || 0;
   return {

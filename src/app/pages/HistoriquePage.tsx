@@ -1,4 +1,5 @@
 import { logger } from '../utils/logger';
+import { normaliserTotauxVente } from '../utils/venteTotals';
 import { useState, useEffect, useMemo } from 'react';
 import {
   Box,
@@ -105,7 +106,7 @@ export function HistoriquePage() {
         ventes.forEach(v => {
           const r: any = v.recap || {};
           const numDoc = r.numDevis || r.numFacture || v.numero_client || '';
-          const total = Number(v.total_net) || Number(v.total_brut) || 0;
+          const total = normaliserTotauxVente(v).totalNet;
           pushRecord(acc, {
             id: `vente-${v.id}`, module: v.type === 'devis' ? 'Devis / Proforma' : 'Ventes / Factures',
             magasin: v.magasin_id, user: v.edite_par, fallbackDate: v.date,

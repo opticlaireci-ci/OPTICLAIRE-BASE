@@ -1,4 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react';
+import { normaliserTotauxVente } from '../utils/venteTotals';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell, AreaChart, Area, LineChart, Line,
@@ -28,7 +29,7 @@ const fmtAxis = (n: number) =>
   n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 1000 ? `${(n / 1000).toFixed(0)}K` : String(n);
 const fmtPct = (n: number) => `${(Number.isFinite(n) ? n : 0).toFixed(2)}%`;
 
-const venteAmount = (v: any) => Number(v?.total_net ?? v?.totalNet ?? v?.total_brut ?? v?.total ?? 0) || 0;
+const venteAmount = (v: any) => normaliserTotauxVente(v).totalNet;
 const bonsAmount = (v: any) =>
   Array.isArray(v?.bons_assurance)
     ? v.bons_assurance.reduce((s: number, b: any) => s + (Number(b?.montant ?? b?.total ?? b?.montantAssurance ?? 0) || 0), 0)
