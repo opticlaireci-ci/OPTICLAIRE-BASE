@@ -220,8 +220,10 @@ function FormulaireVenteFlash({ magasinId, onRetour, onSaved }: { magasinId: str
         articles: articles as any,
         bons_assurance: bonsAssurance as any,
         recap: { remisePct, acompte, modePaiement, compteBanque, details, numFacture },
-        total_brut: 0,
-        total_net: 0,
+        // Toujours envoyer les totaux calculés par les lignes.
+        // L'assurance n'entre jamais dans ces deux montants.
+        total_brut: total,
+        total_net: totalNet,
         edite_par: user?.nom || user?.prenom || user?.email || '',
         statut: 'en_cours',
       } as any);

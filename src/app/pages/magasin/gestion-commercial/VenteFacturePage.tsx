@@ -2310,11 +2310,11 @@ function imprimerFacture(f: FactureData, magasinId?: string) {
   const editePar = f.editePar || '—';
   const acompte = parseFloat(f.acompte) || 0;
   const totalAssurance = f.bonsAssurance.reduce((s, b) => s + (parseFloat(b.montantPrisEnCharge) || 0), 0);
-  const reste = f.totalNet - totalAssurance - acompte;
   const remisePct = parseFloat(f.remisePct) || 0;
   const totaux = normaliserTotauxVente(f);
   const totalBrut = totaux.totalBrut;
   const totalNet = totaux.totalNet;
+  const reste = totalNet - totalAssurance - acompte;
   const remiseMontant = totaux.valeurRemise;
 
   const verres = f.verres || [];
@@ -2483,7 +2483,7 @@ function imprimerFacture(f: FactureData, magasinId?: string) {
     <div class="totaux">
       <div class="totaux-row"><span>TOTAL :</span><span>${totalBrut.toLocaleString('fr-FR')} F CFA</span></div>
       ${remiseMontant > 0 ? `<div class="totaux-row"><span>REMISE (${remisePct}%) :</span><span>- ${remiseMontant.toLocaleString('fr-FR')} F CFA</span></div>` : ''}
-      <div class="totaux-row net"><span>TOTAL NET :</span><span>${f.totalNet.toLocaleString('fr-FR')} F CFA</span></div>
+      <div class="totaux-row net"><span>TOTAL NET :</span><span>${totalNet.toLocaleString('fr-FR')} F CFA</span></div>
       ${totalAssurance > 0 ? `<div class="totaux-row" style="color:#2e7d32"><span>Prise en charge :</span><span>- ${totalAssurance.toLocaleString('fr-FR')} F CFA</span></div>` : ''}
       ${acompte > 0 ? `<div class="totaux-row"><span>ACOMPTE :</span><span>- ${acompte.toLocaleString('fr-FR')} F CFA</span></div>` : ''}
       <div class="totaux-row reste"><span>TOTAL RESTE :</span><span>${reste.toLocaleString('fr-FR')} F CFA</span></div>
@@ -2491,7 +2491,7 @@ function imprimerFacture(f: FactureData, magasinId?: string) {
     </div>
 
     <div style="margin-top:16px;font-size:12px;font-weight:600;text-transform:uppercase;">
-      Arrêté la présente facture à la somme de : ${montantEnLettres(f.totalNet)}
+      Arrêté la présente facture à la somme de : ${montantEnLettres(totalNet)}
     </div>
 
   <!-- Signature dans le flux, sous les totaux -->
@@ -5020,7 +5020,7 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
                       </div>
                       <div className="bg-white/70 rounded p-1">
                         <div className="text-xs text-gray-500">Net</div>
-                        <div className="text-xs font-bold text-gray-800">{v.totalNet.toLocaleString('fr-FR')}</div>
+                        <div className="text-xs font-bold text-gray-800">{totaux.totalNet.toLocaleString('fr-FR')}</div>
                       </div>
                     </div>
                     {/* Paiements */}
@@ -5083,7 +5083,7 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
                         </td>
                         <td className="px-3 py-2 text-right text-sm border border-gray-300 font-semibold">{totalBrut.toLocaleString('fr-FR')}</td>
                         <td className="px-3 py-2 text-center text-sm border border-gray-300">{remisePct}%</td>
-                        <td className="px-3 py-2 text-right text-sm border border-gray-300 font-semibold">{v.totalNet.toLocaleString('fr-FR')}</td>
+                        <td className="px-3 py-2 text-right text-sm border border-gray-300 font-semibold">{totaux.totalNet.toLocaleString('fr-FR')}</td>
                         <td className="px-3 py-2 text-sm border border-gray-300">
                           {acompte > 0 && <div className="text-xs mb-1"><span className="font-medium">Acompte: </span><span className="font-semibold">{acompte.toLocaleString('fr-FR')} F</span></div>}
                           {v.bonsAssurance.map((b, bi) => (
@@ -5189,9 +5189,20 @@ function FormulaireVente({ magasinId, onRetour, onVenteEnregistree, venteInitial
 
     const userName = user?.nom || user?.prenom || user?.email || 'Utilisateur';
 
-    // Calculer le total brut
-    const totalBrut = articles.reduce((s, a) => s + (parseFloat(a.total) || 0), 0) +
-      verre.reduce((s, v) => s + (parseFloat(v.totalVerres) || 0), 0);
+    // Calculer les totaux depuis les LIGNES de vente. Un bon d'assurance ne
+    // participe jamais au TOTAL / TOTAL NET : il intervient uniquement dans le
+    // calcul du TOTAL RESTE. Cette normalisation protège aussi contre une valeur
+    // transmise accidentellement par un ancien écran.
+    const totauxEnregistrement = normaliserTotauxVente({
+      articles,
+      verres: verre,
+      recap,
+      total_brut: articles.reduce((s, a) => s + (parseFloat(a.total) || 0), 0) +
+        verre.reduce((s, v) => s + (parseFloat(v.totalVerres) || 0), 0),
+      total_net: totalNet,
+    });
+    const totalBrut = totauxEnregistrement.totalBrut;
+    const totalNetNormalise = totauxEnregistrement.totalNet;
 
     // Numéro de reçu (versement) : généré UNE fois et conservé sur la vente pour
     // rester stable entre les impressions. Réutilise l'existant en mode édition.
@@ -5206,7 +5217,8 @@ function FormulaireVente({ magasinId, onRetour, onVenteEnregistree, venteInitial
       verres: verre,
       articles,
       bonsAssurance,
-      totalNet,
+      totalNet: totalNetNormalise,
+      totalBrut,
       recap: recapAvecRecu,
       clientInfo: client, // Save full client info for details display
       observation,
@@ -5251,7 +5263,7 @@ function FormulaireVente({ magasinId, onRetour, onVenteEnregistree, venteInitial
 
         // Totaux
         total_brut: totalBrut,
-        total_net: totalNet,
+        total_net: totalNetNormalise,
 
         // Métadonnées
         edite_par: userName,
@@ -5318,7 +5330,7 @@ function FormulaireVente({ magasinId, onRetour, onVenteEnregistree, venteInitial
 
     savingRef.current = false;
     setDerniereVente(venteWithAudit);
-    setSucces({ total: totalNet.toLocaleString('fr-FR') });
+    setSucces({ total: totalNetNormalise.toLocaleString('fr-FR') });
 
     // Trigger sync event after render completes
     setTimeout(() => {

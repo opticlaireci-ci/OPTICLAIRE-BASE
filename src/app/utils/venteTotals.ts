@@ -62,15 +62,18 @@ export function normaliserTotauxVente(vente: any): TotauxVenteNormalises {
   const netEnregistre = roundMoney(vente?.total_net ?? vente?.totalNet);
   const remisePct = getRemisePct(vente);
 
-  // On ne laisse jamais un ancien total brut inférieur au net enregistré.
-  // Lorsque le montant des lignes existe, il est également pris en compte.
-  let totalBrut = Math.max(lignes, brutEnregistre, netEnregistre);
-
-  // Si un ancien TOTAL NET a été conservé avec une remise, le brut minimal
-  // compatible avec ce net est recalculé afin de ne pas inverser les totaux.
-  if (remisePct > 0 && remisePct < 100 && netEnregistre > 0) {
-    totalBrut = Math.max(totalBrut, roundMoney(netEnregistre / (1 - remisePct / 100)));
-  }
+  // SOURCE DE VÉRITÉ : lorsque les lignes de la vente existent, leur somme
+  // détermine le TOTAL brut. On ne doit JAMAIS utiliser un ancien TOTAL NET
+  // erroné pour gonfler le brut (notamment quand un bon d'assurance de 100 000 F
+  // a été accidentellement enregistré dans total_net alors que la vente vaut
+  // 30 000 F). Le bon d'assurance est un règlement/une prise en charge, pas une
+  // ligne de vente.
+  //
+  // S'il n'y a aucune ligne exploitable, on conserve le total brut enregistré ;
+  // en dernier recours seulement, on utilise l'ancien total net.
+  let totalBrut = lignes > 0
+    ? lignes
+    : (brutEnregistre > 0 ? brutEnregistre : netEnregistre);
 
   const valeurRemise = roundMoney(totalBrut * remisePct / 100);
   const totalNet = Math.max(0, totalBrut - valeurRemise);
