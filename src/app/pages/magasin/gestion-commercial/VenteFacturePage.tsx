@@ -5253,23 +5253,26 @@ function FormulaireVente({ magasinId, onRetour, onVenteEnregistree, venteInitial
         statut: 'en_cours',
       };
 
-      // Enregistrement OPTIMISTE : ajouterVente met le cache local à jour
-      // immédiatement (avant l'await réseau), donc la confirmation s'affiche
-      // aussitôt. L'écriture Firestore se poursuit EN ARRIÈRE-PLAN ; en cas
-      // d'échec réseau réel, l'utilisateur est prévenu.
-      ajouterVente(venteSupabase)
-        .then(() => logger.log('✅ Vente enregistrée sur Firebase'))
-        .catch(error => {
-          const message = error instanceof Error ? error.message : String(error);
-          logger.error('❌ Échec enregistrement Firebase:', error);
-          reportFirebaseError('Enregistrement vente', error);
-          alert(`⚠️ La vente s'est affichée mais la synchronisation cloud a échoué.\n\nCause :\n${message}\n\nVérifiez votre connexion ; réessayez si elle n'apparaît pas sur les autres appareils.`);
-        });
+      // IMPORTANT : on attend maintenant la confirmation cloud.
+      // Une vente ne peut plus afficher « Vente enregistrée » si Firestore /
+      // Supabase n'a pas confirmé son écriture. ajouterVente effectue en plus
+      // 3 tentatives en cas de coupure réseau temporaire.
+      try {
+        await ajouterVente(venteSupabase);
+        logger.log('✅ Vente enregistrée et confirmée dans le cloud:', venteSupabase.id);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        logger.error('❌ Échec définitif enregistrement cloud:', error);
+        reportFirebaseError('Enregistrement vente', error);
+        alert(`❌ LA VENTE N'A PAS ÉTÉ CONFIRMÉE DANS LA BASE.\n\nCause :\n${message}\n\nAucune confirmation de vente ne sera affichée. Vérifiez la connexion puis réessayez.`);
+        savingRef.current = false;
+        return;
+      }
 
       // Décrémenter le stock réel du magasin (montures / accessoires vendus).
-      // Exécuté EN ARRIÈRE-PLAN (pas d'await) : l'écran de succès s'affiche
-      // immédiatement après l'enregistrement de la vente au lieu d'attendre la
-      // mise à jour du stock, ce qui rend l'enregistrement beaucoup plus rapide.
+      // On attend également la confirmation du mouvement de stock afin d'éviter
+      // une vente enregistrée sans sortie de stock. Le mouvement est idempotent
+      // grâce à son identifiant déterministe (bon + article).
       const items = articles
         .filter(a => a.type === 'monture' || a.type === 'accessoire')
         .map(a => ({
@@ -5280,8 +5283,17 @@ function FormulaireVente({ magasinId, onRetour, onVenteEnregistree, venteInitial
           prixVente: parseFloat(a.prix) || 0,
         }));
       if (items.length > 0) {
-        enregistrerVente({ magasinId: magasinId.toUpperCase(), bonReference: recap.numFacture, items })
-          .catch(stockErr => logger.error('❌ Décrément stock vente:', stockErr));
+        const stockOk = await enregistrerVente({ magasinId: magasinId.toUpperCase(), bonReference: recapAvecRecu.numFacture, items });
+        if (!stockOk) {
+          // La vente est bien dans la base, mais sa sortie de stock n'est pas
+          // confirmée : on ne masque pas ce problème derrière l'écran succès.
+          const message = 'La vente est enregistrée, mais la sortie de stock n'a pas été confirmée. Réessayez la vente / vérifiez les mouvements avant de continuer.';
+          logger.error('❌ Décrément stock vente non confirmé:', venteSupabase.id);
+          reportFirebaseError('Mouvement de stock vente', new Error(message));
+          alert(`⚠️ ${message}`);
+          savingRef.current = false;
+          return;
+        }
       }
 
       // NB : le stock « Lentilles OPTIC » n'est PLUS décrémenté ici. La sortie de

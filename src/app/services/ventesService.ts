@@ -151,8 +151,29 @@ export async function ajouterVente(
     // Écriture OPTIMISTE : on met le cache local à jour immédiatement pour que
     // l'interface affiche la vente sans attendre l'aller-retour réseau.
     upsertVenteCache(data);
-    await setDoc(doc(db, COLLECTION, vente.id), data, { merge: true });
-    logger.log('✅ Vente enregistrée sur Firestore:', vente.id);
+
+    // Écriture fiable : une vente ne doit JAMAIS être considérée comme
+    // enregistrée tant que le cloud n'a pas confirmé l'upsert. Les anciennes
+    // versions lançaient cette écriture puis retournaient immédiatement, ce
+    // qui permettait d'afficher « Vente enregistrée » alors qu'une coupure
+    // réseau pouvait encore faire échouer l'écriture.
+    let dernierErreur: any = null;
+    for (let tentative = 1; tentative <= 3; tentative++) {
+      try {
+        await setDoc(doc(db, COLLECTION, vente.id), data, { merge: true });
+        logger.log(`✅ Vente enregistrée sur Firestore (tentative ${tentative}):`, vente.id);
+        dernierErreur = null;
+        break;
+      } catch (err) {
+        dernierErreur = err;
+        if (tentative < 3) {
+          const delai = 500 * Math.pow(2, tentative - 1);
+          logger.warn(`⚠️ Vente non synchronisée, nouvelle tentative dans ${delai} ms (${tentative}/3):`, err);
+          await new Promise(resolve => setTimeout(resolve, delai));
+        }
+      }
+    }
+    if (dernierErreur) throw dernierErreur;
 
     // SMS de remerciement pour une VENTE réelle (pas un devis). Idempotent :
     // un seul SMS par vente, en arrière-plan (n'impacte pas l'enregistrement).
@@ -166,9 +187,11 @@ export async function ajouterVente(
 
     return data;
   } catch (err) {
-    // Session expirée/absente → warn discret (la vente est déjà dans le cache
-    // local optimiste). On propage tout de même l'erreur pour que l'appelant
-    // informe l'utilisateur qu'il doit se reconnecter pour synchroniser.
+    // Aucune vente fantôme ne doit rester dans le cache si le cloud n'a jamais
+    // confirmé l'écriture.
+    try { removeVenteCache(vente.id); } catch {}
+    // Session expirée/absente → l'erreur est propagée afin que l'utilisateur
+    // puisse corriger la connexion et réessayer.
     if (isAuthError(err) || isNoSessionError(err)) {
       logNetworkAware('⚠️ ajouterVente (cache local conservé)', err);
     } else {

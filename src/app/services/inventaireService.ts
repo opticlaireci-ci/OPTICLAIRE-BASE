@@ -254,30 +254,39 @@ async function insertMouvements(rows: any[]): Promise<boolean> {
   if (rows.length === 0) return true;
   const userId = auth.currentUser?.uid || null;
   const now = new Date().toISOString();
-  try {
-    await Promise.all(rows.map(r => {
-      const { _docId, ...data } = r;
-      const payload = { ...data, user_id: userId, created_at: now };
-      // Id DÉTERMINISTE (bon + article) → une ré-acceptation OU un retry réseau
-      // écrase le même document au lieu d'en créer un doublon (10 distribué =
-      // 10 en stock, jamais 60). Sans `_docId`, on retombe sur addDoc (auto-id).
-      if (_docId) return setDoc(doc(db, 'mouvements_stock', _docId), payload, { merge: true });
-      return addDoc(collection(db, 'mouvements_stock'), payload);
-    }));
-    return true;
-  } catch (err: any) {
-    // Session expirée/absente : ce n'est pas un refus métier. On journalise en
-    // warn discret (le cache local est conservé) et on invite à se reconnecter,
-    // sans l'alerte rouge « Mouvement refusé » qui laisse croire à un bug.
-    if (isAuthError(err) || isNoSessionError(err)) {
-      logNetworkAware('⚠️ insertMouvements (cache local conservé)', err);
-      alert('Session expirée : reconnectez-vous pour synchroniser les mouvements de stock.');
-      return false;
+  let dernierErreur: any = null;
+
+  // Une coupure réseau momentanée ne doit pas perdre une sortie de stock.
+  // Les IDs déterministes rendent chaque tentative idempotente.
+  for (let tentative = 1; tentative <= 3; tentative++) {
+    try {
+      await Promise.all(rows.map(r => {
+        const { _docId, ...data } = r;
+        const payload = { ...data, user_id: userId, created_at: now };
+        if (_docId) return setDoc(doc(db, 'mouvements_stock', _docId), payload, { merge: true });
+        return addDoc(collection(db, 'mouvements_stock'), payload);
+      }));
+      logger.log(`✅ Mouvements de stock confirmés (tentative ${tentative})`);
+      return true;
+    } catch (err: any) {
+      dernierErreur = err;
+      if (tentative < 3) {
+        const delai = 500 * Math.pow(2, tentative - 1);
+        logger.warn(`⚠️ Mouvement de stock non synchronisé, nouvelle tentative dans ${delai} ms (${tentative}/3):`, err);
+        await new Promise(resolve => setTimeout(resolve, delai));
+      }
     }
-    logger.error('❌ insertMouvements:', err.message);
-    alert(`Mouvement de stock refusé : ${err.message}`);
+  }
+
+  const err: any = dernierErreur;
+  if (isAuthError(err) || isNoSessionError(err)) {
+    logNetworkAware('⚠️ insertMouvements (échec après 3 tentatives)', err);
+    alert('Session expirée : reconnectez-vous pour synchroniser les mouvements de stock.');
     return false;
   }
+  logger.error('❌ insertMouvements après 3 tentatives:', err?.message || err);
+  alert(`Mouvement de stock refusé après 3 tentatives : ${err?.message || err}`);
+  return false;
 }
 
 export async function enregistrerDistribution(params: {
