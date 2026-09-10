@@ -5190,6 +5190,20 @@ function FormulaireVente({ magasinId, onRetour, onVenteEnregistree, venteInitial
       return;
     }
 
+    // Garde-fou : un bon d'assurance est une prise en charge de règlement, PAS
+    // une ligne de vente. Si l'opérateur a ajouté un bon d'assurance sans avoir
+    // saisi la moindre monture/article ni le moindre verre, le TOTAL calculé
+    // serait 0 F — ce qui a été, par le passé, la cause du bug où le montant de
+    // l'assurance se retrouvait affiché à la place du vrai total. On bloque
+    // donc l'enregistrement tant que la monture et/ou les verres ne sont pas
+    // renseignés, pour garantir Total = somme(monture) + somme(verres) même
+    // avec un bon d'assurance.
+    const aLigneVente = articles.length > 0 || verre.length > 0;
+    if (bonsAssurance.length > 0 && !aLigneVente) {
+      alert("Veuillez renseigner la monture (Étape III) et/ou les verres (Étape II) avant d'enregistrer.\n\nUn bon d'assurance est un mode de règlement : il ne remplace jamais le détail de la vente. Le Total doit toujours correspondre à la somme de la monture et des verres.");
+      return;
+    }
+
     // Garde anti-double : empêche un double enregistrement (double-clic / re-render).
     if (savingRef.current) return;
     savingRef.current = true;

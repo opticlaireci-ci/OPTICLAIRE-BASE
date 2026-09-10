@@ -193,6 +193,14 @@ function FormulaireVenteFlash({ magasinId, onRetour, onSaved }: { magasinId: str
       return;
     }
 
+    // Garde-fou : un bon d'assurance est un mode de règlement, pas une ligne de
+    // vente. Sans article renseigné, le Total serait 0 F et le bon d'assurance
+    // pourrait, par erreur, être perçu comme le total de la vente.
+    if (bonsAssurance.length > 0 && articles.length === 0) {
+      alert("Veuillez renseigner au moins un article (monture/verre) avant d'enregistrer.\n\nUn bon d'assurance est un mode de règlement : il ne remplace jamais le détail de la vente.");
+      return;
+    }
+
     // Garde anti-double : empêche un double enregistrement (double-clic / re-render).
     if (savingRef.current) return;
     savingRef.current = true;
