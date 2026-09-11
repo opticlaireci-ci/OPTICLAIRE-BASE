@@ -53,6 +53,24 @@ export function findVerreByName(verres: VerreRecord[], nom: string): VerreRecord
   return verres.find(v => v.verre?.toLowerCase() === nom.trim().toLowerCase()) ?? null;
 }
 
+/**
+ * Suggestions pour le champ libre « Traitement » du bloc Verre (prescription).
+ * Combine le catalogue dédié (Gestion des Traitements) ET les traitements déjà
+ * utilisés sur des verres enregistrés, pour que TOUT traitement connu de
+ * l'enseigne apparaisse — même s'il n'a été saisi que via un verre et jamais
+ * ajouté séparément au catalogue.
+ */
+export function useTraitementOptions(): string[] {
+  const traitements = useTraitements();
+  const verres = useVerresList();
+  return useMemo(() => {
+    const noms = new Set<string>();
+    for (const t of traitements) if (t.designation) noms.add(t.designation.trim());
+    for (const v of verres) if (v.traitement) noms.add(v.traitement.trim());
+    return [...noms].filter(Boolean).sort();
+  }, [traitements, verres]);
+}
+
 // ── Montures enregistrées ────────────────────────────────────────────────────
 export interface MontureRecord {
   id: string;
@@ -133,6 +151,22 @@ export function useServices(): ServiceRecord[] {
   return useLS<ServiceRecord>('leclaire_global_services');
 }
 
+// ── Traitements enregistrés (catalogue « Gestion des Traitements ») ─────────
+// Jusqu'ici, ce catalogue (leclaire_global_traitements, géré depuis
+// TraitementPage) n'était PAS repris dans useVenteProducts : un traitement
+// créé là-bas n'apparaissait donc jamais dans la liste « Monture | Accessoire
+// | Traitement | Service » de la Vente/Devis, alors que l'en-tête du tableau
+// l'annonce. On l'ajoute au même titre que montures/accessoires/services.
+export interface TraitementRecord {
+  id: string;
+  designation: string;
+  prix: number;
+}
+
+export function useTraitements(): TraitementRecord[] {
+  return useLS<TraitementRecord>('leclaire_global_traitements');
+}
+
 // ── Stock RÉEL d'un magasin (mouvements Firestore) ───────────────────────────
 /**
  * Retourne le stock réel disponible du magasin, agrégé depuis les mouvements
@@ -192,11 +226,11 @@ export function useStockMagasin(magasinId: string): Map<string, number> {
 // ── Index unifié des produits vendables (avec stock réel du magasin) ──────────
 export interface VenteProduct {
   produitId: string;
-  type: 'monture' | 'accessoire' | 'verre' | 'service';
+  type: 'monture' | 'accessoire' | 'verre' | 'service' | 'traitement';
   label: string;
   codeBarre: string;
   prix: number;
-  /** Quantité réelle en magasin, ou null si non gérée en stock (verre/service). */
+  /** Quantité réelle en magasin, ou null si non gérée en stock (verre/service/traitement). */
   stock: number | null;
 }
 
@@ -205,6 +239,7 @@ export function useVenteProducts(magasinId: string): VenteProduct[] {
   const accessoires = useAccessoires();
   const verres = useVerresList();
   const services = useServices();
+  const traitements = useTraitements();
   const stockMap = useStockMagasin(magasinId);
 
     // Le stock (mouvements) peut être indexé par l'id catalogue OU par la
@@ -277,8 +312,19 @@ export function useVenteProducts(magasinId: string): VenteProduct[] {
       });
     }
 
+    for (const t of traitements) {
+      list.push({
+        produitId: t.id,
+        type: 'traitement',
+        label: t.designation || '',
+        codeBarre: '',
+        prix: Number(t.prix) || 0,
+        stock: null,
+      });
+    }
+
     return list.filter(p => p.label);
-  }, [montures, accessoires, verres, services, stockMap]);
+  }, [montures, accessoires, verres, services, traitements, stockMap]);
 }
 
 /** Cherche un produit par libellé exact ou code-barre (insensible à la casse). */

@@ -11,7 +11,7 @@ import { autoSaveClient } from '../../../utils/autoClient';
 import { afficherPdfBlob, afficherHtml } from '../../../utils/inAppViewer';
 import { useSupabaseSync } from '../../../hooks/useSupabaseSync';
 import {
-  useTypesVerre, useVerresList, findVerreByName, VerreRecord,
+  useTypesVerre, useVerresList, useTraitementOptions, findVerreByName, VerreRecord,
   useVenteProducts, findVenteProduct, VenteProduct,
   useComptesBanque, useModesPaiement, autoSaveModePaiement,
   useProfessions, useOphtalmologues, useCabinets, useAssurances,
@@ -1582,6 +1582,7 @@ function VerreBlock({
 }) {
   const typesVerre = useTypesVerre();
   const verresList = useVerresList();
+  const traitementOptions = useTraitementOptions();
   const getRestant = useLentillesOpticStock();
   const [showVerreSug, setShowVerreSug] = useState(false);
   const verreBoxRef = useRef<HTMLDivElement>(null);
@@ -1590,10 +1591,15 @@ function VerreBlock({
   // écrire (pas de liste complète), et restreintes au type de verre choisi.
   const verreSuggestions = useMemo(() => {
     const q = (data.verre || '').trim().toLowerCase();
-    if (!q) return [];
+    const parType = (v: VerreRecord) =>
+      !data.typeVerre || !v.typeVerre || v.typeVerre.toLowerCase() === data.typeVerre.toLowerCase();
+    // Champ vide (clic dans le champ sans avoir tapé) : on propose déjà tous
+    // les verres enregistrés (filtrés par type si choisi), pour que la
+    // conseillère puisse sélectionner sans avoir à deviner un nom.
+    if (!q) return verresList.filter(parType).slice(0, 30);
     return verresList
       .filter(v => {
-        if (data.typeVerre && v.typeVerre && v.typeVerre.toLowerCase() !== data.typeVerre.toLowerCase()) return false;
+        if (!parType(v)) return false;
         return (
           v.verre?.toLowerCase().includes(q) ||
           v.traitement?.toLowerCase().includes(q) ||
@@ -1706,7 +1712,7 @@ function VerreBlock({
               placeholder="Commencez à écrire le verre..."
               value={data.verre}
               onChange={handleVerreChange}
-              onFocus={() => { if ((data.verre || '').trim()) setShowVerreSug(true); }}
+              onFocus={() => setShowVerreSug(true)}
               autoComplete="off"
             />
             {showVerreSug && verreSuggestions.length > 0 && (
@@ -1737,7 +1743,15 @@ function VerreBlock({
           </div>
           <div>
             <div className={purpleHdr}>Traitement</div>
-            <input className="w-full text-xs border border-purple-300 rounded px-2 py-1 bg-white" value={data.traitement} onChange={set('traitement')} />
+            <input
+              className="w-full text-xs border border-purple-300 rounded px-2 py-1 bg-white"
+              list={`traitements-verre-${index}`}
+              value={data.traitement}
+              onChange={set('traitement')}
+            />
+            <datalist id={`traitements-verre-${index}`}>
+              {traitementOptions.map(t => <option key={t} value={t} />)}
+            </datalist>
           </div>
           <div>
             <div className={purpleHdr}>Matière</div>
@@ -2024,7 +2038,7 @@ function StepIII({
       .flatMap(p => [p.label, p.codeBarre].filter(Boolean))
   )];
   const traitServiceOptions = [...new Set(
-    products.filter(p => p.type === 'verre' || p.type === 'service')
+    products.filter(p => p.type === 'verre' || p.type === 'service' || p.type === 'traitement')
       .map(p => p.label).filter(Boolean)
   )];
 
@@ -2256,7 +2270,7 @@ function StepIII({
                 onChange={e => {
                   const v = e.target.value;
                   setSearchService(v);
-                  addFromSearch(v, p => p.type === 'verre' || p.type === 'service', () => setSearchService(''));
+                  addFromSearch(v, p => p.type === 'verre' || p.type === 'service' || p.type === 'traitement', () => setSearchService(''));
                 }}
               />
             </div>

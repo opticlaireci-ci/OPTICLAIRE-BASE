@@ -8,7 +8,7 @@ import { addCreateAudit, addUpdateAudit, formatDate, AuditInfo } from '../../../
 import { autoSaveOphtalmologue, autoSaveCabinet } from '../../../utils/autoActeur';
 import { autoSaveClient } from '../../../utils/autoClient';
 import { afficherPdfBlob } from '../../../utils/inAppViewer';
-import { useTypesVerre, useVerresList, findVerreByName, VerreRecord, useOphtalmologues, useCabinets, useProfessions, useClientRecordsMagasin, ClientRecord, useVenteProducts, findVenteProduct, VenteProduct, useModesPaiement, autoSaveModePaiement } from '../../../utils/venteLookups';
+import { useTypesVerre, useVerresList, useTraitementOptions, findVerreByName, VerreRecord, useOphtalmologues, useCabinets, useProfessions, useClientRecordsMagasin, ClientRecord, useVenteProducts, findVenteProduct, VenteProduct, useModesPaiement, autoSaveModePaiement } from '../../../utils/venteLookups';
 import { genCodeBarre, genNumFacture } from '../../../utils/autoNumbers';
 import { printHeaderHTML } from '../../../utils/documentHeader';
 import { useSupabaseSync } from '../../../hooks/useSupabaseSync';
@@ -484,6 +484,7 @@ function OeilRow({ label, data, onChange }: { label: string; data: OeilData; onC
 function VerreBlock({ data, index, total, onChange, onRemove }: { data: VerreInfo; index: number; total: number; onChange: (d: VerreInfo) => void; onRemove: () => void }) {
   const typesVerre = useTypesVerre();
   const verresList = useVerresList();
+  const traitementOptions = useTraitementOptions();
   const [showVerreSug, setShowVerreSug] = useState(false);
   const verreBoxRef = useRef<HTMLDivElement>(null);
   const calcTotal = (od: OeilData, og: OeilData): string => {
@@ -499,10 +500,15 @@ function VerreBlock({ data, index, total, onChange, onRemove }: { data: VerreInf
   // Suggestions filtrées à partir de ce que l'on tape, restreintes au type choisi.
   const verreSuggestions = useMemo(() => {
     const q = (data.verre || '').trim().toLowerCase();
-    if (!q) return [];
+    const parType = (v: VerreRecord) =>
+      !data.typeVerre || !v.typeVerre || v.typeVerre.toLowerCase() === data.typeVerre.toLowerCase();
+    // Champ vide (clic dans le champ sans avoir tapé) : on propose déjà tous
+    // les verres enregistrés (filtrés par type si choisi), pour que la
+    // conseillère puisse sélectionner sans avoir à deviner un nom.
+    if (!q) return verresList.filter(parType).slice(0, 30);
     return verresList
       .filter(v => {
-        if (data.typeVerre && v.typeVerre && v.typeVerre.toLowerCase() !== data.typeVerre.toLowerCase()) return false;
+        if (!parType(v)) return false;
         return (
           v.verre?.toLowerCase().includes(q) ||
           v.traitement?.toLowerCase().includes(q) ||
@@ -590,7 +596,7 @@ function VerreBlock({ data, index, total, onChange, onRemove }: { data: VerreInf
               placeholder="Commencez à écrire le verre..."
               value={data.verre}
               onChange={handleVerreChange}
-              onFocus={() => { if ((data.verre || '').trim()) setShowVerreSug(true); }}
+              onFocus={() => setShowVerreSug(true)}
               autoComplete="off"
             />
             {showVerreSug && verreSuggestions.length > 0 && (
@@ -617,7 +623,18 @@ function VerreBlock({ data, index, total, onChange, onRemove }: { data: VerreInf
               </div>
             )}
           </div>
-          <div><div className={purpleHdr}>Traitement</div><input className="w-full text-xs border border-purple-300 rounded px-2 py-1 bg-white" value={data.traitement} onChange={set('traitement')} /></div>
+          <div>
+            <div className={purpleHdr}>Traitement</div>
+            <input
+              className="w-full text-xs border border-purple-300 rounded px-2 py-1 bg-white"
+              list={`traitements-verre-devis-${index}`}
+              value={data.traitement}
+              onChange={set('traitement')}
+            />
+            <datalist id={`traitements-verre-devis-${index}`}>
+              {traitementOptions.map(t => <option key={t} value={t} />)}
+            </datalist>
+          </div>
           <div><div className={purpleHdr}>Matière</div><input className="w-full text-xs border border-purple-300 rounded px-2 py-1 bg-white" value={data.matiere} onChange={set('matiere')} /></div>
         </div>
         <div style={{ minWidth: 80 }}><div className={purpleHdr}>Diamètre</div><input className="w-full text-xs border border-purple-300 rounded px-2 py-1 bg-white" value={data.diametre} onChange={set('diametre')} /></div>
@@ -679,7 +696,7 @@ function ArticlesBlock({ articles, onChange, magasinId, idSuffix }: { articles: 
     products.filter(p => p.type === 'monture' || p.type === 'accessoire').flatMap(p => [p.label, p.codeBarre].filter(Boolean))
   )];
   const traitServiceOptions = [...new Set(
-    products.filter(p => p.type === 'verre' || p.type === 'service').map(p => p.label).filter(Boolean)
+    products.filter(p => p.type === 'verre' || p.type === 'service' || p.type === 'traitement').map(p => p.label).filter(Boolean)
   )];
 
   const productToLigne = (p: VenteProduct): ArticleLigne => ({
@@ -812,7 +829,7 @@ function ArticlesBlock({ articles, onChange, magasinId, idSuffix }: { articles: 
             <div>
               <div className="text-sm text-gray-400 mb-1 text-center">Traitement Service</div>
               <input className={iCls} list={traitDl} placeholder="Verre, traitement ou service..." value={searchService}
-                onChange={e => { const v = e.target.value; setSearchService(v); addFromSearch(v, p => p.type === 'verre' || p.type === 'service', () => setSearchService('')); }} />
+                onChange={e => { const v = e.target.value; setSearchService(v); addFromSearch(v, p => p.type === 'verre' || p.type === 'service' || p.type === 'traitement', () => setSearchService('')); }} />
             </div>
           </div>
         </div>
