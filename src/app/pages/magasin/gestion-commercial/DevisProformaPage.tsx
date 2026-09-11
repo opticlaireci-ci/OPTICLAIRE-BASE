@@ -531,7 +531,13 @@ function VerreSuggestionsDropdown({
         <button
           key={v.id}
           type="button"
-          onClick={() => onSelect(v)}
+          onPointerDown={(e) => {
+            // Le menu est rendu via createPortal dans document.body.
+            // Le listener document "mousedown" fermait donc le menu avant le onClick.
+            // PointerDown sélectionne le verre avant cette fermeture, y compris sur mobile.
+            e.preventDefault();
+            onSelect(v);
+          }}
           className="w-full text-left px-3 py-2 hover:bg-purple-50 border-b border-purple-100 last:border-0"
         >
           <div className="text-xs font-semibold text-purple-900">{v.verre}</div>
