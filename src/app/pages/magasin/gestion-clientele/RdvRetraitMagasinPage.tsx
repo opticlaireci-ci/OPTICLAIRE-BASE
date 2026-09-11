@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { normaliserTotauxVente } from '../../utils/venteTotals';
+import { normaliserTotauxVente } from '../../../utils/venteTotals';
 import { useParams } from 'react-router';
 import { Search, X, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useLiveDataReadonly } from '../../../hooks/useLiveData';
