@@ -710,6 +710,8 @@ export function VisualisationPage() {
   };
 
   // ── Export PDF / Excel ──────────────────────────────────────────────────────
+  // VERSION RAPPORT REGLEMENTS 2026-09-11 : ordre DATE -> MAGASIN -> REGLEMENTS.
+  // Aucun bandeau bleu « MAGASIN : ... » n'est généré.
   const imprimer = async () => {
     // Imports paresseux : jsPDF + autoTable chargés uniquement à l'impression.
     const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
@@ -929,14 +931,14 @@ export function VisualisationPage() {
     else if (view.footer) aoa.push([view.footer]);
     const ws = XLSX.utils.aoa_to_sheet(aoa);
     // Mise en forme Excel des séparateurs de date (ligne verte comme le PDF).
-    const headerOffset = excelHeaderRows().length + 3;
+    const headerOffset = excelHeaderRows().length + 4; // first generated group row comes after title/subtitle/blank/headers
     excelGroupRows.forEach((entry, idx) => {
       if (!entry.group && !entry.magasin) return;
       const r = headerOffset + idx;
       for (let c = 0; c < view.headers.length; c++) {
         const cell = ws[XLSX.utils.encode_cell({ r, c })];
         if (cell) cell.s = entry.magasin
-          ? { fill: { fgColor: { rgb: '374151' } }, font: { bold: true, color: { rgb: 'FFFFFF' } } }
+          ? { fill: { fgColor: { rgb: 'FFFFFF' } }, font: { bold: true, color: { rgb: '000000' } } }
           : { fill: { fgColor: { rgb: 'C6DC5C' } }, font: { bold: true, color: { rgb: '000000' } } };
       }
     });
