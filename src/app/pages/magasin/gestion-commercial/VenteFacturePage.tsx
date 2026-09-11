@@ -1,8 +1,8 @@
 import { logger } from '../../../utils/logger';
 import { AddButton } from '../../../components/AddButton';
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
-import { useAuth } from '../../../contexts/AuthContext';
 import { createPortal } from 'react-dom';
+import { useAuth } from '../../../contexts/AuthContext';
 import { useParams } from 'react-router';
 import { Calendar, Trash2, X, Download, Plus, Eye, FileText, ArrowLeft, Printer, MoreHorizontal, Pencil } from 'lucide-react';
 import { addCreateAudit, addUpdateAudit, formatDate, resolveUserName, AuditInfo } from '../../../utils/auditUtils';
@@ -1575,75 +1575,6 @@ function OeilRow({
   );
 }
 
-
-function VerreSuggestionsDropdown({
-  anchorRef,
-  open,
-  suggestions,
-  onSelect,
-}: {
-  anchorRef: React.RefObject<HTMLDivElement>;
-  open: boolean;
-  suggestions: VerreRecord[];
-  onSelect: (v: VerreRecord) => void;
-}) {
-  const [style, setStyle] = useState<React.CSSProperties>({});
-
-  useEffect(() => {
-    if (!open || typeof window === 'undefined') return;
-    const updatePosition = () => {
-      const el = anchorRef.current;
-      if (!el) return;
-      const rect = el.getBoundingClientRect();
-      setStyle({
-        position: 'fixed',
-        left: rect.left,
-        top: rect.bottom + 4,
-        width: rect.width,
-        maxHeight: '18rem',
-        zIndex: 2147483647,
-      });
-    };
-    updatePosition();
-    window.addEventListener('resize', updatePosition);
-    window.addEventListener('scroll', updatePosition, true);
-    return () => {
-      window.removeEventListener('resize', updatePosition);
-      window.removeEventListener('scroll', updatePosition, true);
-    };
-  }, [open, anchorRef]);
-
-  if (!open || suggestions.length === 0 || typeof document === 'undefined') return null;
-
-  return createPortal(
-    <div
-      style={style}
-      className="bg-white border border-purple-300 rounded-lg shadow-2xl overflow-y-auto overscroll-contain"
-    >
-      {suggestions.map(v => (
-        <button
-          key={v.id}
-          type="button"
-          onClick={() => onSelect(v)}
-          className="w-full text-left px-3 py-2 hover:bg-purple-50 border-b border-purple-100 last:border-0"
-        >
-          <div className="text-xs font-semibold text-purple-900">{v.verre}</div>
-          <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5 text-[11px] text-gray-600">
-            {v.typeVerre && <span>Type&nbsp;: {v.typeVerre}</span>}
-            {v.traitement && <span>Traitement&nbsp;: {v.traitement}</span>}
-            {v.matiere && <span>Matière&nbsp;: {v.matiere}</span>}
-            {v.diametre && <span>Ø&nbsp;: {v.diametre}</span>}
-            {v.fournisseur && <span>Fourn.&nbsp;: {v.fournisseur}</span>}
-            {v.garantie && <span>Garantie&nbsp;: {v.garantie}</span>}
-            {v.prixVerre ? <span className="font-semibold text-purple-700">{Number(v.prixVerre).toLocaleString('fr-FR')} F</span> : null}
-          </div>
-        </button>
-      ))}
-    </div>,
-    document.body,
-  );
-}
-
 function VerreBlock({
   data, index, total, onChange, onRemove,
 }: {
@@ -1656,6 +1587,8 @@ function VerreBlock({
   const getRestant = useLentillesOpticStock();
   const [showVerreSug, setShowVerreSug] = useState(false);
   const verreBoxRef = useRef<HTMLDivElement>(null);
+  const verreDropdownRef = useRef<HTMLDivElement>(null);
+  const [verreDropdownStyle, setVerreDropdownStyle] = useState<React.CSSProperties>({});
 
   // Suggestions filtrées : uniquement à partir de ce que l'utilisateur commence à
   // écrire (pas de liste complète), et restreintes au type de verre choisi.
@@ -1676,7 +1609,7 @@ function VerreBlock({
           v.matiere?.toLowerCase().includes(q) ||
           v.fournisseur?.toLowerCase().includes(q)
         );
-      })
+      });
   }, [verresList, data.verre, data.typeVerre]);
 
   const selectVerre = (v: VerreRecord) => {
@@ -1698,16 +1631,36 @@ function VerreBlock({
     setShowVerreSug(false);
   };
 
-  // Fermer la liste au clic à l'extérieur.
+  // Fermer la liste au clic à l'extérieur et garder la liste au-dessus des conteneurs.
   useEffect(() => {
     if (!showVerreSug) return;
-    const onDocClick = (e: MouseEvent) => {
-      if (verreBoxRef.current && !verreBoxRef.current.contains(e.target as Node)) {
-        setShowVerreSug(false);
-      }
+    const updatePosition = () => {
+      const el = verreBoxRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      setVerreDropdownStyle({
+        position: 'fixed',
+        left: rect.left,
+        top: rect.bottom + 4,
+        width: rect.width,
+        maxHeight: '18rem',
+        zIndex: 2147483647,
+      });
     };
+    const onDocClick = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (verreBoxRef.current?.contains(target) || verreDropdownRef.current?.contains(target)) return;
+      setShowVerreSug(false);
+    };
+    updatePosition();
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
     document.addEventListener('mousedown', onDocClick);
-    return () => document.removeEventListener('mousedown', onDocClick);
+    return () => {
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+      document.removeEventListener('mousedown', onDocClick);
+    };
   }, [showVerreSug]);
 
   const calcTotal = (od: typeof data.oeilDroit, og: typeof data.oeilGauche): string => {
@@ -1784,13 +1737,33 @@ function VerreBlock({
               onFocus={() => setShowVerreSug(true)}
               autoComplete="off"
             />
-            {showVerreSug && (
-              <VerreSuggestionsDropdown
-                anchorRef={verreBoxRef}
-                open={showVerreSug}
-                suggestions={verreSuggestions}
-                onSelect={selectVerre}
-              />
+            {showVerreSug && verreSuggestions.length > 0 && typeof document !== 'undefined' && createPortal(
+              <div
+                ref={verreDropdownRef}
+                style={verreDropdownStyle}
+                className="bg-white border border-purple-300 rounded-lg shadow-2xl overflow-y-auto overscroll-contain"
+              >
+                {verreSuggestions.map(v => (
+                  <button
+                    key={v.id}
+                    type="button"
+                    onClick={() => selectVerre(v)}
+                    className="w-full text-left px-3 py-2 hover:bg-purple-50 border-b border-purple-100 last:border-0"
+                  >
+                    <div className="text-xs font-semibold text-purple-900">{v.verre}</div>
+                    <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5 text-[11px] text-gray-600">
+                      {v.typeVerre && <span>Type&nbsp;: {v.typeVerre}</span>}
+                      {v.traitement && <span>Traitement&nbsp;: {v.traitement}</span>}
+                      {v.matiere && <span>Matière&nbsp;: {v.matiere}</span>}
+                      {v.diametre && <span>Ø&nbsp;: {v.diametre}</span>}
+                      {v.fournisseur && <span>Fourn.&nbsp;: {v.fournisseur}</span>}
+                      {v.garantie && <span>Garantie&nbsp;: {v.garantie}</span>}
+                      {v.prixVerre ? <span className="font-semibold text-purple-700">{Number(v.prixVerre).toLocaleString('fr-FR')} F</span> : null}
+                    </div>
+                  </button>
+                ))}
+              </div>,
+              document.body,
             )}
           </div>
           <div>
