@@ -695,6 +695,35 @@ export function VisualisationPage() {
     return sorted.concat(sansMagasin.length ? [['Sans magasin', sansMagasin] as [string, Row[]]] : []);
   };
 
+  // Regroupe des lignes par magasin (ordre officiel des magasins), utilisé
+  // par l'export PDF et l'export Excel pour enchaîner les règlements
+  // magasin par magasin sans ligne de séparation (le magasin est déjà
+  // intégré dans la 1ère cellule de chaque ligne : MAGASIN\nCLIENT).
+  const storeGroupsForRows = (rows: Row[], headers: Column[]) => {
+    const magasinCol = headers.findIndex(h => /^magasin$/i.test(h.label.trim()));
+    const knownMagasins = new Set(getAllMagasinIds().map(id => id.toUpperCase()));
+    const extractMagasin = (r: Row): string => {
+      if (magasinCol >= 0) return magU(r.cells[magasinCol]);
+      const firstLine = String(r.cells[0] || '').split(/\r?\n/)[0].trim().toUpperCase();
+      return knownMagasins.has(firstLine) ? firstLine : '';
+    };
+    const map = new Map<string, Row[]>();
+    const sans: Row[] = [];
+    rows.forEach(r => {
+      const m = extractMagasin(r);
+      if (!m) sans.push(r);
+      else { if (!map.has(m)) map.set(m, []); map.get(m)!.push(r); }
+    });
+    const order = getAllMagasinIds().map(id => id.toUpperCase());
+    const rank = new Map(order.map((id, i) => [id, i]));
+    const sorted = [...map.entries()].sort((a, b) =>
+      (rank.get(a[0]) ?? Number.MAX_SAFE_INTEGER) - (rank.get(b[0]) ?? Number.MAX_SAFE_INTEGER) ||
+      a[0].localeCompare(b[0], 'fr')
+    );
+    if (sans.length) sorted.push(['Sans magasin', sans]);
+    return sorted;
+  };
+
   const groupTotalColumn = (headers: Column[]) => {
     // Pour l'état RÈGLEMENTS, le montant journalier est un total encaissé :
     // il doit impérativement être affiché sous la colonne « Règlement »,
@@ -746,39 +775,16 @@ export function VisualisationPage() {
 
     // Pour « Tous les Magasins », l'ordre du rapport est désormais :
     // JOUR → MAGASIN → règlements du magasin, puis MAGASIN suivant → JOUR suivant.
-    // Il n'y a plus de bandeau bleu « MAGASIN : ... ». Le nom du magasin reste
-    // visible sur une ligne simple en gras, juste sous la ligne d'édition du jour.
-    const storeGroupsForRows = (rows: Row[]) => {
-      const magasinCol = view.headers.findIndex(h => /^magasin$/i.test(h.label.trim()));
-      const knownMagasins = new Set(getAllMagasinIds().map(id => id.toUpperCase()));
-      const extractMagasin = (r: Row): string => {
-        if (magasinCol >= 0) return magU(r.cells[magasinCol]);
-        const firstLine = String(r.cells[0] || '').split(/\r?\n/)[0].trim().toUpperCase();
-        return knownMagasins.has(firstLine) ? firstLine : '';
-      };
-      const map = new Map<string, Row[]>();
-      const sans: Row[] = [];
-      rows.forEach(r => {
-        const m = extractMagasin(r);
-        if (!m) sans.push(r);
-        else { if (!map.has(m)) map.set(m, []); map.get(m)!.push(r); }
-      });
-      const order = getAllMagasinIds().map(id => id.toUpperCase());
-      const rank = new Map(order.map((id, i) => [id, i]));
-      const sorted = [...map.entries()].sort((a, b) =>
-        (rank.get(a[0]) ?? Number.MAX_SAFE_INTEGER) - (rank.get(b[0]) ?? Number.MAX_SAFE_INTEGER) ||
-        a[0].localeCompare(b[0], 'fr')
-      );
-      if (sans.length) sorted.push(['Sans magasin', sans]);
-      return sorted;
-    };
-
+    // Il n'y a pas de ligne « nom du magasin » séparée : celui-ci est déjà
+    // affiché dans la 1ère cellule de chaque ligne (MAGASIN\nCLIENT).
     const appendDateGroups = (rows: Row[]) => {
       const groups = prepareDateGroups(rows, view.headers);
       if (!groups) {
         if (magasinGroups) {
-          for (const [nomMagasin, rowsMagasin] of storeGroupsForRows(rows)) {
-            pdfBody.push([{ content: nomMagasin, colSpan: view.headers.length, styles: { fontStyle: 'bold', textColor: [0, 0, 0], halign: 'left' } }]);
+          // Le magasin est déjà intégré dans la 1ère cellule (MAGASIN\nCLIENT) :
+          // on se contente d'ordonner les lignes magasin par magasin, sans
+          // ligne de séparation supplémentaire.
+          for (const [, rowsMagasin] of storeGroupsForRows(rows, view.headers)) {
             rowsMagasin.forEach(r => pdfBody.push(r.cells));
           }
         } else rows.forEach(r => pdfBody.push(r.cells));
@@ -800,14 +806,11 @@ export function VisualisationPage() {
         pdfBody.push(cells);
 
         // Dans chaque journée, regrouper les règlements par magasin avant de
-        // passer au magasin suivant. Le magasin n'a plus de bandeau bleu.
+        // passer au magasin suivant, SANS ligne de séparation « nom du
+        // magasin » : celui-ci est déjà affiché dans la 1ère cellule de
+        // chaque ligne (MAGASIN\nCLIENT), on enchaîne donc directement.
         if (magasinGroups) {
-          for (const [nomMagasin, rowsMagasin] of storeGroupsForRows(g.rows)) {
-            pdfBody.push([{
-              content: nomMagasin,
-              colSpan: view.headers.length,
-              styles: { textColor: [0, 0, 0], fontStyle: 'bold', halign: 'left', fillColor: [255, 255, 255], fontSize: 9 },
-            }]);
+          for (const [, rowsMagasin] of storeGroupsForRows(g.rows, view.headers)) {
             rowsMagasin.forEach(r => pdfBody.push(r.cells));
           }
         } else {
@@ -899,10 +902,10 @@ export function VisualisationPage() {
       const groups = prepareDateGroups(rows, view.headers);
       if (!groups) {
         if (magasinGroups) {
-          for (const [nomMagasin, rowsMagasin] of storeGroupsForRows(rows)) {
-            const row = Array(view.headers.length).fill('');
-            row[0] = nomMagasin;
-            excelGroupRows.push({ row, group: false, magasin: true });
+          // Le magasin est déjà intégré dans la 1ère cellule (MAGASIN\nCLIENT) :
+          // on ordonne simplement les lignes magasin par magasin, sans ligne
+          // de séparation supplémentaire.
+          for (const [, rowsMagasin] of storeGroupsForRows(rows, view.headers)) {
             rowsMagasin.forEach(r => excelGroupRows.push({ row: r.cells, group: false }));
           }
         } else rows.forEach(r => excelGroupRows.push({ row: r.cells, group: false }));
@@ -914,11 +917,11 @@ export function VisualisationPage() {
         row[0] = g.date.getTime() === 0 ? 'Sans date' : `Édition : ${dateLabel(g.date)}`;
         if (g.hasTotal && totalCol >= 0) row[totalCol] = fmtMontant(g.total);
         excelGroupRows.push({ row, group: true });
+        // Enchaîner les règlements magasin par magasin sans ligne de
+        // séparation : le nom du magasin figure déjà dans la 1ère cellule
+        // de chaque ligne (MAGASIN\nCLIENT).
         if (magasinGroups) {
-          for (const [nomMagasin, rowsMagasin] of storeGroupsForRows(g.rows)) {
-            const magasinRow = Array(view.headers.length).fill('');
-            magasinRow[0] = nomMagasin;
-            excelGroupRows.push({ row: magasinRow, group: false, magasin: true });
+          for (const [, rowsMagasin] of storeGroupsForRows(g.rows, view.headers)) {
             rowsMagasin.forEach(r => excelGroupRows.push({ row: r.cells, group: false }));
           }
         } else g.rows.forEach(r => excelGroupRows.push({ row: r.cells, group: false }));
