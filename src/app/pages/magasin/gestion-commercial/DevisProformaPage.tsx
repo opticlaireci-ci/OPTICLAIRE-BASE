@@ -525,6 +525,7 @@ function VerreSuggestionsDropdown({
   return createPortal(
     <div
       style={style}
+      data-verre-suggestions="true"
       className="bg-white border border-purple-300 rounded-lg shadow-2xl overflow-y-auto overscroll-contain"
     >
       {suggestions.map(v => (
@@ -596,11 +597,16 @@ function VerreBlock({ data, index, total, onChange, onRemove }: { data: VerreInf
 
   useEffect(() => {
     if (!showVerreSug) return;
-    const onDocClick = (e: MouseEvent) => {
-      if (verreBoxRef.current && !verreBoxRef.current.contains(e.target as Node)) setShowVerreSug(false);
+    const onDocPointerDown = (e: PointerEvent) => {
+      const target = e.target as Node | null;
+      // Le menu est rendu dans document.body via un portal : il n'est donc
+      // pas contenu dans verreBoxRef. Ne pas fermer le menu lors d'un clic,
+      // d'un toucher ou du début d'un défilement dans la liste.
+      if (target && (verreBoxRef.current?.contains(target) || (target as Element).closest?.('[data-verre-suggestions]'))) return;
+      setShowVerreSug(false);
     };
-    document.addEventListener('mousedown', onDocClick);
-    return () => document.removeEventListener('mousedown', onDocClick);
+    document.addEventListener('pointerdown', onDocPointerDown);
+    return () => document.removeEventListener('pointerdown', onDocPointerDown);
   }, [showVerreSug]);
 
   const set = (k: keyof VerreInfo) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => onChange({ ...data, [k]: e.target.value });
