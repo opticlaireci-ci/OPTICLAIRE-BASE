@@ -742,14 +742,44 @@ export function VisualisationPage() {
     const magasinGroups = prepareMagasinGroups(view.rows, view.headers);
     const pdfBody: any[][] = [];
 
-    // « Tous les Magasins » : un bloc complet par magasin. À l'intérieur de
-    // chaque bloc, on conserve le regroupement par date déjà utilisé par les
-    // rapports historiques. Ainsi les informations d'un magasin ne sont jamais
-    // mélangées avec celles du magasin suivant.
+    // Pour « Tous les Magasins », l'ordre du rapport est désormais :
+    // JOUR → MAGASIN → règlements du magasin, puis MAGASIN suivant → JOUR suivant.
+    // Il n'y a plus de bandeau bleu « MAGASIN : ... ». Le nom du magasin reste
+    // visible sur une ligne simple en gras, juste sous la ligne d'édition du jour.
+    const storeGroupsForRows = (rows: Row[]) => {
+      const magasinCol = view.headers.findIndex(h => /^magasin$/i.test(h.label.trim()));
+      const knownMagasins = new Set(getAllMagasinIds().map(id => id.toUpperCase()));
+      const extractMagasin = (r: Row): string => {
+        if (magasinCol >= 0) return magU(r.cells[magasinCol]);
+        const firstLine = String(r.cells[0] || '').split(/\r?\n/)[0].trim().toUpperCase();
+        return knownMagasins.has(firstLine) ? firstLine : '';
+      };
+      const map = new Map<string, Row[]>();
+      const sans: Row[] = [];
+      rows.forEach(r => {
+        const m = extractMagasin(r);
+        if (!m) sans.push(r);
+        else { if (!map.has(m)) map.set(m, []); map.get(m)!.push(r); }
+      });
+      const order = getAllMagasinIds().map(id => id.toUpperCase());
+      const rank = new Map(order.map((id, i) => [id, i]));
+      const sorted = [...map.entries()].sort((a, b) =>
+        (rank.get(a[0]) ?? Number.MAX_SAFE_INTEGER) - (rank.get(b[0]) ?? Number.MAX_SAFE_INTEGER) ||
+        a[0].localeCompare(b[0], 'fr')
+      );
+      if (sans.length) sorted.push(['Sans magasin', sans]);
+      return sorted;
+    };
+
     const appendDateGroups = (rows: Row[]) => {
       const groups = prepareDateGroups(rows, view.headers);
       if (!groups) {
-        pdfBody.push(...rows.map(r => r.cells));
+        if (magasinGroups) {
+          for (const [nomMagasin, rowsMagasin] of storeGroupsForRows(rows)) {
+            pdfBody.push([{ content: nomMagasin, colSpan: view.headers.length, styles: { fontStyle: 'bold', textColor: [0, 0, 0], halign: 'left' } }]);
+            rowsMagasin.forEach(r => pdfBody.push(r.cells));
+          }
+        } else rows.forEach(r => pdfBody.push(r.cells));
         return;
       }
       const totalCol = groupTotalColumn(view.headers);
@@ -766,22 +796,25 @@ export function VisualisationPage() {
           cells = [{ content: label, colSpan: view.headers.length, styles: { fillColor: [198, 220, 92], textColor: [0, 0, 0], fontStyle: 'bold', halign: 'left' } }];
         }
         pdfBody.push(cells);
-        g.rows.forEach(r => pdfBody.push(r.cells));
+
+        // Dans chaque journée, regrouper les règlements par magasin avant de
+        // passer au magasin suivant. Le magasin n'a plus de bandeau bleu.
+        if (magasinGroups) {
+          for (const [nomMagasin, rowsMagasin] of storeGroupsForRows(g.rows)) {
+            pdfBody.push([{
+              content: nomMagasin,
+              colSpan: view.headers.length,
+              styles: { textColor: [0, 0, 0], fontStyle: 'bold', halign: 'left', fillColor: [255, 255, 255], fontSize: 9 },
+            }]);
+            rowsMagasin.forEach(r => pdfBody.push(r.cells));
+          }
+        } else {
+          g.rows.forEach(r => pdfBody.push(r.cells));
+        }
       }
     };
 
-    if (magasinGroups) {
-      for (const [nomMagasin, rowsMagasin] of magasinGroups) {
-        pdfBody.push([{
-          content: `MAGASIN : ${nomMagasin}`,
-          colSpan: view.headers.length,
-          styles: { fillColor: [55, 65, 81], textColor: [255, 255, 255], fontStyle: 'bold', halign: 'left', fontSize: 9 },
-        }]);
-        appendDateGroups(rowsMagasin);
-      }
-    } else {
-      appendDateGroups(view.rows);
-    }
+    appendDateGroups(view.rows);
 
     autoTable(doc, {
       startY: startY - 5 + boxH + 4,
@@ -858,16 +891,39 @@ export function VisualisationPage() {
       }
     };
 
-    if (magasinGroups) {
-      for (const [nomMagasin, rowsMagasin] of magasinGroups) {
-        const row = Array(view.headers.length).fill('');
-        row[0] = `MAGASIN : ${nomMagasin}`;
-        excelGroupRows.push({ row, group: false, magasin: true });
-        appendExcelDateGroups(rowsMagasin);
+    // Même structure que le PDF : JOUR → MAGASIN → règlements, puis magasin
+    // suivant. Le bandeau bleu du magasin est supprimé ; le nom reste en gras.
+    const appendExcelDateGroupsByMagasin = (rows: Row[]) => {
+      const groups = prepareDateGroups(rows, view.headers);
+      if (!groups) {
+        if (magasinGroups) {
+          for (const [nomMagasin, rowsMagasin] of storeGroupsForRows(rows)) {
+            const row = Array(view.headers.length).fill('');
+            row[0] = nomMagasin;
+            excelGroupRows.push({ row, group: false, magasin: true });
+            rowsMagasin.forEach(r => excelGroupRows.push({ row: r.cells, group: false }));
+          }
+        } else rows.forEach(r => excelGroupRows.push({ row: r.cells, group: false }));
+        return;
       }
-    } else {
-      appendExcelDateGroups(view.rows);
-    }
+      const totalCol = groupTotalColumn(view.headers);
+      for (const g of groups) {
+        const row = Array(view.headers.length).fill('');
+        row[0] = g.date.getTime() === 0 ? 'Sans date' : `Édition : ${dateLabel(g.date)}`;
+        if (g.hasTotal && totalCol >= 0) row[totalCol] = fmtMontant(g.total);
+        excelGroupRows.push({ row, group: true });
+        if (magasinGroups) {
+          for (const [nomMagasin, rowsMagasin] of storeGroupsForRows(g.rows)) {
+            const magasinRow = Array(view.headers.length).fill('');
+            magasinRow[0] = nomMagasin;
+            excelGroupRows.push({ row: magasinRow, group: false, magasin: true });
+            rowsMagasin.forEach(r => excelGroupRows.push({ row: r.cells, group: false }));
+          }
+        } else g.rows.forEach(r => excelGroupRows.push({ row: r.cells, group: false }));
+      }
+    };
+
+    appendExcelDateGroupsByMagasin(view.rows);
     aoa.push(...excelGroupRows.map(x => x.row));
     if (view.foot) aoa.push(view.foot);
     else if (view.footer) aoa.push([view.footer]);
