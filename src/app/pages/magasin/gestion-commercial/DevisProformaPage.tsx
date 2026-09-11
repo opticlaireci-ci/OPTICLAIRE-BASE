@@ -2,6 +2,7 @@ import { logger } from '../../../utils/logger';
 import { AddButton } from '../../../components/AddButton';
 import { useState , useEffect, useMemo, useRef} from 'react';
 import { useLocation } from 'react-router';
+import { createPortal } from 'react-dom';
 import { useParams } from 'react-router';
 import { Plus, Eye, X, FileText, Calendar, Printer, ArrowRightLeft, MoreHorizontal } from 'lucide-react';
 import { addCreateAudit, addUpdateAudit, formatDate, AuditInfo } from '../../../utils/auditUtils';
@@ -481,6 +482,75 @@ function OeilRow({ label, data, onChange }: { label: string; data: OeilData; onC
 }
 
 // ── Bloc Verre ────────────────────────────────────────────────────────────────
+
+function VerreSuggestionsDropdown({
+  anchorRef,
+  open,
+  suggestions,
+  onSelect,
+}: {
+  anchorRef: React.RefObject<HTMLDivElement>;
+  open: boolean;
+  suggestions: VerreRecord[];
+  onSelect: (v: VerreRecord) => void;
+}) {
+  const [style, setStyle] = useState<React.CSSProperties>({});
+
+  useEffect(() => {
+    if (!open || typeof window === 'undefined') return;
+    const updatePosition = () => {
+      const el = anchorRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      setStyle({
+        position: 'fixed',
+        left: rect.left,
+        top: rect.bottom + 4,
+        width: rect.width,
+        maxHeight: '18rem',
+        zIndex: 2147483647,
+      });
+    };
+    updatePosition();
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+    return () => {
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+    };
+  }, [open, anchorRef]);
+
+  if (!open || suggestions.length === 0 || typeof document === 'undefined') return null;
+
+  return createPortal(
+    <div
+      style={style}
+      className="bg-white border border-purple-300 rounded-lg shadow-2xl overflow-y-auto overscroll-contain"
+    >
+      {suggestions.map(v => (
+        <button
+          key={v.id}
+          type="button"
+          onClick={() => onSelect(v)}
+          className="w-full text-left px-3 py-2 hover:bg-purple-50 border-b border-purple-100 last:border-0"
+        >
+          <div className="text-xs font-semibold text-purple-900">{v.verre}</div>
+          <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5 text-[11px] text-gray-600">
+            {v.typeVerre && <span>Type&nbsp;: {v.typeVerre}</span>}
+            {v.traitement && <span>Traitement&nbsp;: {v.traitement}</span>}
+            {v.matiere && <span>Matière&nbsp;: {v.matiere}</span>}
+            {v.diametre && <span>Ø&nbsp;: {v.diametre}</span>}
+            {v.fournisseur && <span>Fourn.&nbsp;: {v.fournisseur}</span>}
+            {v.garantie && <span>Garantie&nbsp;: {v.garantie}</span>}
+            {v.prixVerre ? <span className="font-semibold text-purple-700">{Number(v.prixVerre).toLocaleString('fr-FR')} F</span> : null}
+          </div>
+        </button>
+      ))}
+    </div>,
+    document.body,
+  );
+}
+
 function VerreBlock({ data, index, total, onChange, onRemove }: { data: VerreInfo; index: number; total: number; onChange: (d: VerreInfo) => void; onRemove: () => void }) {
   const typesVerre = useTypesVerre();
   const verresList = useVerresList();
@@ -505,7 +575,7 @@ function VerreBlock({ data, index, total, onChange, onRemove }: { data: VerreInf
     // Champ vide (clic dans le champ sans avoir tapé) : on propose déjà tous
     // les verres enregistrés (filtrés par type si choisi), pour que la
     // conseillère puisse sélectionner sans avoir à deviner un nom.
-    if (!q) return verresList.filter(parType).slice(0, 30);
+    if (!q) return verresList.filter(parType);
     return verresList
       .filter(v => {
         if (!parType(v)) return false;
@@ -516,7 +586,6 @@ function VerreBlock({ data, index, total, onChange, onRemove }: { data: VerreInf
           v.fournisseur?.toLowerCase().includes(q)
         );
       })
-      .slice(0, 8);
   }, [verresList, data.verre, data.typeVerre]);
 
   useEffect(() => {
@@ -599,28 +668,13 @@ function VerreBlock({ data, index, total, onChange, onRemove }: { data: VerreInf
               onFocus={() => setShowVerreSug(true)}
               autoComplete="off"
             />
-            {showVerreSug && verreSuggestions.length > 0 && (
-              <div className="absolute left-0 right-0 top-full mt-1 z-50 bg-white border border-purple-300 rounded-lg shadow-xl max-h-72 overflow-y-auto">
-                {verreSuggestions.map(v => (
-                  <button
-                    key={v.id}
-                    type="button"
-                    onClick={() => selectVerre(v)}
-                    className="w-full text-left px-3 py-2 hover:bg-purple-50 border-b border-purple-100 last:border-0"
-                  >
-                    <div className="text-xs font-semibold text-purple-900">{v.verre}</div>
-                    <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5 text-[11px] text-gray-600">
-                      {v.typeVerre && <span>Type&nbsp;: {v.typeVerre}</span>}
-                      {v.traitement && <span>Traitement&nbsp;: {v.traitement}</span>}
-                      {v.matiere && <span>Matière&nbsp;: {v.matiere}</span>}
-                      {v.diametre && <span>Ø&nbsp;: {v.diametre}</span>}
-                      {v.fournisseur && <span>Fourn.&nbsp;: {v.fournisseur}</span>}
-                      {v.garantie && <span>Garantie&nbsp;: {v.garantie}</span>}
-                      {v.prixVerre ? <span className="font-semibold text-purple-700">{Number(v.prixVerre).toLocaleString('fr-FR')} F</span> : null}
-                    </div>
-                  </button>
-                ))}
-              </div>
+            {showVerreSug && (
+              <VerreSuggestionsDropdown
+                anchorRef={verreBoxRef}
+                open={showVerreSug}
+                suggestions={verreSuggestions}
+                onSelect={selectVerre}
+              />
             )}
           </div>
           <div>
