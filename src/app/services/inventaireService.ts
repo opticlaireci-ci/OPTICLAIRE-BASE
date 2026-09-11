@@ -5,7 +5,7 @@ import { logger } from '../utils/logger';
  */
 
 import {
-  collection, doc, getDocs, addDoc, setDoc,
+  collection, doc, getDocs, setDoc, getDoc,
 } from '../utils/firestoreCompat';
 import { db, auth } from '../utils/firebaseClient';
 import { logNetworkAware, isAuthError, isNoSessionError } from '../utils/networkErrors';
@@ -85,7 +85,7 @@ async function chargerMouvementsAvecBonsAcceptes(targets: string[]) {
         const key = logicalKey(fake);
         if (!movementKeys.has(key)) {
           movements.push({
-            id: `fallback_${d.id}_${sanitizeIdPart(article)}`,
+            id: stableUuid(`fallback|${d.id}|${article}`),
             data: {
               ...fake,
               quantite: Number(item.quantite) || 0,
@@ -245,35 +245,69 @@ export async function getQuantiteDisponible(
 
 export async function recalculerTousLesStocks(): Promise<void> {}
 
-/** Nettoie une valeur pour l'utiliser dans un id de document KV. */
-function sanitizeIdPart(v: any): string {
-  return String(v ?? '').replace(/[^a-zA-Z0-9]/g, '_').slice(0, 80);
+/**
+ * Génère un UUID déterministe à partir d'une clé métier.
+ *
+ * Certaines bases existantes déclarent `mouvements_stock.id` en UUID. Les
+ * anciennes versions fabriquaient des IDs du type `vte_FA-0004_ARTICLE`, ce
+ * qui provoquait un rejet Postgres alors que la vente, elle, était déjà écrite.
+ * Un UUID déterministe reste compatible avec une colonne TEXT comme avec une
+ * colonne UUID et conserve l'idempotence entre les retries / appareils.
+ */
+function stableUuid(key: string): string {
+  let h1 = 0x811c9dc5, h2 = 0x9e3779b9, h3 = 0x85ebca6b, h4 = 0xc2b2ae35;
+  for (let i = 0; i < key.length; i++) {
+    const c = key.charCodeAt(i);
+    h1 = Math.imul(h1 ^ c, 16777619);
+    h2 = Math.imul(h2 ^ c, 2246822519);
+    h3 = Math.imul(h3 ^ c, 3266489917);
+    h4 = Math.imul(h4 ^ c, 668265263);
+  }
+  const hex = [h1, h2, h3, h4].map(n => (n >>> 0).toString(16).padStart(8, '0')).join('');
+  return `${hex.slice(0,8)}-${hex.slice(8,12)}-5${hex.slice(13,16)}-8${hex.slice(17,20)}-${hex.slice(20,32)}`;
+}
+
+async function confirmerMouvement(id: string): Promise<boolean> {
+  try {
+    const snap = await getDoc(doc(db, 'mouvements_stock', id));
+    return snap.exists();
+  } catch {
+    return false;
+  }
 }
 
 async function insertMouvements(rows: any[]): Promise<boolean> {
   if (rows.length === 0) return true;
-  const userId = auth.currentUser?.uid || null;
+  const user = await auth.ensureSession();
+  if (!user) {
+    logNetworkAware('⚠️ insertMouvements — session absente', new Error('NO_SESSION'));
+    return false;
+  }
+  const userId = user.uid;
   const now = new Date().toISOString();
   let dernierErreur: any = null;
 
-  // Une coupure réseau momentanée ne doit pas perdre une sortie de stock.
-  // Les IDs déterministes rendent chaque tentative idempotente.
-  for (let tentative = 1; tentative <= 3; tentative++) {
+  // Une coupure réseau, une réponse perdue ou une erreur partielle ne doit
+  // jamais créer de doublon. Chaque ligne possède un UUID métier stable.
+  for (let tentative = 1; tentative <= 4; tentative++) {
     try {
-      await Promise.all(rows.map(r => {
+      for (const r of rows) {
         const { _docId, ...data } = r;
+        const id = _docId || stableUuid(`${data.type}|${data.bon_id || data.reference || ''}|${data.magasin_source || data.magasin_id || ''}|${data.article_id || data.designation || ''}`);
         const magasinId = data.magasin_id || data.magasin_source || data.magasin_destination || null;
         const payload = { ...data, magasin_id: magasinId, user_id: userId, created_at: now };
-        if (_docId) return setDoc(doc(db, 'mouvements_stock', _docId), payload, { merge: true });
-        return addDoc(collection(db, 'mouvements_stock'), payload);
-      }));
-      logger.log(`✅ Mouvements de stock confirmés (tentative ${tentative})`);
+        await setDoc(doc(db, 'mouvements_stock', id), payload, { merge: true });
+        if (!(await confirmerMouvement(id))) {
+          throw new Error(`Mouvement ${id} écrit mais non relu après confirmation serveur.`);
+        }
+      }
+      logger.log(`✅ Mouvements de stock confirmés (${rows.length} ligne(s), tentative ${tentative})`);
       return true;
     } catch (err: any) {
       dernierErreur = err;
-      if (tentative < 3) {
-        const delai = 500 * Math.pow(2, tentative - 1);
-        logger.warn(`⚠️ Mouvement de stock non synchronisé, nouvelle tentative dans ${delai} ms (${tentative}/3):`, err);
+      if (tentative < 4) {
+        const delai = 600 * Math.pow(2, tentative - 1);
+        logger.warn(`⚠️ Mouvement de stock non confirmé, nouvelle tentative dans ${delai} ms (${tentative}/4):`, err);
         await new Promise(resolve => setTimeout(resolve, delai));
       }
     }
@@ -281,12 +315,10 @@ async function insertMouvements(rows: any[]): Promise<boolean> {
 
   const err: any = dernierErreur;
   if (isAuthError(err) || isNoSessionError(err)) {
-    logNetworkAware('⚠️ insertMouvements (échec après 3 tentatives)', err);
-    alert('Session expirée : reconnectez-vous pour synchroniser les mouvements de stock.');
+    logNetworkAware('⚠️ insertMouvements (échec après 4 tentatives)', err);
     return false;
   }
-  logger.error('❌ insertMouvements après 3 tentatives:', err?.message || err);
-  alert(`Mouvement de stock refusé après 3 tentatives : ${err?.message || err}`);
+  logger.error('❌ insertMouvements après 4 tentatives:', err?.message || err);
   return false;
 }
 
@@ -296,7 +328,7 @@ export async function enregistrerDistribution(params: {
   items: Item[];
 }): Promise<boolean> {
   return insertMouvements(params.items.map(item => ({
-    _docId: `dist_${sanitizeIdPart(params.bonReference)}_${sanitizeIdPart(item.id)}`,
+    _docId: stableUuid(`distribution|${params.bonReference}|${params.magasinId}|${item.id}`),
     type: 'distribution', article_id: item.id, quantite: item.quantite,
     magasin_id: params.magasinId, magasin_destination: params.magasinId, bon_id: params.bonReference,
     designation: item.designation, produit_type: item.type, prix_vente: item.prixVente,
@@ -310,7 +342,7 @@ export async function enregistrerTransfert(params: {
   items: Item[];
 }): Promise<boolean> {
   return insertMouvements(params.items.map(item => ({
-    _docId: `trf_${sanitizeIdPart(params.bonReference)}_${sanitizeIdPart(item.id)}`,
+    _docId: stableUuid(`transfert|${params.bonReference}|${params.magasinSource}|${params.magasinDestination}|${item.id}`),
     type: 'transfert', article_id: item.id, quantite: item.quantite,
     magasin_id: params.magasinSource, magasin_source: params.magasinSource, magasin_destination: params.magasinDestination,
     bon_id: params.bonReference, designation: item.designation,
@@ -332,7 +364,7 @@ export async function enregistrerVente(params: {
   const rows = params.items.filter(i => i.quantite > 0);
   if (rows.length === 0) return true;
   return insertMouvements(rows.map(item => ({
-    _docId: `vte_${sanitizeIdPart(params.bonReference)}_${sanitizeIdPart(item.id)}`,
+    _docId: stableUuid(`vente|${params.bonReference}|${params.magasinId}|${item.id}`),
     type: 'vente', article_id: item.id, quantite: item.quantite,
     magasin_id: params.magasinId, magasin_source: params.magasinId, bon_id: params.bonReference,
     designation: item.designation, produit_type: item.type, prix_vente: item.prixVente,
@@ -345,7 +377,7 @@ export async function enregistrerRetour(params: {
   items: Item[];
 }): Promise<boolean> {
   return insertMouvements(params.items.map(item => ({
-    _docId: `ret_${sanitizeIdPart(params.bonReference)}_${sanitizeIdPart(item.id)}`,
+    _docId: stableUuid(`retour|${params.bonReference}|${params.magasinId}|${item.id}`),
     type: 'retour', article_id: item.id, quantite: item.quantite,
     magasin_id: params.magasinId, magasin_source: params.magasinId, bon_id: params.bonReference,
     designation: item.designation, produit_type: item.type, prix_vente: item.prixVente,

@@ -1,5 +1,5 @@
 import { logger } from '../utils/logger';
-import { TENANT, nomMagasin } from '../config/tenant';
+import { TENANT, nomMagasin, tenantConfigDefaut } from '../config/tenant';
 /**
  * Liste complète des magasins OPTICLAIRE
  * Centralisé pour éviter les duplications
@@ -8,7 +8,9 @@ import { TENANT, nomMagasin } from '../config/tenant';
 // Liste par défaut, DÉRIVÉE des réglages de l'enseigne (src/app/config/tenant.ts).
 // Elle ne sert qu'à la première ouverture : ensuite l'enseigne gère ses magasins
 // depuis l'application et `getMagasins()` lit la version enregistrée.
-export const MAGASINS: Magasin[] = TENANT.magasins.map(m => ({
+const MAGASINS_REFERENCE = tenantConfigDefaut().magasins;
+
+export const MAGASINS: Magasin[] = MAGASINS_REFERENCE.map(m => ({
   id: m.id,
   label: nomMagasin(m.label),
 }));
@@ -68,7 +70,7 @@ export function getMagasins(): Magasin[] {
     const stored = localStorage.getItem('leclaire_magasins');
     if (stored) {
       const parsed = JSON.parse(stored);
-      const normalized = normalizeMagasins(parsed);
+      const normalized = normalizeMagasins([...parsed, ...MAGASINS]);
       const normalizedStr = JSON.stringify(normalized);
       if (JSON.stringify(parsed) !== normalizedStr) {
         localStorage.setItem('leclaire_magasins', normalizedStr);
@@ -108,7 +110,7 @@ export function initMagasins(): void {
     return;
   }
   try {
-    const stored = normalizeMagasins(JSON.parse(existing));
+    const stored = normalizeMagasins([...JSON.parse(existing), ...MAGASINS]);
     const storedIds = new Set(stored.map(m => m.id));
     const missing = MAGASINS.filter(m => !storedIds.has(m.id));
     const merged = normalizeMagasins([...stored, ...missing]);
