@@ -821,6 +821,12 @@ export function VisualisationPage() {
       styles: { fontSize: 8.5, textColor: [0, 0, 0], lineColor: [0, 0, 0], lineWidth: 0.1, font: 'helvetica' },
       headStyles: { fillColor: [230, 230, 230], textColor: [0, 0, 0], fontStyle: 'bold' },
       footStyles: { fillColor: [230, 230, 230], textColor: [0, 0, 0], fontStyle: 'bold' },
+      // Une ligne ne doit jamais être coupée entre deux pages : sinon le nom
+      // du magasin (dessiné à la main, voir plus bas) peut se retrouver
+      // tronqué en haut d'une nouvelle page pendant que le reste de la
+      // ligne réapparaît juste en dessous, donnant l'impression de cellules
+      // « cachées » les unes sous les autres.
+      rowPageBreak: 'avoid',
       // Le magasin et le client sont dans la même cellule. Pour éviter le
       // doublon qui apparaissait auparavant, on retire la ligne magasin du
       // rendu automatique et on la dessine une seule fois en gras au-dessus
@@ -829,10 +835,15 @@ export function VisualisationPage() {
       didParseCell: (data: any) => {
         if (data.section !== 'body' || data.column.index !== 0 || !data.cell?.text?.length) return;
         const lines = Array.isArray(data.cell.text) ? data.cell.text.map((x: any) => String(x)) : [String(data.cell.text)];
-        if (lines.length < 2) return;
         const firstLine = lines[0].trim();
         const knownMagasins = new Set(getAllMagasinIds().map(id => id.toUpperCase()));
         if (!firstLine || !knownMagasins.has(firstLine.toUpperCase())) return;
+        // Le client peut être vide (aucune ligne après le magasin, ou une
+        // ligne vide) : on traite ce cas comme les autres pour que TOUTES
+        // les lignes « magasin » aient la même hauteur et le même style,
+        // sans quoi une ligne au client manquant restait affichée avec sa
+        // hauteur naturelle (très fine), ce qui donnait l'impression d'une
+        // ligne « fantôme » coupée au-dessus de la ligne suivante.
         const clientLine = lines.slice(1).join(' ').trim();
         (data.cell as any).__magasinNom = firstLine;
         data.cell.text = clientLine ? [clientLine] : [];
@@ -854,11 +865,6 @@ export function VisualisationPage() {
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(8.5);
         doc.text(magasinNom, data.cell.x + padLeft, data.cell.y + 5);
-        // Ligne de séparation fine entre le nom du magasin et le nom du
-        // client pour bien distinguer les deux lignes dans la cellule.
-        doc.setDrawColor(200, 200, 200);
-        doc.setLineWidth(0.1);
-        doc.line(data.cell.x + padLeft, data.cell.y + 7, data.cell.x + data.cell.width - padLeft, data.cell.y + 7);
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(8.5);
       },
