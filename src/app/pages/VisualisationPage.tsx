@@ -837,6 +837,13 @@ export function VisualisationPage() {
         (data.cell as any).__magasinNom = firstLine;
         data.cell.text = clientLine ? [clientLine] : [];
         data.cell.styles.minCellHeight = Math.max(Number(data.cell.styles.minCellHeight || 0), 15);
+        // Le nom du magasin est redessiné à la main (en gras) en haut de la
+        // cellule dans didDrawCell. Sans cela, autoTable dessine le nom du
+        // client aligné en haut par défaut, exactement à la même position
+        // que le magasin : les deux textes se superposaient (cf. capture
+        // d'écran). On force donc le client à s'afficher dans la moitié
+        // basse de la cellule, sous le nom du magasin.
+        data.cell.styles.valign = 'bottom';
       },
       didDrawCell: (data: any) => {
         if (data.section !== 'body' || data.column.index !== 0) return;
@@ -846,7 +853,12 @@ export function VisualisationPage() {
         doc.setTextColor(0, 0, 0);
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(8.5);
-        doc.text(magasinNom, data.cell.x + padLeft, data.cell.y + 5.5);
+        doc.text(magasinNom, data.cell.x + padLeft, data.cell.y + 5);
+        // Ligne de séparation fine entre le nom du magasin et le nom du
+        // client pour bien distinguer les deux lignes dans la cellule.
+        doc.setDrawColor(200, 200, 200);
+        doc.setLineWidth(0.1);
+        doc.line(data.cell.x + padLeft, data.cell.y + 7, data.cell.x + data.cell.width - padLeft, data.cell.y + 7);
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(8.5);
       },
