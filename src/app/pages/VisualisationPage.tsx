@@ -818,27 +818,37 @@ export function VisualisationPage() {
       foot: view.foot ? [view.foot] : undefined,
       // Toutes les écritures du PDF sont explicitement en noir, y compris
       // les lignes de données (évite le rendu gris de la police par défaut).
-      styles: { fontSize: 8, textColor: [0, 0, 0], lineColor: [0, 0, 0], lineWidth: 0.1 },
+      styles: { fontSize: 8.5, textColor: [0, 0, 0], lineColor: [0, 0, 0], lineWidth: 0.1, font: 'helvetica' },
       headStyles: { fillColor: [230, 230, 230], textColor: [0, 0, 0], fontStyle: 'bold' },
       footStyles: { fillColor: [230, 230, 230], textColor: [0, 0, 0], fontStyle: 'bold' },
-      // Le magasin et le client sont dans la même cellule. AutoTable ne permet
-      // pas un style différent pour chaque ligne d'une même cellule : on
-      // renforce donc la première ligne (le nom du magasin) en gras après le
-      // rendu normal de la cellule, tout en laissant le nom du client normal.
-      didDrawCell: (data: any) => {
+      // Le magasin et le client sont dans la même cellule. Pour éviter le
+      // doublon qui apparaissait auparavant, on retire la ligne magasin du
+      // rendu automatique et on la dessine une seule fois en gras au-dessus
+      // du client. Cette logique est limitée aux états dont la première
+      // cellule est bien au format MAGASIN\nCLIENT.
+      didParseCell: (data: any) => {
         if (data.section !== 'body' || data.column.index !== 0 || !data.cell?.text?.length) return;
-        const lines = Array.isArray(data.cell.text) ? data.cell.text : [String(data.cell.text)];
+        const lines = Array.isArray(data.cell.text) ? data.cell.text.map((x: any) => String(x)) : [String(data.cell.text)];
         if (lines.length < 2) return;
-        const firstLine = String(lines[0] || '').trim();
+        const firstLine = lines[0].trim();
         const knownMagasins = new Set(getAllMagasinIds().map(id => id.toUpperCase()));
         if (!firstLine || !knownMagasins.has(firstLine.toUpperCase())) return;
+        const clientLine = lines.slice(1).join(' ').trim();
+        (data.cell as any).__magasinNom = firstLine;
+        data.cell.text = clientLine ? [clientLine] : [];
+        data.cell.styles.minCellHeight = Math.max(Number(data.cell.styles.minCellHeight || 0), 15);
+      },
+      didDrawCell: (data: any) => {
+        if (data.section !== 'body' || data.column.index !== 0) return;
+        const magasinNom = String((data.cell as any).__magasinNom || '').trim();
+        if (!magasinNom) return;
         const padLeft = typeof data.cell.padding?.left === 'number' ? data.cell.padding.left : 2;
-        const y = data.cell.y + (data.cell.height / lines.length) * 0.72;
         doc.setTextColor(0, 0, 0);
         doc.setFont('helvetica', 'bold');
-        doc.setFontSize(8);
-        doc.text(firstLine, data.cell.x + padLeft, y);
+        doc.setFontSize(8.5);
+        doc.text(magasinNom, data.cell.x + padLeft, data.cell.y + 5.5);
         doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8.5);
       },
       columnStyles: view.headers.reduce((acc, h, i) => {
         if (h.align === 'right') acc[i] = { halign: 'right' };
