@@ -664,8 +664,6 @@ function NavigationMenu() {
   };
 
   const handleNavigate = (path: string) => {
-    // Chaque navigation démarre visuellement en haut de la nouvelle page.
-    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
     // Le menu latéral se referme automatiquement à chaque page ouverte :
     // fermeture complète sur mobile, repli en mode mini sur desktop.
     if (isMobile) setMobileOpen(false);
@@ -1351,7 +1349,7 @@ function MainLayoutContent() {
   // précédente.
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
-  }, [location.pathname, location.search]);
+  }, [location.pathname]);
 
   // Attendre la fin de la vérification de session.
   // On affiche un écran d'attente PLUTÔT QUE `null` : ces deux états sont censés
@@ -1386,12 +1384,12 @@ function MainLayoutContent() {
     <Box sx={{ display: 'flex', minHeight: '100dvh' }}>
       <style>{`
         @keyframes pageFadeIn {
-          from { opacity: 0; }
-          to   { opacity: 1; }
+          from { opacity: 0; transform: translateY(6px); }
+          to   { opacity: 1; transform: translateY(0); }
         }
         .page-transition {
           animation: pageFadeIn 0.15s ease-out both;
-          will-change: opacity;
+          will-change: opacity, transform;
         }
       `}</style>
       <NavigationMenu />
@@ -1401,7 +1399,7 @@ function MainLayoutContent() {
             et marges automatiques. Sur mobile/tablette la largeur reste à 100 %
             (aucun changement du comportement mobile). */}
         <Box
-          key={`${location.pathname}${location.search}`}
+          key={location.pathname}
           className="page-transition"
           sx={{ width: '100%', maxWidth: { xs: '100%', lg: 1600 }, mx: 'auto' }}
         >

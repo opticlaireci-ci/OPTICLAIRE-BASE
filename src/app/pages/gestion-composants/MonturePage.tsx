@@ -184,31 +184,28 @@ function MargeCell({ reference, codeBarre, marque, prix }: {
   const marge = total - cout;
   const pctMonture = total > 0 ? Math.round((marge / total) * 100) : 0;
   return (
-    // largeur = 100% de la cellule (qui, elle, est figée par tableLayout: 'fixed'
-    // sur le <Table>) : la cellule ne peut plus jamais déborder sur la colonne
-    // « Édition » à sa droite, quelle que soit la largeur d'écran.
-    <Box sx={{ fontSize: '0.67rem', width: '100%', boxSizing: 'border-box', overflow: 'hidden' }}>
+    <Box sx={{ fontSize: '0.67rem', minWidth: 230 }}>
       <div style={rowBase}>
         <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#f44336', flexShrink: 0, display: 'inline-block' }} />
-        <span style={{ flex: 1, fontSize: '0.67rem', minWidth: 0 }}>Commande</span>
-        <span style={{ flexShrink: 0, textAlign: 'right', fontSize: '0.67rem' }}>0.00</span>
-        <span style={{ fontSize: '0.67rem', color: '#777', padding: '0 4px', flexShrink: 0 }}>Qte 0</span>
-        <span style={{ flexShrink: 0, textAlign: 'right', fontSize: '0.67rem' }}>0.00</span>
+        <span style={{ flex: 1, fontSize: '0.67rem' }}>Commande</span>
+        <span style={{ minWidth: 40, textAlign: 'right', fontSize: '0.67rem' }}>0.00</span>
+        <span style={{ fontSize: '0.67rem', color: '#777', padding: '0 4px' }}>Qte 0</span>
+        <span style={{ minWidth: 40, textAlign: 'right', fontSize: '0.67rem' }}>0.00</span>
       </div>
       <div style={rowBase}>
         <span style={{ width: 9, height: 9, background: '#4caf50', flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 2, fontSize: 9, color: 'white', fontWeight: 700 }}>+</span>
-        <span style={{ flex: 1, fontSize: '0.67rem', minWidth: 0 }}>Vente</span>
-        <span style={{ flexShrink: 0, textAlign: 'right', fontSize: '0.67rem', fontWeight: qte > 0 ? 700 : 400, color: qte > 0 ? '#1a237e' : 'inherit' }}>{fmt(total)}</span>
-        <span style={{ fontSize: '0.67rem', color: qte > 0 ? '#1976d2' : '#777', padding: '0 4px', flexShrink: 0, fontWeight: qte > 0 ? 700 : 400 }}>Qte {qte}</span>
-        <span style={{ flexShrink: 0, textAlign: 'right', fontSize: '0.67rem' }}>{fmt(prix)}</span>
+        <span style={{ flex: 1, fontSize: '0.67rem' }}>Vente</span>
+        <span style={{ minWidth: 40, textAlign: 'right', fontSize: '0.67rem', fontWeight: qte > 0 ? 700 : 400, color: qte > 0 ? '#1a237e' : 'inherit' }}>{fmt(total)}</span>
+        <span style={{ fontSize: '0.67rem', color: qte > 0 ? '#1976d2' : '#777', padding: '0 4px', fontWeight: qte > 0 ? 700 : 400 }}>Qte {qte}</span>
+        <span style={{ minWidth: 40, textAlign: 'right', fontSize: '0.67rem' }}>{fmt(prix)}</span>
       </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 8px', borderBottom: '1px solid #e8e8e8', gap: 6 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 8px', borderBottom: '1px solid #e8e8e8' }}>
         <span style={{ fontWeight: 700, fontSize: '0.67rem', color: marge > 0 ? '#2e7d32' : marge < 0 ? '#c62828' : 'inherit' }}>{fmt(marge)}</span>
-        <span style={{ fontWeight: 700, fontSize: '0.67rem', flexShrink: 0 }}>{pctMonture}% / Monture</span>
+        <span style={{ fontWeight: 700, fontSize: '0.67rem' }}>{pctMonture}% / Monture</span>
       </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 8px', gap: 6 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 8px' }}>
         <span style={{ fontWeight: 700, fontSize: '0.67rem', color: marge > 0 ? '#2e7d32' : marge < 0 ? '#c62828' : 'inherit' }}>{fmt(marge)}</span>
-        <span style={{ fontWeight: 700, fontSize: '0.67rem', flexShrink: 0 }}>{pctMonture}% / Total</span>
+        <span style={{ fontWeight: 700, fontSize: '0.67rem' }}>{pctMonture}% / Total</span>
       </div>
     </Box>
   );
@@ -708,14 +705,8 @@ export function MonturePage() {
 
       {/* Table - Desktop */}
       <div className="hidden md:block">
-      <TableContainer component={Paper} sx={{ boxShadow: '0 1px 4px rgba(0,0,0,0.1)', borderRadius: 1, overflowX: 'auto' }}>
-        {/*
-          tableLayout: 'fixed' + une largeur explicite sur CHAQUE colonne
-          (répétée à l'identique dans l'en-tête et dans les cellules du corps)
-          empêchent une colonne de déborder sur sa voisine : c'est ce qui
-          provoquait le chevauchement entre « Marge » et « Édition ».
-        */}
-        <Table size="small" sx={{ width: 1362, tableLayout: 'fixed' }}>
+      <TableContainer component={Paper} sx={{ boxShadow: '0 1px 4px rgba(0,0,0,0.1)', borderRadius: 1 }}>
+        <Table size="small" sx={{ minWidth: 1100 }}>
           <TableHead>
             <TableRow sx={{ bgcolor: '#fafafa', '& th': { fontWeight: 700, fontSize: '0.78rem', borderBottom: '2px solid #e0e0e0', py: 1.2, px: 1 } }}>
               <TableCell padding="checkbox" sx={{ width: 36 }}><Checkbox size="small" /></TableCell>
@@ -724,18 +715,18 @@ export function MonturePage() {
                   <DeleteIcon sx={{ fontSize: 13, color: 'white' }} />
                 </IconButton>
               </TableCell>
-              <TableCell sx={{ width: 100 }}>Code Barre</TableCell>
-              <TableCell sx={{ width: 110 }}>Marque</TableCell>
-              <TableCell sx={{ width: 110 }}>Catégorie</TableCell>
-              <TableCell sx={{ width: 90 }}>Famille</TableCell>
-              <TableCell sx={{ width: 110 }}>Référence</TableCell>
-              <TableCell sx={{ width: 80 }}>Couleur</TableCell>
-              <TableCell sx={{ width: 70 }}>Taille</TableCell>
-              <TableCell sx={{ width: 90 }}>Prix</TableCell>
-              <TableCell sx={{ width: 70 }}>Stock</TableCell>
-              <TableCell sx={{ width: 230 }}>Marge</TableCell>
-              <TableCell sx={{ width: 60 }}>Seuil</TableCell>
-              <TableCell sx={{ width: 160 }}>Édition</TableCell>
+              <TableCell>Code Barre</TableCell>
+              <TableCell>Marque</TableCell>
+              <TableCell>Catégorie</TableCell>
+              <TableCell>Famille</TableCell>
+              <TableCell>Référence</TableCell>
+              <TableCell>Couleur</TableCell>
+              <TableCell>Taille</TableCell>
+              <TableCell>Prix</TableCell>
+              <TableCell>Stock</TableCell>
+              <TableCell sx={{ minWidth: 230 }}>Marge</TableCell>
+              <TableCell>Seuil</TableCell>
+              <TableCell sx={{ minWidth: 155 }}>Édition</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -759,33 +750,31 @@ export function MonturePage() {
                   <React.Fragment key={m.id}>
                     {/* ── Ligne principale ── */}
                     <TableRow sx={{ '&:hover': { bgcolor: '#f5f5f5' }, borderBottom: 'none' }}>
-                      <TableCell padding="checkbox" sx={{ width: 36 }}><Checkbox size="small" /></TableCell>
-                      <TableCell sx={{ ...cellSx, width: 46, textAlign: 'center', color: '#9e9e9e' }}>{idx + 1}</TableCell>
-                      <TableCell sx={{ ...cellSx, width: 100, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.codeBarre}</TableCell>
-                      <TableCell sx={{ ...cellSx, width: 110, fontWeight: 600, overflowWrap: 'break-word' }}>{m.marque}</TableCell>
-                      <TableCell sx={{ ...cellSx, width: 110, overflowWrap: 'break-word' }}>{m.categorie}</TableCell>
-                      <TableCell sx={{ ...cellSx, width: 90, overflowWrap: 'break-word' }}>{m.famille}</TableCell>
-                      <TableCell sx={{ ...cellSx, width: 110, overflowWrap: 'break-word' }}>
+                      <TableCell padding="checkbox"><Checkbox size="small" /></TableCell>
+                      <TableCell sx={{ ...cellSx, textAlign: 'center', color: '#9e9e9e' }}>{idx + 1}</TableCell>
+                      <TableCell sx={cellSx}>{m.codeBarre}</TableCell>
+                      <TableCell sx={{ ...cellSx, fontWeight: 600 }}>{m.marque}</TableCell>
+                      <TableCell sx={cellSx}>{m.categorie}</TableCell>
+                      <TableCell sx={cellSx}>{m.famille}</TableCell>
+                      <TableCell sx={cellSx}>
                         <div>{m.reference}</div>
                         {m.garantie && (
                           <Chip label={`Garantie: ${m.garantie}`} size="small"
                             sx={{ mt: 0.5, bgcolor: '#ff9800', color: 'white', fontSize: '0.65rem', height: 20, fontWeight: 600 }} />
                         )}
                       </TableCell>
-                      <TableCell sx={{ ...cellSx, width: 80, overflowWrap: 'break-word' }}>{m.couleur}</TableCell>
-                      <TableCell sx={{ ...cellSx, width: 70, overflowWrap: 'break-word' }}>{m.taille}</TableCell>
-                      <TableCell sx={{ ...cellSx, width: 90, fontWeight: 600 }}>
-                        {m.prix?.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </TableCell>
-                      <TableCell sx={{ ...cellSx, width: 70, textAlign: 'center' }}>{m.stock}</TableCell>
-                      <TableCell sx={{ width: 230, p: 0, verticalAlign: 'top', borderLeft: '1px solid #f0f0f0', borderRight: '1px solid #f0f0f0', overflow: 'hidden' }}>
+                      <TableCell sx={cellSx}>{m.couleur}</TableCell>
+                      <TableCell sx={cellSx}>{m.taille}</TableCell>
+                      <TableCell sx={{ ...cellSx, fontWeight: 600 }}>{m.prix?.toLocaleString('fr-FR')}</TableCell>
+                      <TableCell sx={{ ...cellSx, textAlign: 'center' }}>{m.stock}</TableCell>
+                      <TableCell sx={{ p: 0, verticalAlign: 'top', borderLeft: '1px solid #f0f0f0', borderRight: '1px solid #f0f0f0' }}>
                         <MargeCell reference={m.reference} codeBarre={m.codeBarre} marque={m.marque} prix={m.prix ?? 0} />
                       </TableCell>
-                      <TableCell sx={{ ...cellSx, width: 60, textAlign: 'center' }}>{m.seuil}</TableCell>
-                      <TableCell sx={{ ...cellSx, width: 160, verticalAlign: 'top', overflow: 'hidden' }}>
+                      <TableCell sx={{ ...cellSx, textAlign: 'center' }}>{m.seuil}</TableCell>
+                      <TableCell sx={{ ...cellSx, verticalAlign: 'top' }}>
                         <Typography sx={{ fontSize: '0.72rem', fontWeight: 600, lineHeight: 1.3 }}>{date}</Typography>
                         <Typography sx={{ fontSize: '0.7rem', color: '#666', lineHeight: 1.3 }}>{time}</Typography>
-                        <Typography noWrap sx={{ fontSize: '0.7rem', color: '#333', lineHeight: 1.3, mb: 0.5, overflow: 'hidden', textOverflow: 'ellipsis' }}>{user}</Typography>
+                        <Typography sx={{ fontSize: '0.7rem', color: '#333', lineHeight: 1.3, mb: 0.5 }}>{user}</Typography>
                         <Box sx={{ display: 'flex', gap: 0.5 }}>
                           <Tooltip title="Copier" arrow>
                             <IconButton size="small" sx={{ bgcolor: '#e3f2fd', border: '1px solid #90caf9', borderRadius: 0.5, p: 0.35 }}>

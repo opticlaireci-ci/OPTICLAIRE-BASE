@@ -524,21 +524,18 @@ function VerreSuggestionsDropdown({
 
   return createPortal(
     <div
-      style={style}
       data-verre-suggestions="true"
+      onClick={(e) => e.stopPropagation()}
+      onWheel={(e) => e.stopPropagation()}
+      onTouchMove={(e) => e.stopPropagation()}
+      style={{ ...style, touchAction: 'pan-y' }}
       className="bg-white border border-purple-300 rounded-lg shadow-2xl overflow-y-auto overscroll-contain"
     >
       {suggestions.map(v => (
         <button
           key={v.id}
           type="button"
-          onPointerDown={(e) => {
-            // Le menu est rendu via createPortal dans document.body.
-            // Le listener document "mousedown" fermait donc le menu avant le onClick.
-            // PointerDown sélectionne le verre avant cette fermeture, y compris sur mobile.
-            e.preventDefault();
-            onSelect(v);
-          }}
+          onClick={() => onSelect(v)}
           className="w-full text-left px-3 py-2 hover:bg-purple-50 border-b border-purple-100 last:border-0"
         >
           <div className="text-xs font-semibold text-purple-900">{v.verre}</div>
@@ -597,16 +594,21 @@ function VerreBlock({ data, index, total, onChange, onRemove }: { data: VerreInf
 
   useEffect(() => {
     if (!showVerreSug) return;
-    const onDocPointerDown = (e: PointerEvent) => {
+    // IMPORTANT : le menu est dans document.body via un portal.
+    // On utilise CLICK (et non pointerdown/mousedown) pour la fermeture :
+    // commencer un geste de défilement sur mobile ne déclenche alors jamais
+    // la fermeture du menu.
+    const onDocClick = (e: MouseEvent) => {
+      const path = typeof e.composedPath === 'function' ? e.composedPath() : [];
+      const insidePortal = path.some(node =>
+        node instanceof Element && node.matches('[data-verre-suggestions]')
+      );
       const target = e.target as Node | null;
-      // Le menu est rendu dans document.body via un portal : il n'est donc
-      // pas contenu dans verreBoxRef. Ne pas fermer le menu lors d'un clic,
-      // d'un toucher ou du début d'un défilement dans la liste.
-      if (target && (verreBoxRef.current?.contains(target) || (target as Element).closest?.('[data-verre-suggestions]'))) return;
+      if (insidePortal || (target && verreBoxRef.current?.contains(target))) return;
       setShowVerreSug(false);
     };
-    document.addEventListener('pointerdown', onDocPointerDown);
-    return () => document.removeEventListener('pointerdown', onDocPointerDown);
+    document.addEventListener('click', onDocClick);
+    return () => document.removeEventListener('click', onDocClick);
   }, [showVerreSug]);
 
   const set = (k: keyof VerreInfo) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => onChange({ ...data, [k]: e.target.value });
@@ -1510,25 +1512,6 @@ function ListeDevis({ magasinId, onNouveau, onModifier }: { magasinId: string; o
   };
 
   const [detailPropIdx, setDetailPropIdx] = useState(0);
-  const detailScrollRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    if (!detail) return;
-    const frame = requestAnimationFrame(() => {
-      if (detailScrollRef.current) detailScrollRef.current.scrollTo({ top: 0, left: 0, behavior: 'auto' });
-      window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
-      document.documentElement.scrollTop = 0;
-      document.body.scrollTop = 0;
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [detail?.id, detailPropIdx]);
-
-  useEffect(() => {
-    if (!detail) return;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = previousOverflow; };
-  }, [detail]);
 
   return (
     <>
@@ -1544,12 +1527,12 @@ function ListeDevis({ magasinId, onNouveau, onModifier }: { magasinId: string; o
         const obs = (raw?.observation as any) || '';
         const hasProps = props.filter((p: any) => (p.verres?.length || 0) + (p.articles?.length || 0) > 0).length;
 
-        return createPortal((
-          <div className="fixed inset-0 z-[100] flex items-start overflow-hidden" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-            <div ref={detailScrollRef} className="relative bg-gray-100 w-full min-h-screen max-h-screen overflow-y-auto overscroll-contain">
+        return (
+          <div className="fixed inset-0 z-50 flex items-start overflow-y-auto" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+            <div className="relative bg-gray-100 w-full min-h-screen">
               {/* Top bar */}
               <div className="flex items-center justify-between px-6 py-3 text-white text-sm font-semibold" style={{ backgroundColor: '#1a7a96' }}>
-                <span>Fiche de renseignement client | {fmt(detail.date)}</span>
+                <span>Informations Client | {fmt(detail.date)}</span>
                 <span className="font-bold tracking-wide">Détails Dossier</span>
                 <div className="flex items-center gap-3">
                   <span className="opacity-70">Actions</span>
@@ -1795,7 +1778,7 @@ function ListeDevis({ magasinId, onNouveau, onModifier }: { magasinId: string; o
               </div>
             </div>
           </div>
-        ), document.body);
+        );
       })()}
 
       <div className="flex flex-col gap-4 p-3 md:p-6">

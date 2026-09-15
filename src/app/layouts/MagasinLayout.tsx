@@ -368,7 +368,7 @@ export function MagasinLayout() {
   // Remonter automatiquement EN HAUT de la page à chaque changement de page.
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
-  }, [location.pathname, location.search]);
+  }, [location.pathname]);
 
   if (isLoading || !isAuthenticated) {
     return null;
@@ -459,8 +459,6 @@ export function MagasinLayout() {
   };
 
   const handleNavigate = (path: string) => {
-    // Chaque navigation démarre visuellement en haut de la nouvelle page.
-    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
     // Le menu latéral se referme automatiquement à chaque page ouverte
     // (sur mobile ET desktop) — cf. drawer temporaire ci-dessous.
     setMobileOpen(false);
@@ -693,8 +691,8 @@ export function MagasinLayout() {
         {isMobile && shortcutsOpen && <Box sx={{ height: 52 }} />}
         {/* Contenu CENTRÉ sur grands écrans (desktop), largeur 100 % sur mobile. */}
         <Box
-          key={`${location.pathname}${location.search}`}
-          sx={{ width: '100%', maxWidth: { xs: '100%', lg: 1600 }, mx: 'auto', animation: 'pageFadeIn 0.15s ease-out both', willChange: 'opacity' }}
+          key={location.pathname}
+          sx={{ width: '100%', maxWidth: { xs: '100%', lg: 1600 }, mx: 'auto', animation: 'pageFadeIn 0.15s ease-out both', willChange: 'opacity, transform' }}
         >
           <Outlet />
         </Box>
@@ -702,8 +700,8 @@ export function MagasinLayout() {
       <SessionIndicator />
       <style>{`
         @keyframes pageFadeIn {
-          from { opacity: 0; }
-          to   { opacity: 1; }
+          from { opacity: 0; transform: translateY(6px); }
+          to   { opacity: 1; transform: translateY(0); }
         }
       `}</style>
     </Box>
