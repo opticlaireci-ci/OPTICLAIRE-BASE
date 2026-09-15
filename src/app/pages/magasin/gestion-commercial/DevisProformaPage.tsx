@@ -1510,6 +1510,23 @@ function ListeDevis({ magasinId, onNouveau, onModifier }: { magasinId: string; o
   };
 
   const [detailPropIdx, setDetailPropIdx] = useState(0);
+  const detailScrollRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!detail) return;
+    const frame = requestAnimationFrame(() => {
+      if (detailScrollRef.current) detailScrollRef.current.scrollTop = 0;
+      window.scrollTo({ top: 0, behavior: 'auto' });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [detail?.id, detailPropIdx]);
+
+  useEffect(() => {
+    if (!detail) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = previousOverflow; };
+  }, [detail]);
 
   return (
     <>
@@ -1526,11 +1543,11 @@ function ListeDevis({ magasinId, onNouveau, onModifier }: { magasinId: string; o
         const hasProps = props.filter((p: any) => (p.verres?.length || 0) + (p.articles?.length || 0) > 0).length;
 
         return (
-          <div className="fixed inset-0 z-50 flex items-start overflow-y-auto" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-            <div className="relative bg-gray-100 w-full min-h-screen">
+          <div className="fixed inset-0 z-50 flex items-start overflow-hidden" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+            <div ref={detailScrollRef} className="relative bg-gray-100 w-full min-h-screen max-h-screen overflow-y-auto overscroll-contain">
               {/* Top bar */}
               <div className="flex items-center justify-between px-6 py-3 text-white text-sm font-semibold" style={{ backgroundColor: '#1a7a96' }}>
-                <span>Informations Client | {fmt(detail.date)}</span>
+                <span>Fiche de renseignement client | {fmt(detail.date)}</span>
                 <span className="font-bold tracking-wide">Détails Dossier</span>
                 <div className="flex items-center gap-3">
                   <span className="opacity-70">Actions</span>

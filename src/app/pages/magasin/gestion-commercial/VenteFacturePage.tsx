@@ -3244,6 +3244,7 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
   const [dateDebut, setDateDebut] = useState('');
   const [dateFin, setDateFin] = useState('');
   const [detail, setDetail] = useState<VenteSauvegardee | null>(null);
+  const detailScrollRef = useRef<HTMLDivElement | null>(null);
   const [viewMode, setViewMode] = useState<'details' | 'reglements'>('details');
   const [showAjouterReglement, setShowAjouterReglement] = useState(false);
   const [showBonAssuranceReglement, setShowBonAssuranceReglement] = useState(false);
@@ -3318,6 +3319,25 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
   const [savRecuperation, setSavRecuperation] = useState('');
   const [savEquipements, setSavEquipements] = useState<{ id: string; equipement: string; pannes: string[]; commentaire: string; showPanneInput: boolean; panneInput: string }[]>([]);
   const [savRecords, setSavRecords] = useState<{ reference: string; details: string; date: string }[]>([]);
+
+  // À chaque ouverture/changement de détail, revenir automatiquement en haut de la fiche.
+  // Cela évite d'obliger l'utilisateur à faire défiler une ancienne position de scroll.
+  useEffect(() => {
+    if (!detail) return;
+    const frame = requestAnimationFrame(() => {
+      if (detailScrollRef.current) detailScrollRef.current.scrollTop = 0;
+      window.scrollTo({ top: 0, behavior: 'auto' });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [detail?.id, viewMode]);
+
+  // Pendant l'affichage de la fiche, seul le contenu de la fiche doit défiler.
+  useEffect(() => {
+    if (!detail) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = previousOverflow; };
+  }, [detail]);
 
   // Réinitialiser viewMode quand on change de détail
   useEffect(() => {
@@ -3708,7 +3728,7 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
 
       {/* Détail modal */}
       {detail && (
-        <div className="fixed inset-0 z-50 flex items-start md:items-center justify-center overflow-y-auto" style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}>
+        <div className="fixed inset-0 z-50 flex items-start md:items-center justify-center overflow-hidden" style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}>
           <div className="bg-white md:rounded-xl shadow-2xl w-full md:max-w-7xl md:mx-4 overflow-hidden min-h-screen md:min-h-0 md:max-h-[90vh] flex flex-col">
             {/* Header */}
             <div className="flex items-center justify-between px-6 py-3 bg-gray-100 border-b border-gray-300">
@@ -3734,15 +3754,15 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
               </button>
             </div>
 
-            <div className="overflow-y-auto flex-1" key={`modal-${viewMode}`}>
+            <div ref={detailScrollRef} className="overflow-y-auto overscroll-contain flex-1" key={`modal-${viewMode}`}>
               {viewMode === 'details' ? (
               <>
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-4 p-4">
                 {/* Left Column - Client Info */}
                 <div className="col-span-12 md:col-span-3 flex flex-col gap-3">
-                  {/* Informations Client */}
+                  {/* Fiche de renseignement client — toujours en tête du détail */}
                   <div className="rounded-lg p-4 text-white text-sm" style={{ backgroundColor: '#1a7a96' }}>
-                    <div className="text-xs font-semibold uppercase mb-2 opacity-90">📋 Informations Client | {fmt(detail.date)}</div>
+                    <div className="text-xs font-semibold uppercase mb-2 opacity-90">📋 Fiche de renseignement client | {fmt(detail.date)}</div>
                     <div className="font-bold text-base mb-1">{detail.numeroClient} | {detail.client}</div>
                     <div className="text-sm">{detail.telephone || '—'}</div>
                     {(() => {
@@ -4288,7 +4308,7 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
                     <div className="col-span-12 md:col-span-3 flex flex-col gap-3">
                       {/* Informations Client */}
                       <div className="rounded-lg p-4 text-white text-sm" style={{ backgroundColor: '#1a7a96' }}>
-                        <div className="text-xs font-semibold uppercase mb-2 opacity-90">📋 Informations Client | {fmt(detail.date)}</div>
+                        <div className="text-xs font-semibold uppercase mb-2 opacity-90">📋 Fiche de renseignement client | {fmt(detail.date)}</div>
                         <div className="font-bold text-base mb-1">{detail.numeroClient} | {detail.client}</div>
                         <div className="text-sm">{detail.telephone || '—'}</div>
                         {(() => {

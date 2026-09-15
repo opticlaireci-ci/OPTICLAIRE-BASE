@@ -79,7 +79,7 @@ function ModalBonAssurance({ onAdd, onClose }: { onAdd: (b: BonAssurance) => voi
   const assurancesEnr = useAssurances();
   const set = (k: keyof BonAssurance) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setForm(f => ({ ...f, [k]: e.target.value }));
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}>
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-hidden p-2 md:p-4" style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}>
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4">
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
           <span className="font-semibold text-gray-800">Bon Assurance</span>
@@ -603,6 +603,7 @@ function ListeVentesFlash({ magasinId, onNouvelle }: { magasinId: string; onNouv
   const [ventes, setVentes] = useState<VenteFlash[]>([]);
   const [search, setSearch] = useState('');
   const [detail, setDetail] = useState<VenteFlash | null>(null);
+  const detailScrollRef = useRef<HTMLDivElement | null>(null);
 
   // Lecture DIRECTE Firestore (cohérent sur tous les navigateurs). Ne garde que les ventes flash.
   useEffect(() => {
@@ -618,6 +619,22 @@ function ListeVentesFlash({ magasinId, onNouvelle }: { magasinId: string; onNouv
     return () => { annule = true; };
   }, [magasinId]);
 
+  useEffect(() => {
+    if (!detail) return;
+    const frame = requestAnimationFrame(() => {
+      if (detailScrollRef.current) detailScrollRef.current.scrollTop = 0;
+      window.scrollTo({ top: 0, behavior: 'auto' });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [detail?.id]);
+
+  useEffect(() => {
+    if (!detail) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = previousOverflow; };
+  }, [detail]);
+
   const filtered = ventes.filter(v =>
     [v.client, v.numeroClient, v.numFacture].some(s => s.toLowerCase().includes(search.toLowerCase()))
   );
@@ -626,9 +643,9 @@ function ListeVentesFlash({ magasinId, onNouvelle }: { magasinId: string; onNouv
     <>
       {detail && (
         <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}>
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-xl mx-4">
+          <div ref={detailScrollRef} className="bg-white rounded-xl shadow-2xl w-full max-w-xl mx-4 max-h-[92vh] overflow-y-auto overscroll-contain">
             <div className="flex items-center justify-between px-6 py-4" style={{ backgroundColor: '#1a7a96' }}>
-              <span className="text-white font-semibold">Détail — {detail.numFacture}</span>
+              <span className="text-white font-semibold">Fiche de renseignement — {detail.numFacture}</span>
               <button onClick={() => setDetail(null)} className="text-white"><X size={18} /></button>
             </div>
             <div className="p-5 flex flex-col gap-4 text-sm">
