@@ -1515,8 +1515,10 @@ function ListeDevis({ magasinId, onNouveau, onModifier }: { magasinId: string; o
   useEffect(() => {
     if (!detail) return;
     const frame = requestAnimationFrame(() => {
-      if (detailScrollRef.current) detailScrollRef.current.scrollTop = 0;
-      window.scrollTo({ top: 0, behavior: 'auto' });
+      if (detailScrollRef.current) detailScrollRef.current.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+      window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
     });
     return () => cancelAnimationFrame(frame);
   }, [detail?.id, detailPropIdx]);
@@ -1542,8 +1544,8 @@ function ListeDevis({ magasinId, onNouveau, onModifier }: { magasinId: string; o
         const obs = (raw?.observation as any) || '';
         const hasProps = props.filter((p: any) => (p.verres?.length || 0) + (p.articles?.length || 0) > 0).length;
 
-        return (
-          <div className="fixed inset-0 z-50 flex items-start overflow-hidden" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+        return createPortal((
+          <div className="fixed inset-0 z-[100] flex items-start overflow-hidden" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
             <div ref={detailScrollRef} className="relative bg-gray-100 w-full min-h-screen max-h-screen overflow-y-auto overscroll-contain">
               {/* Top bar */}
               <div className="flex items-center justify-between px-6 py-3 text-white text-sm font-semibold" style={{ backgroundColor: '#1a7a96' }}>
@@ -1793,7 +1795,7 @@ function ListeDevis({ magasinId, onNouveau, onModifier }: { magasinId: string; o
               </div>
             </div>
           </div>
-        );
+        ), document.body);
       })()}
 
       <div className="flex flex-col gap-4 p-3 md:p-6">

@@ -3325,8 +3325,10 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
   useEffect(() => {
     if (!detail) return;
     const frame = requestAnimationFrame(() => {
-      if (detailScrollRef.current) detailScrollRef.current.scrollTop = 0;
-      window.scrollTo({ top: 0, behavior: 'auto' });
+      if (detailScrollRef.current) detailScrollRef.current.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+      window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
     });
     return () => cancelAnimationFrame(frame);
   }, [detail?.id, viewMode]);
@@ -3727,8 +3729,8 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
       )}
 
       {/* Détail modal */}
-      {detail && (
-        <div className="fixed inset-0 z-50 flex items-start md:items-center justify-center overflow-hidden" style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}>
+      {detail && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[100] flex items-start md:items-center justify-center overflow-hidden" style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}>
           <div className="bg-white md:rounded-xl shadow-2xl w-full md:max-w-7xl md:mx-4 overflow-hidden min-h-screen md:min-h-0 md:max-h-[90vh] flex flex-col">
             {/* Header */}
             <div className="flex items-center justify-between px-6 py-3 bg-gray-100 border-b border-gray-300">
@@ -4739,7 +4741,8 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {showCommandeVerre && detail && (
