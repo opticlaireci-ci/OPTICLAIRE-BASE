@@ -3044,7 +3044,7 @@ function CommandeVerreModal({
   ];
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl max-h-[92vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-6 py-3 rounded-t-xl" style={{ backgroundColor: '#1a7a96' }}>
           <h3 className="text-white text-base font-bold">👓 Bon de Commande de Verre — {vente.recap?.numFacture || ''}</h3>
@@ -3524,7 +3524,7 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
     <>
       {/* Modal Ajouter Règlement */}
       {showAjouterReglement && detail && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+        <div className="fixed inset-0 z-[200] flex items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
           <div className="bg-white rounded-lg shadow-2xl w-full max-w-4xl mx-4 overflow-hidden">
             <div className="flex items-center justify-between px-6 py-3 bg-gray-100 border-b border-gray-300">
               <h3 className="text-lg font-bold text-gray-800">Ajouter Règlement</h3>
@@ -3636,11 +3636,11 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
 
       {/* Modal Bon Assurance (sur page règlements) */}
       {showBonAssuranceReglement && detail && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+        <div className="fixed inset-0 z-[200] flex items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
           <div className="bg-white rounded-lg shadow-2xl w-full max-w-4xl mx-4 overflow-hidden">
             <div className="flex items-center justify-between px-6 py-3 bg-gray-100 border-b border-gray-300">
               <h3 className="text-lg font-bold text-gray-800">Bons d'Assurance</h3>
-              <button onClick={() => setShowBonAssuranceReglement(false)} className="text-gray-600 hover:text-gray-800">
+              <button onClick={() => { setShowBonAssuranceReglement(false); setShowBonForm(false); }} className="text-gray-600 hover:text-gray-800">
                 <X size={20} />
               </button>
             </div>
@@ -3710,7 +3710,7 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
             </div>
             <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50">
               <button
-                onClick={() => setShowBonAssuranceReglement(false)}
+                onClick={() => { setShowBonAssuranceReglement(false); setShowBonForm(false); }}
                 className="px-6 py-2 rounded-lg text-sm font-medium border border-gray-300 text-gray-700 hover:bg-gray-100"
               >
                 Fermer
@@ -4690,7 +4690,7 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
                       {peutReglement && (
                         <>
                           <button
-                            onClick={() => setShowAjouterReglement(true)}
+                            onClick={() => { setShowBonAssuranceReglement(false); setShowBonForm(false); setShowAjouterReglement(true); }}
                             className="w-full px-4 py-2.5 rounded-lg text-white text-sm font-semibold shadow hover:opacity-90"
                             style={{ backgroundColor: '#e09a2b' }}
                           >
@@ -4698,7 +4698,7 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
                           </button>
 
                           <button
-                            onClick={() => setShowBonAssuranceReglement(true)}
+                            onClick={() => { setShowAjouterReglement(false); setShowBonAssuranceReglement(true); }}
                             className="w-full px-4 py-2.5 rounded-lg text-white text-sm font-semibold shadow hover:opacity-90"
                             style={{ backgroundColor: '#e09a2b' }}
                           >
@@ -4756,7 +4756,7 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
 
       {/* ── Modal Service Après-Vente ──────────────────────────────────────── */}
       {showSAV && detail && (
-        <div className="fixed inset-0 z-[60] flex items-start md:items-center justify-center overflow-y-auto" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+        <div className="fixed inset-0 z-[200] flex items-start md:items-center justify-center overflow-y-auto" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
           <div className="bg-white md:rounded-xl shadow-2xl w-full md:max-w-3xl md:mx-4 flex flex-col min-h-screen md:min-h-0 md:max-h-[90vh]">
             {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
