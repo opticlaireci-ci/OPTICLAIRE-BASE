@@ -447,7 +447,7 @@ export function VisualisationPage() {
           const totalAss = filteredAss.reduce((s, v) => s + montantVente(v), 0);
           return build(titre, nomFichier, headersReg, assRows,
             `Total factures avec assurance : ${fmtMontant(totalAss)}`,
-            { foot: ['T O T A L', fmtMontant(totalAss), fmtMontant(totalAss), '', ''] });
+            { foot: ['T O T A L', '', fmtMontant(totalAss), '', ''] });
         }
 
         const filteredR = reglements
@@ -501,24 +501,14 @@ export function VisualisationPage() {
           ), 0), 0);
         const totalR = filteredR.reduce((s, r) => s + num(r.montant), 0);
         const totalV = filteredV.reduce((s, v) => s + num((v.recap as any)?.acompte), 0);
-        // Total Net distinct par facture (évite de compter deux fois une facture
-        // ayant plusieurs règlements).
-        const facturesUniques = new Map<string, number>();
-        filteredR.forEach(r => { const v = vById.get(r.vente_id); if (v) facturesUniques.set(v.id, montantVente(v)); });
-        filteredV.forEach(v => facturesUniques.set(v.id, montantVente(v)));
-        // Les bons d'assurance ne sont ajoutés au total net que lorsque
-        // l'état affiche réellement tous les modes de paiement. Pour un filtre
-        // précis (Espèces, Mobile Money, etc.), le Total Net doit correspondre
-        // uniquement aux factures représentées par les lignes affichées.
-        if (modePaiement === OPTION_TOUS_MODES) {
-          filteredAssVentes.forEach(v => facturesUniques.set(v.id, montantVente(v)));
-        }
-        const totalNetDistinct = Array.from(facturesUniques.values()).reduce((s, n) => s + n, 0);
+        // Dans l'état RÈGLEMENTS, la ligne TOTAL ne doit contenir que le
+        // montant réellement encaissé : la colonne « Total Net » reste vide
+        // dans cette ligne.
         const totalEncaisse = totalR + totalV + totalAssurance;
         const allRows = [...regRows, ...acompteRows, ...assuranceRows];
         return build(titre, nomFichier, headersReg, allRows,
           `Total encaissé : ${fmtMontant(totalEncaisse)}`,
-          { foot: ['T O T A L', fmtMontant(totalNetDistinct), fmtMontant(totalEncaisse), '', ''] });
+          { foot: ['T O T A L', '', fmtMontant(totalEncaisse), '', ''] });
       }
       // ── Assurances ────────────────────────────────────────────────────────────
       case 'recap-releves': {
@@ -826,9 +816,58 @@ export function VisualisationPage() {
       head: [view.headers.map(h => h.label)],
       body: pdfBody,
       foot: view.foot ? [view.foot] : undefined,
-      styles: { fontSize: 8, lineColor: [0, 0, 0], lineWidth: 0.1 },
+      // Toutes les écritures du PDF sont explicitement en noir, y compris
+      // les lignes de données (évite le rendu gris de la police par défaut).
+      styles: { fontSize: 8.5, textColor: [0, 0, 0], lineColor: [0, 0, 0], lineWidth: 0.1, font: 'helvetica' },
       headStyles: { fillColor: [230, 230, 230], textColor: [0, 0, 0], fontStyle: 'bold' },
       footStyles: { fillColor: [230, 230, 230], textColor: [0, 0, 0], fontStyle: 'bold' },
+      // Une ligne ne doit jamais être coupée entre deux pages : sinon le nom
+      // du magasin (dessiné à la main, voir plus bas) peut se retrouver
+      // tronqué en haut d'une nouvelle page pendant que le reste de la
+      // ligne réapparaît juste en dessous, donnant l'impression de cellules
+      // « cachées » les unes sous les autres.
+      rowPageBreak: 'avoid',
+      // Le magasin et le client sont dans la même cellule. Pour éviter le
+      // doublon qui apparaissait auparavant, on retire la ligne magasin du
+      // rendu automatique et on la dessine une seule fois en gras au-dessus
+      // du client. Cette logique est limitée aux états dont la première
+      // cellule est bien au format MAGASIN\nCLIENT.
+      didParseCell: (data: any) => {
+        if (data.section !== 'body' || data.column.index !== 0 || !data.cell?.text?.length) return;
+        const lines = Array.isArray(data.cell.text) ? data.cell.text.map((x: any) => String(x)) : [String(data.cell.text)];
+        const firstLine = lines[0].trim();
+        const knownMagasins = new Set(getAllMagasinIds().map(id => id.toUpperCase()));
+        if (!firstLine || !knownMagasins.has(firstLine.toUpperCase())) return;
+        // Le client peut être vide (aucune ligne après le magasin, ou une
+        // ligne vide) : on traite ce cas comme les autres pour que TOUTES
+        // les lignes « magasin » aient la même hauteur et le même style,
+        // sans quoi une ligne au client manquant restait affichée avec sa
+        // hauteur naturelle (très fine), ce qui donnait l'impression d'une
+        // ligne « fantôme » coupée au-dessus de la ligne suivante.
+        const clientLine = lines.slice(1).join(' ').trim();
+        (data.cell as any).__magasinNom = firstLine;
+        data.cell.text = clientLine ? [clientLine] : [];
+        data.cell.styles.minCellHeight = Math.max(Number(data.cell.styles.minCellHeight || 0), 15);
+        // Le nom du magasin est redessiné à la main (en gras) en haut de la
+        // cellule dans didDrawCell. Sans cela, autoTable dessine le nom du
+        // client aligné en haut par défaut, exactement à la même position
+        // que le magasin : les deux textes se superposaient (cf. capture
+        // d'écran). On force donc le client à s'afficher dans la moitié
+        // basse de la cellule, sous le nom du magasin.
+        data.cell.styles.valign = 'bottom';
+      },
+      didDrawCell: (data: any) => {
+        if (data.section !== 'body' || data.column.index !== 0) return;
+        const magasinNom = String((data.cell as any).__magasinNom || '').trim();
+        if (!magasinNom) return;
+        const padLeft = typeof data.cell.padding?.left === 'number' ? data.cell.padding.left : 2;
+        doc.setTextColor(0, 0, 0);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(8.5);
+        doc.text(magasinNom, data.cell.x + padLeft, data.cell.y + 5);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8.5);
+      },
       columnStyles: view.headers.reduce((acc, h, i) => {
         if (h.align === 'right') acc[i] = { halign: 'right' };
         return acc;
@@ -933,6 +972,30 @@ export function VisualisationPage() {
     if (view.foot) aoa.push(view.foot);
     else if (view.footer) aoa.push([view.footer]);
     const ws = XLSX.utils.aoa_to_sheet(aoa);
+
+    // Mise en forme globale Excel : toutes les écritures sont explicitement
+    // noires. Le nom du magasin (1ère ligne de la cellule MAGASIN\nCLIENT)
+    // est mis en gras pour les états de règlements/mouvements.
+    const range = XLSX.utils.decode_range(ws['!ref'] || 'A1:A1');
+    const knownMagasins = new Set(getAllMagasinIds().map(id => id.toUpperCase()));
+    for (let r = range.s.r; r <= range.e.r; r++) {
+      for (let c = range.s.c; c <= range.e.c; c++) {
+        const cell = ws[XLSX.utils.encode_cell({ r, c })];
+        if (!cell) continue;
+        const value = String(cell.v ?? '');
+        const isStoreClientCell = c === 0 && value.includes('\n') &&
+          knownMagasins.has(value.split(/\r?\n/)[0].trim().toUpperCase());
+        cell.s = {
+          ...(cell.s || {}),
+          font: {
+            ...(cell.s?.font || {}),
+            color: { rgb: '000000' },
+            ...(isStoreClientCell ? { bold: true } : {}),
+          },
+        };
+      }
+    }
+
     // Mise en forme Excel des séparateurs de date (ligne verte comme le PDF).
     const headerOffset = excelHeaderRows().length + 4; // first generated group row comes after title/subtitle/blank/headers
     excelGroupRows.forEach((entry, idx) => {
@@ -940,9 +1003,11 @@ export function VisualisationPage() {
       const r = headerOffset + idx;
       for (let c = 0; c < view.headers.length; c++) {
         const cell = ws[XLSX.utils.encode_cell({ r, c })];
-        if (cell) cell.s = entry.magasin
-          ? { fill: { fgColor: { rgb: 'FFFFFF' } }, font: { bold: true, color: { rgb: '000000' } } }
-          : { fill: { fgColor: { rgb: 'C6DC5C' } }, font: { bold: true, color: { rgb: '000000' } } };
+        if (cell) cell.s = {
+          ...(cell.s || {}),
+          fill: { fgColor: { rgb: entry.magasin ? 'FFFFFF' : 'C6DC5C' } },
+          font: { ...(cell.s?.font || {}), bold: true, color: { rgb: '000000' } },
+        };
       }
     });
     const wb = XLSX.utils.book_new();

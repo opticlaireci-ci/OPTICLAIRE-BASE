@@ -3,7 +3,7 @@ import { AddButton } from '../../../components/AddButton';
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useAuth } from '../../../contexts/AuthContext';
-import { useParams } from 'react-router';
+import { useParams, useSearchParams } from 'react-router';
 import { Calendar, Trash2, X, Download, Plus, Eye, FileText, ArrowLeft, Printer, MoreHorizontal, Pencil } from 'lucide-react';
 import { addCreateAudit, addUpdateAudit, formatDate, resolveUserName, AuditInfo } from '../../../utils/auditUtils';
 import { genNumFacture, genCodeBarre, genRefBonCommandeVerre, genNumRecu } from '../../../utils/autoNumbers';
@@ -1649,12 +1649,8 @@ function VerreBlock({
       });
     };
     const onDocClick = (e: MouseEvent) => {
-      const target = e.target as Node | null;
-      const path = typeof e.composedPath === 'function' ? e.composedPath() : [];
-      const insidePortal = path.some(node =>
-        node instanceof Element && node.matches('[data-verre-suggestions]')
-      );
-      if (insidePortal || (target && verreBoxRef.current?.contains(target)) || (target && verreDropdownRef.current?.contains(target))) return;
+      const target = e.target as Node;
+      if (verreBoxRef.current?.contains(target) || verreDropdownRef.current?.contains(target)) return;
       setShowVerreSug(false);
     };
     updatePosition();
@@ -1745,11 +1741,7 @@ function VerreBlock({
             {showVerreSug && verreSuggestions.length > 0 && typeof document !== 'undefined' && createPortal(
               <div
                 ref={verreDropdownRef}
-                style={{ ...verreDropdownStyle, touchAction: 'pan-y' }}
-                data-verre-suggestions="true"
-                onClick={(e) => e.stopPropagation()}
-                onWheel={(e) => e.stopPropagation()}
-                onTouchMove={(e) => e.stopPropagation()}
+                style={verreDropdownStyle}
                 className="bg-white border border-purple-300 rounded-lg shadow-2xl overflow-y-auto overscroll-contain"
               >
                 {verreSuggestions.map(v => (
@@ -2593,8 +2585,8 @@ function ModalBonAssurance({
     onClose();
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}>
+  return typeof document !== 'undefined' ? createPortal(
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}>
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4" style={{ backgroundColor: '#1a7a96' }}>
@@ -2642,8 +2634,9 @@ function ModalBonAssurance({
           </button>
         </div>
       </div>
-    </div>
-  );
+    </div>,
+    document.body
+  ) : null;
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -3052,7 +3045,7 @@ function CommandeVerreModal({
   ];
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl max-h-[92vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-6 py-3 rounded-t-xl" style={{ backgroundColor: '#1a7a96' }}>
           <h3 className="text-white text-base font-bold">👓 Bon de Commande de Verre — {vente.recap?.numFacture || ''}</h3>
@@ -3252,6 +3245,7 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
   const [dateDebut, setDateDebut] = useState('');
   const [dateFin, setDateFin] = useState('');
   const [detail, setDetail] = useState<VenteSauvegardee | null>(null);
+  const detailScrollRef = useRef<HTMLDivElement | null>(null);
   const [viewMode, setViewMode] = useState<'details' | 'reglements'>('details');
   const [showAjouterReglement, setShowAjouterReglement] = useState(false);
   const [showBonAssuranceReglement, setShowBonAssuranceReglement] = useState(false);
@@ -3326,6 +3320,27 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
   const [savRecuperation, setSavRecuperation] = useState('');
   const [savEquipements, setSavEquipements] = useState<{ id: string; equipement: string; pannes: string[]; commentaire: string; showPanneInput: boolean; panneInput: string }[]>([]);
   const [savRecords, setSavRecords] = useState<{ reference: string; details: string; date: string }[]>([]);
+
+  // À chaque ouverture/changement de détail, revenir automatiquement en haut de la fiche.
+  // Cela évite d'obliger l'utilisateur à faire défiler une ancienne position de scroll.
+  useEffect(() => {
+    if (!detail) return;
+    const frame = requestAnimationFrame(() => {
+      if (detailScrollRef.current) detailScrollRef.current.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+      window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [detail?.id, viewMode]);
+
+  // Pendant l'affichage de la fiche, seul le contenu de la fiche doit défiler.
+  useEffect(() => {
+    if (!detail) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = previousOverflow; };
+  }, [detail]);
 
   // Réinitialiser viewMode quand on change de détail
   useEffect(() => {
@@ -3509,8 +3524,8 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
   return (
     <>
       {/* Modal Ajouter Règlement */}
-      {showAjouterReglement && detail && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+      {showAjouterReglement && detail && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[900] flex items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
           <div className="bg-white rounded-lg shadow-2xl w-full max-w-4xl mx-4 overflow-hidden">
             <div className="flex items-center justify-between px-6 py-3 bg-gray-100 border-b border-gray-300">
               <h3 className="text-lg font-bold text-gray-800">Ajouter Règlement</h3>
@@ -3617,16 +3632,17 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Modal Bon Assurance (sur page règlements) */}
-      {showBonAssuranceReglement && detail && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+      {showBonAssuranceReglement && detail && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[900] flex items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
           <div className="bg-white rounded-lg shadow-2xl w-full max-w-4xl mx-4 overflow-hidden">
             <div className="flex items-center justify-between px-6 py-3 bg-gray-100 border-b border-gray-300">
               <h3 className="text-lg font-bold text-gray-800">Bons d'Assurance</h3>
-              <button onClick={() => setShowBonAssuranceReglement(false)} className="text-gray-600 hover:text-gray-800">
+              <button onClick={() => { setShowBonAssuranceReglement(false); setShowBonForm(false); }} className="text-gray-600 hover:text-gray-800">
                 <X size={20} />
               </button>
             </div>
@@ -3696,7 +3712,7 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
             </div>
             <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50">
               <button
-                onClick={() => setShowBonAssuranceReglement(false)}
+                onClick={() => { setShowBonAssuranceReglement(false); setShowBonForm(false); }}
                 className="px-6 py-2 rounded-lg text-sm font-medium border border-gray-300 text-gray-700 hover:bg-gray-100"
               >
                 Fermer
@@ -3704,19 +3720,21 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
             </div>
           </div>
 
-          {/* Formulaire d'ajout d'un bon (réutilise ModalBonAssurance) */}
-          {showBonForm && (
-            <ModalBonAssurance
-              onClose={() => setShowBonForm(false)}
-              onSave={handleSaveBonReglement}
-            />
-          )}
-        </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Formulaire d'ajout d'un bon : monté directement dans le body */}
+      {showBonForm && detail && (
+        <ModalBonAssurance
+          onClose={() => setShowBonForm(false)}
+          onSave={handleSaveBonReglement}
+        />
       )}
 
       {/* Détail modal */}
-      {detail && (
-        <div className="fixed inset-0 z-50 flex items-start md:items-center justify-center overflow-y-auto" style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}>
+      {detail && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[100] flex items-start md:items-center justify-center overflow-hidden" style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}>
           <div className="bg-white md:rounded-xl shadow-2xl w-full md:max-w-7xl md:mx-4 overflow-hidden min-h-screen md:min-h-0 md:max-h-[90vh] flex flex-col">
             {/* Header */}
             <div className="flex items-center justify-between px-6 py-3 bg-gray-100 border-b border-gray-300">
@@ -3742,15 +3760,15 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
               </button>
             </div>
 
-            <div className="overflow-y-auto flex-1" key={`modal-${viewMode}`}>
+            <div ref={detailScrollRef} className="overflow-y-auto overscroll-contain flex-1" key={`modal-${viewMode}`}>
               {viewMode === 'details' ? (
               <>
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-4 p-4">
                 {/* Left Column - Client Info */}
                 <div className="col-span-12 md:col-span-3 flex flex-col gap-3">
-                  {/* Informations Client */}
+                  {/* Fiche de renseignement client — toujours en tête du détail */}
                   <div className="rounded-lg p-4 text-white text-sm" style={{ backgroundColor: '#1a7a96' }}>
-                    <div className="text-xs font-semibold uppercase mb-2 opacity-90">📋 Informations Client | {fmt(detail.date)}</div>
+                    <div className="text-xs font-semibold uppercase mb-2 opacity-90">📋 Fiche de renseignement client | {fmt(detail.date)}</div>
                     <div className="font-bold text-base mb-1">{detail.numeroClient} | {detail.client}</div>
                     <div className="text-sm">{detail.telephone || '—'}</div>
                     {(() => {
@@ -4296,7 +4314,7 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
                     <div className="col-span-12 md:col-span-3 flex flex-col gap-3">
                       {/* Informations Client */}
                       <div className="rounded-lg p-4 text-white text-sm" style={{ backgroundColor: '#1a7a96' }}>
-                        <div className="text-xs font-semibold uppercase mb-2 opacity-90">📋 Informations Client | {fmt(detail.date)}</div>
+                        <div className="text-xs font-semibold uppercase mb-2 opacity-90">📋 Fiche de renseignement client | {fmt(detail.date)}</div>
                         <div className="font-bold text-base mb-1">{detail.numeroClient} | {detail.client}</div>
                         <div className="text-sm">{detail.telephone || '—'}</div>
                         {(() => {
@@ -4676,7 +4694,7 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
                       {peutReglement && (
                         <>
                           <button
-                            onClick={() => setShowAjouterReglement(true)}
+                            onClick={() => { setShowBonAssuranceReglement(false); setShowBonForm(false); setShowAjouterReglement(true); }}
                             className="w-full px-4 py-2.5 rounded-lg text-white text-sm font-semibold shadow hover:opacity-90"
                             style={{ backgroundColor: '#e09a2b' }}
                           >
@@ -4684,7 +4702,7 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
                           </button>
 
                           <button
-                            onClick={() => setShowBonAssuranceReglement(true)}
+                            onClick={() => { setShowAjouterReglement(false); setShowBonAssuranceReglement(true); }}
                             className="w-full px-4 py-2.5 rounded-lg text-white text-sm font-semibold shadow hover:opacity-90"
                             style={{ backgroundColor: '#e09a2b' }}
                           >
@@ -4727,21 +4745,23 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {showCommandeVerre && detail && (
+      {showCommandeVerre && detail && typeof document !== 'undefined' && createPortal(
         <CommandeVerreModal
           vente={detail}
           magasinId={magasinId}
           onClose={() => setShowCommandeVerre(false)}
           onSave={handleSaveCommandeVerre}
-        />
+        />,
+        document.body
       )}
 
       {/* ── Modal Service Après-Vente ──────────────────────────────────────── */}
-      {showSAV && detail && (
-        <div className="fixed inset-0 z-[60] flex items-start md:items-center justify-center overflow-y-auto" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+      {showSAV && detail && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[900] flex items-start md:items-center justify-center overflow-y-auto" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
           <div className="bg-white md:rounded-xl shadow-2xl w-full md:max-w-3xl md:mx-4 flex flex-col min-h-screen md:min-h-0 md:max-h-[90vh]">
             {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
@@ -4934,7 +4954,8 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       <div className="flex flex-col gap-4 p-3 md:p-6">
@@ -5616,6 +5637,7 @@ function venteSupabaseToSauvegardee(v: VenteSupabase): VenteSauvegardee {
 
 export function VenteFacturePage() {
   const { magasinId = '' } = useParams<{ magasinId: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
   const ventesKey = `leclaire_ventes_${magasinId}`;
   const [vue, setVue] = useState<'liste' | 'formulaire'>('liste');
   const [venteEnEdition, setVenteEnEdition] = useState<VenteSauvegardee | null>(null);
@@ -5641,6 +5663,20 @@ export function VenteFacturePage() {
     setVentes(readVentesCache(magasinId).filter(estVente).map(venteSupabaseToSauvegardee));
     chargerVentes();
   }, [magasinId]);
+
+  // Ouverture directe d'une facture demandée depuis Gestion de Comptabilité >
+  // Facture Assurance. Le bouton d'édition transmet l'id de la vente dans l'URL.
+  useEffect(() => {
+    const venteId = searchParams.get('venteId');
+    if (!venteId || vue !== 'liste') return;
+    const vente = ventes.find(v => v.id === venteId);
+    if (!vente) return;
+    setVenteEnEdition(vente);
+    setVue('formulaire');
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete('venteId');
+    setSearchParams(nextParams, { replace: true });
+  }, [searchParams, setSearchParams, ventes, vue]);
 
   // Synchronisation en temps réel
   useEffect(() => {
