@@ -3523,8 +3523,8 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
   return (
     <>
       {/* Modal Ajouter Règlement */}
-      {showAjouterReglement && detail && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+      {showAjouterReglement && detail && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
           <div className="bg-white rounded-lg shadow-2xl w-full max-w-4xl mx-4 overflow-hidden">
             <div className="flex items-center justify-between px-6 py-3 bg-gray-100 border-b border-gray-300">
               <h3 className="text-lg font-bold text-gray-800">Ajouter Règlement</h3>
@@ -3632,11 +3632,11 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
             </div>
           </div>
         </div>
-      )}
+        , document.body)}
 
       {/* Modal Bon Assurance (sur page règlements) */}
-      {showBonAssuranceReglement && detail && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+      {showBonAssuranceReglement && detail && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
           <div className="bg-white rounded-lg shadow-2xl w-full max-w-4xl mx-4 overflow-hidden">
             <div className="flex items-center justify-between px-6 py-3 bg-gray-100 border-b border-gray-300">
               <h3 className="text-lg font-bold text-gray-800">Bons d'Assurance</h3>
@@ -3726,7 +3726,7 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
             />
           )}
         </div>
-      )}
+        , document.body)}
 
       {/* Détail modal */}
       {detail && typeof document !== 'undefined' && createPortal(
