@@ -3,7 +3,7 @@ import { AddButton } from '../../../components/AddButton';
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useAuth } from '../../../contexts/AuthContext';
-import { useParams } from 'react-router';
+import { useParams, useSearchParams } from 'react-router';
 import { Calendar, Trash2, X, Download, Plus, Eye, FileText, ArrowLeft, Printer, MoreHorizontal, Pencil } from 'lucide-react';
 import { addCreateAudit, addUpdateAudit, formatDate, resolveUserName, AuditInfo } from '../../../utils/auditUtils';
 import { genNumFacture, genCodeBarre, genRefBonCommandeVerre, genNumRecu } from '../../../utils/autoNumbers';
@@ -5608,6 +5608,7 @@ function venteSupabaseToSauvegardee(v: VenteSupabase): VenteSauvegardee {
 
 export function VenteFacturePage() {
   const { magasinId = '' } = useParams<{ magasinId: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
   const ventesKey = `leclaire_ventes_${magasinId}`;
   const [vue, setVue] = useState<'liste' | 'formulaire'>('liste');
   const [venteEnEdition, setVenteEnEdition] = useState<VenteSauvegardee | null>(null);
@@ -5633,6 +5634,20 @@ export function VenteFacturePage() {
     setVentes(readVentesCache(magasinId).filter(estVente).map(venteSupabaseToSauvegardee));
     chargerVentes();
   }, [magasinId]);
+
+  // Ouverture directe d'une facture demandée depuis Gestion de Comptabilité >
+  // Facture Assurance. Le bouton d'édition transmet l'id de la vente dans l'URL.
+  useEffect(() => {
+    const venteId = searchParams.get('venteId');
+    if (!venteId || vue !== 'liste') return;
+    const vente = ventes.find(v => v.id === venteId);
+    if (!vente) return;
+    setVenteEnEdition(vente);
+    setVue('formulaire');
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete('venteId');
+    setSearchParams(nextParams, { replace: true });
+  }, [searchParams, setSearchParams, ventes, vue]);
 
   // Synchronisation en temps réel
   useEffect(() => {
