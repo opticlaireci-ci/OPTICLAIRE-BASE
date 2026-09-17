@@ -9,6 +9,7 @@ import {
 } from '../utils/firestoreCompat';
 import { db, auth } from '../utils/firebaseClient';
 import { logNetworkAware, isAuthError, isNoSessionError } from '../utils/networkErrors';
+import { chargerCatalogue, replaceCatalogue } from './catalogueService';
 
 export interface StockMagasin {
   magasinId: string;
@@ -267,6 +268,22 @@ function stableUuid(key: string): string {
   return `${hex.slice(0,8)}-${hex.slice(8,12)}-5${hex.slice(13,16)}-8${hex.slice(17,20)}-${hex.slice(20,32)}`;
 }
 
+/**
+ * Vérifie l'existence d'un mouvement métier avant de rejouer une opération.
+ * Utilisé notamment pour réparer les anciens bons traités sans mouvement.
+ */
+export async function mouvementStockExiste(
+  type: string,
+  bonReference: string,
+  magasinId: string,
+  articleId: string,
+): Promise<boolean> {
+  const id = stableUuid(
+    `${type}|${bonReference}|${magasinId}|${articleId}`
+  );
+  return confirmerMouvement(id);
+}
+
 async function confirmerMouvement(id: string): Promise<boolean> {
   try {
     const snap = await getDoc(doc(db, 'mouvements_stock', id));
@@ -322,17 +339,105 @@ async function insertMouvements(rows: any[]): Promise<boolean> {
   return false;
 }
 
+
+/**
+ * Met à jour le stock GENERAL (magasin central).
+ *
+ * Règle métier :
+ * - distribution vers un magasin  => stock général DIMINUE ;
+ * - retour d'un magasin           => stock général AUGMENTE ;
+ * - transfert entre magasins      => stock général INCHANGÉ ;
+ * - vente en magasin              => stock général INCHANGÉ.
+ *
+ * Le stock magasin, lui, reste calculé exclusivement à partir des mouvements.
+ */
+async function ajusterStockGeneral(items: Item[], delta: 1 | -1): Promise<boolean> {
+  const groupes = new Map<'monture' | 'accessoire', Item[]>();
+  for (const item of items) {
+    const type = item.type === 'accessoire' ? 'accessoire' : 'monture';
+    const liste = groupes.get(type) || [];
+    liste.push(item);
+    groupes.set(type, liste);
+  }
+
+  try {
+    for (const [type, lignes] of groupes) {
+      const catType = type === 'accessoire' ? 'catalogue_accessoires' : 'catalogue_montures';
+      const catalogue = await chargerCatalogue(catType);
+      if (!Array.isArray(catalogue)) {
+        throw new Error(`Catalogue général introuvable: ${catType}`);
+      }
+
+      const normaliser = (v: unknown) => String(v ?? '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, ' ');
+
+      const suivant = catalogue.map((produit: any) => ({ ...produit }));
+      for (const ligne of lignes) {
+        const id = String(ligne.id ?? '').trim();
+        const designation = normaliser(ligne.designation);
+        const index = suivant.findIndex((p: any) =>
+          (id && String(p?.id ?? '').trim() === id) ||
+          (!id && designation && normaliser(
+            type === 'monture'
+              ? `${p?.marque || ''} - ${p?.reference || ''}`
+              : `${p?.marque || ''} - ${p?.designation || ''}`
+          ) === designation) ||
+          (designation && normaliser(
+            type === 'monture'
+              ? `${p?.marque || ''} - ${p?.reference || ''}`
+              : `${p?.marque || ''} - ${p?.designation || ''}`
+          ) === designation)
+        );
+
+        if (index < 0) {
+          logger.warn(`⚠️ Produit absent du stock général: ${ligne.designation} (${id})`);
+          continue;
+        }
+
+        const actuel = Number(suivant[index]?.stock) || 0;
+        const quantite = Math.max(0, Number(ligne.quantite) || 0);
+        const nouveau = actuel + (delta * quantite);
+
+        if (nouveau < 0) {
+          throw new Error(
+            `Stock général insuffisant pour "${ligne.designation}" : ${actuel} disponible, ${quantite} demandé(s).`
+          );
+        }
+        suivant[index].stock = nouveau;
+      }
+
+      await replaceCatalogue(catType, suivant);
+    }
+
+    return true;
+  } catch (err) {
+    logger.error('❌ ajusterStockGeneral:', err);
+    return false;
+  }
+}
+
 export async function enregistrerDistribution(params: {
   magasinId: string;
   bonReference: string;
   items: Item[];
 }): Promise<boolean> {
-  return insertMouvements(params.items.map(item => ({
+  const rows = params.items.filter(i => i.quantite > 0);
+  if (rows.length === 0) return true;
+
+  const mouvementOk = await insertMouvements(rows.map(item => ({
     _docId: stableUuid(`distribution|${params.bonReference}|${params.magasinId}|${item.id}`),
     type: 'distribution', article_id: item.id, quantite: item.quantite,
     magasin_id: params.magasinId, magasin_destination: params.magasinId, bon_id: params.bonReference,
     designation: item.designation, produit_type: item.type, prix_vente: item.prixVente,
   })));
+  if (!mouvementOk) return false;
+
+  // Une distribution sort du stock central et entre dans le magasin.
+  return ajusterStockGeneral(rows, -1);
 }
 
 export async function enregistrerTransfert(params: {
@@ -376,10 +481,17 @@ export async function enregistrerRetour(params: {
   bonReference: string;
   items: Item[];
 }): Promise<boolean> {
-  return insertMouvements(params.items.map(item => ({
+  const rows = params.items.filter(i => i.quantite > 0);
+  if (rows.length === 0) return true;
+
+  const mouvementOk = await insertMouvements(rows.map(item => ({
     _docId: stableUuid(`retour|${params.bonReference}|${params.magasinId}|${item.id}`),
     type: 'retour', article_id: item.id, quantite: item.quantite,
     magasin_id: params.magasinId, magasin_source: params.magasinId, bon_id: params.bonReference,
     designation: item.designation, produit_type: item.type, prix_vente: item.prixVente,
   })));
+  if (!mouvementOk) return false;
+
+  // Un retour sort du magasin et revient au stock central.
+  return ajusterStockGeneral(rows, 1);
 }

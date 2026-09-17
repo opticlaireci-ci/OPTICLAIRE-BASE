@@ -44,7 +44,7 @@ interface BonTransfert {
   magasinSource: string;
   magasinDest: string;
   responsable: string;
-  items: { designation: string; quantite: number; prixUnit: number }[];
+  items: { id?: string; type?: 'monture' | 'accessoire'; designation: string; quantite: number; prixUnit: number }[];
   statut: string;
   observations?: string;
   createdAt?: string;
@@ -126,16 +126,30 @@ export function BonTransfertMagasinPage() {
 
     // Si le bon est accepté, enregistrer le transfert dans l'inventaire
     if (action === 'accepter' && selectedBon.items && selectedBon.magasinSource && selectedBon.magasinDest) {
-      const items = selectedBon.items.map(item => ({
-        id: item.designation, // Utiliser designation comme ID
-        type: 'monture' as const, // Supposer que ce sont des montures
-        designation: item.designation,
-        quantite: item.quantite,
-        prixVente: item.prixUnit,
-      }));
+      const source = selectedBon.magasinSource.toUpperCase();
+      const stockSource = await loadStockMagasin(source);
+      const normaliser = (v: unknown) => String(v ?? '')
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .trim().toLowerCase().replace(/\s+/g, ' ');
+
+      const items = selectedBon.items.map(item => {
+        const stock = stockSource.find(s =>
+          (item.id && String(s.produitId) === String(item.id)) ||
+          normaliser(s.designation) === normaliser(item.designation)
+        );
+        return {
+          // Les anciens bons n'avaient pas d'id catalogue : on le résout
+          // depuis le stock réel du magasin source.
+          id: String(item.id || stock?.produitId || item.designation).trim(),
+          type: item.type === 'accessoire' ? 'accessoire' as const : 'monture' as const,
+          designation: item.designation,
+          quantite: item.quantite,
+          prixVente: item.prixUnit || stock?.prixVente || 0,
+        };
+      }).filter(item => item.quantite > 0);
 
       await enregistrerTransfert({
-        magasinSource: selectedBon.magasinSource.toUpperCase(),
+        magasinSource: source,
         magasinDestination: selectedBon.magasinDest.toUpperCase(),
         bonReference: selectedBon.numero,
         items,
@@ -240,6 +254,8 @@ export function BonTransfertMagasinPage() {
       magasinDest: magasinDestination,
       responsable: getCurrentUser(),
       items: itemsTransfert.map(item => ({
+        id: item.produitId,
+        type: 'monture' as const,
         designation: item.designation,
         quantite: item.quantite,
         prixUnit: item.prixVente,

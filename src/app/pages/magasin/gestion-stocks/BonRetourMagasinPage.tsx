@@ -27,7 +27,7 @@ import {
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import DeleteIcon from '@mui/icons-material/Delete';
-import { enregistrerRetour, loadStockMagasin } from '../../../services/inventaireService';
+import { enregistrerRetour, loadStockMagasin, mouvementStockExiste } from '../../../services/inventaireService';
 import { upsertBon, retourToRow } from '../../../services/bonsService';
 import { useLiveData } from '../../../hooks/useLiveData';
 import { getCurrentUser, resolveUserName, formatDate } from '../../../utils/auditUtils';
@@ -40,7 +40,7 @@ interface BonRetour {
   date: string;
   magasin: string;
   responsable: string;
-  items: { designation: string; quantite: number; motif: string }[];
+  items: { id?: string; type?: 'monture' | 'accessoire'; designation: string; quantite: number; motif: string; prixUnit?: number }[];
   statut: string;
   observations?: string;
   validePar?: string;
@@ -100,7 +100,65 @@ export function BonRetourMagasinPage() {
     : [];
 
   const handleValider = async () => {
-    if (!selectedBon) return;
+    if (!selectedBon || !magasinId) return;
+
+    // Un bon déjà traité peut être « réparé » s'il a été traité par une
+    // ancienne version qui n'avait pas créé le mouvement de stock.
+    // Une fois le mouvement présent, on ne le rejoue jamais.
+    const magasin = magasinId.toUpperCase();
+
+    // Résoudre les anciens bons qui ne contiennent pas encore l'id catalogue.
+    const stockActuel = await loadStockMagasin(magasin);
+    const normaliser = (v: unknown) => String(v ?? '')
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .trim().toLowerCase().replace(/\s+/g, ' ');
+
+    const items = (selectedBon.items || []).map(item => {
+      const designation = normaliser(item.designation);
+      const stock = stockActuel.find(s =>
+        (item.id && String(s.produitId) === String(item.id)) ||
+        normaliser(s.designation) === designation
+      );
+      return {
+        id: String(item.id || stock?.produitId || item.designation).trim(),
+        type: item.type === 'accessoire' ? 'accessoire' as const : 'monture' as const,
+        designation: item.designation,
+        quantite: Number(item.quantite) || 0,
+        prixVente: Number(item.prixUnit) || stock?.prixVente || 0,
+      };
+    }).filter(item => item.id && item.quantite > 0);
+
+    if (items.length === 0) {
+      alert('❌ Aucun article valide à traiter dans ce bon de retour.');
+      return;
+    }
+
+    // Si le mouvement existe déjà, le bon a déjà été appliqué au stock.
+    // Cela protège contre les doubles clics et permet de réparer les anciens
+    // bons « Traité » qui n'avaient pas de mouvement.
+    const mouvementsManquants = [];
+    for (const item of items) {
+      const existe = await mouvementStockExiste('retour', selectedBon.numero, magasin, item.id);
+      if (!existe) mouvementsManquants.push(item);
+    }
+
+    if (mouvementsManquants.length > 0) {
+      const stockOk = await enregistrerRetour({
+        magasinId: magasin,
+        bonReference: selectedBon.numero,
+        items: mouvementsManquants,
+      });
+
+      if (!stockOk) {
+        logger.error('❌ Retour non confirmé dans le stock:', selectedBon.numero);
+        alert(
+          "❌ Le retour n'a pas pu être appliqué au stock.\n\n" +
+          "Le bon n'est pas considéré comme traité tant que la sortie du magasin " +
+          "et l'entrée dans le stock général ne sont pas confirmées."
+        );
+        return;
+      }
+    }
 
     const updatedBons = allBons.map((bon) => {
       if (bon.id === selectedBon.id) {
@@ -110,6 +168,16 @@ export function BonRetourMagasinPage() {
           observations,
           dateTraitement: new Date().toISOString(),
           traitePar: getCurrentUser(),
+          // Conserver l'id catalogue dans le bon pour les prochains traitements.
+          items: (bon.items || []).map((oldItem: any) => {
+            const resolved = items.find(i =>
+              (oldItem.id && String(oldItem.id) === String(i.id)) ||
+              normaliser(oldItem.designation) === normaliser(i.designation)
+            );
+            return resolved
+              ? { ...oldItem, id: resolved.id, type: resolved.type, prixUnit: resolved.prixVente }
+              : oldItem;
+          }),
         };
       }
       return bon;
@@ -117,28 +185,22 @@ export function BonRetourMagasinPage() {
 
     setAllBons(updatedBons);
     const changed = updatedBons.find((b) => b.id === selectedBon.id);
-    if (changed) upsertBon(retourToRow(changed)).catch(e => logger.error('❌ upsertBon retour:', e));
-
-    // Enregistrer le retour dans l'inventaire
-    if (selectedBon.items && magasinId) {
-      const items = selectedBon.items.map(item => ({
-        id: item.designation,
-        type: 'monture' as const,
-        designation: item.designation,
-        quantite: item.quantite,
-        prixVente: 0, // Prix non disponible dans les retours
-      }));
-
-      await enregistrerRetour({
-        magasinId: magasinId.toUpperCase(),
-        bonReference: selectedBon.numero,
-        items,
-      });
-
-      logger.log(`✅ Retour enregistré: ${items.length} produits retirés du magasin ${magasinId}`);
+    if (changed) {
+      try {
+        await upsertBon(retourToRow(changed));
+      } catch (e) {
+        logger.error('❌ upsertBon retour:', e);
+        alert('⚠️ Le stock a été mis à jour, mais le bon n’a pas pu être synchronisé.');
+      }
     }
 
+    logger.log(
+      `✅ Retour appliqué: ${items.length} produit(s) retirés du magasin ${magasin} ` +
+      `et réintégrés au stock général.`
+    );
+
     window.dispatchEvent(new CustomEvent('leclaire-sync-update'));
+    window.dispatchEvent(new CustomEvent('leclaire-stock-updated', { detail: { magasinId: magasin } }));
 
     setShowValidationDialog(false);
     setShowDetailDialog(false);
@@ -146,7 +208,7 @@ export function BonRetourMagasinPage() {
     setObservations('');
   };
 
-  const getStatutColor = (statut: string) => {
+    const getStatutColor = (statut: string) => {
     switch (statut?.toLowerCase()) {
       case 'validé':
         return 'success';
@@ -244,9 +306,12 @@ export function BonRetourMagasinPage() {
       magasin: magasinId.toUpperCase(),
       responsable: getCurrentUser(),
       items: itemsRetour.map(item => ({
+        id: item.produitId,
+        type: 'monture' as const,
         designation: item.designation,
         quantite: item.quantite,
         motif: item.motif,
+        prixUnit: item.prixVente,
       })),
       statut: 'En attente',
       createdAt: new Date().toISOString(),
