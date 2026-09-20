@@ -863,7 +863,7 @@ export function CallCenterGlobalPage() {
                         </div>;
                       })}
                     </div>
-                  )}
+                  ))}
                 </div>;
               })}
             </div>
