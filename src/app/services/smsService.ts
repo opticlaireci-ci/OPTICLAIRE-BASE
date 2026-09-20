@@ -6,6 +6,7 @@ import { logger } from '../utils/logger';
 
 import { serverFetch } from '../utils/supabaseClient';
 import { TENANT } from '../config/tenant';
+import { numeroAjouteAuCallCenter } from '../utils/callCenterSmsExclusions';
 
 export interface SmsRapport {
   id: string;
@@ -277,6 +278,14 @@ export async function envoyerSmsReel(params: {
   if (!to) {
     upsertRapport({ ...base, resultat: 'Échec' });
     return { success: false, error: 'Numéro invalide' };
+  }
+
+  // Les numéros ajoutés/importés dans le Call Center sont destinés aux appels.
+  // Aucun SMS automatique ou manuel ne doit partir vers ces numéros.
+  if (numeroAjouteAuCallCenter(to)) {
+    upsertRapport({ ...base, resultat: 'Ignoré - Call Center' });
+    logger.log(`📵 SMS bloqué : ${params.telephone} est un numéro ajouté au Call Center.`);
+    return { success: true };
   }
 
   upsertRapport(base);

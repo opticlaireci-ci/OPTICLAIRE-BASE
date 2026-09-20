@@ -24,6 +24,7 @@ import { PALMERAIE_2025_SEED } from '../data/palmeraieCallCenter2025';
 import { PALMERAIE_2026_SEED } from '../data/palmeraieCallCenter2026';
 import { Combobox } from '../components/Combobox';
 import { savePendingCall, readPendingCall, clearPendingCall } from '../utils/pendingCall';
+import { ajouterNumerosCallCenterAuxExclusions } from '../utils/callCenterSmsExclusions';
 
 const PALMERAIE_SEED = [...PALMERAIE_2024_SEED, ...PALMERAIE_2025_SEED, ...PALMERAIE_2026_SEED];
 
@@ -155,6 +156,9 @@ export function CallCenterGlobalPage() {
           const lastAt = lastWriteAtRef.current[EXTRA_KEY(m.id)];
           if (lastAt && incomingAt && incomingAt < lastAt) return; // snapshot périmé
           setExtrasByMag(prev => ({ ...prev, [m.id]: value }));
+          // Toute personne ajoutée/importée au Call Center est automatiquement
+          // exclue des envois SMS afin de réserver le numéro aux appels.
+          ajouterNumerosCallCenterAuxExclusions(value);
           try { localStorage.setItem(EXTRA_KEY(m.id), JSON.stringify(value)); } catch {}
         },
         () => {},
@@ -231,6 +235,8 @@ export function CallCenterGlobalPage() {
       id: `x_${Date.now()}_${i}_${Math.random().toString(36).slice(2, 5)}`,
       createdAt: now,
     }));
+    ajouterNumerosCallCenterAuxExclusions(created);
+
     persistExtras(magasinId, [...(extrasByMag[magasinId] || []), ...created]);
   };
 

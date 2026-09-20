@@ -126,12 +126,17 @@ interface MouvementAdministrationRecap {
   commentaire: string;
 }
 
-function depensesMouvementsParJour(magasinId: string, semaine: string, mouvements: MouvementCaisseRecap[]): Record<Jour, number> {
+function mouvementsCaisseParJour(
+  magasinId: string,
+  semaine: string,
+  mouvements: MouvementCaisseRecap[],
+  type: 'entree' | 'sortie',
+): Record<Jour, number> {
   const result = Object.fromEntries(JOURS.map(j => [j, 0])) as Record<Jour, number>;
   const jourDates = JOURS.map((_, i) => dateDuJour(semaine, i));
   mouvements.forEach(m => {
     if (String(m.magasinId || '').toUpperCase() !== String(magasinId).toUpperCase()) return;
-    if (String(m.type || '').toLowerCase() !== 'sortie') return;
+    if (String(m.type || '').toLowerCase() !== type) return;
     const idx = jourDates.indexOf(dateMouvementISO(m.date));
     if (idx === -1) return;
     result[JOURS[idx]] += Number(m.montant) || 0;
@@ -147,15 +152,18 @@ function calcRecapMagasin(
   mouvementsCaisse: MouvementCaisseRecap[] = [],
   ventesSource?: VenteSupabase[],
 ): RecapMagasin {
-  const recettesAuto = recettesVentesParJour(magasinId, semaine, ventesSource);
-  const depensesAuto = depensesMouvementsParJour(magasinId, semaine, mouvementsCaisse);
+  // Le Récap Hebdomadaire est désormais alimenté directement par les
+  // Mouvements Entrées/Sorties du magasin :
+  //   - toutes les ENTRÉES = recettes
+  //   - toutes les SORTIES = dépenses
+  // Les ventes et anciennes saisies manuelles ne sont donc plus additionnées
+  // afin d'éviter les doubles comptages.
+  const recettesAuto = mouvementsCaisseParJour(magasinId, semaine, mouvementsCaisse, 'entree');
+  const depensesAuto = mouvementsCaisseParJour(magasinId, semaine, mouvementsCaisse, 'sortie');
   let totalR = 0, totalD = 0;
   const lignes = JOURS.map(jour => {
-    const e = entries.find(x => x.jour === jour);
     const recettes = recettesAuto[jour] || 0;
-    // Les sorties enregistrées dans les mouvements de caisse deviennent les dépenses du récap.
-    // Les anciennes saisies manuelles restent utilisées uniquement lorsqu'aucune sortie n'est enregistrée ce jour-là.
-    const depenses = depensesAuto[jour] > 0 ? depensesAuto[jour] : (e?.depenses || 0);
+    const depenses = depensesAuto[jour] || 0;
     totalR += recettes; totalD += depenses;
     return { jour, recettes, depenses, rd: recettes - depenses };
   });
