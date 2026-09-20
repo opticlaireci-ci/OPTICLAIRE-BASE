@@ -177,7 +177,7 @@ export function buildContacts(
     const tel = (v.telephone || v.telephone2 || '').trim();
     if (!nom && !tel) continue;
     const vendeuse = vendeuseOf(v);
-    const cle = `${vendeuse.toLowerCase()}__${tel || nom.toLowerCase()}`;
+    const cle = tel.replace(/\D/g, '') || nom.toLowerCase().replace(/\s+/g, ' ').trim();
     const prev = map.get(cle);
     if (prev && (prev.rendezVous || '') >= (v.date || '')) continue;
     map.set(cle, {

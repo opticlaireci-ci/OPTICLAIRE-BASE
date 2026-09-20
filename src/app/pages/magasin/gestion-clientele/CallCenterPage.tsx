@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams } from 'react-router';
 import {
-  Phone, PhoneCall, PhoneOff, Search, X, Clock, Timer, CheckCircle2, History, User, Smartphone,
+  Phone, PhoneCall, PhoneOff, Search, X, Clock, Timer, CheckCircle2, History, User, Smartphone, ChevronDown, ChevronRight,
 } from 'lucide-react';
 import { useLiveData } from '../../../hooks/useLiveData';
 import { useAuth } from '../../../contexts/AuthContext';
@@ -293,6 +293,7 @@ export function CallCenterPage() {
 
   const isAdmin = isAdminRole(user?.role);
   const [month, setMonth] = useState<string>(() => currentMonthKey());
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const monthOptions = useMemo(() => listMonthOptions(ventes), [ventes]);
 
   // Clients du MOIS sélectionné, regroupés PAR VENDEUSE. Une conseillère ne voit
@@ -459,18 +460,21 @@ export function CallCenterPage() {
             </div>
           ) : (
             <div className="flex flex-col gap-5">
-              {filteredGroupes.map(groupe => (
+              {filteredGroupes.map(groupe => {
+                const groupOpen = expandedGroups.has(groupe.vendeuse);
+                return (
                 <div key={groupe.vendeuse} className="border border-gray-200 rounded overflow-hidden">
-                  <div className="flex items-center justify-between px-4 py-2.5" style={{ backgroundColor: TEAL + '14' }}>
+                  <button type="button" onClick={() => setExpandedGroups(prev => { const n = new Set(prev); n.has(groupe.vendeuse) ? n.delete(groupe.vendeuse) : n.add(groupe.vendeuse); return n; })} className="w-full flex items-center justify-between px-4 py-2.5 text-left hover:bg-gray-50" style={{ backgroundColor: TEAL + '14' }}>
                     <div className="flex items-center gap-2">
+                      {groupOpen ? <ChevronDown size={15} style={{ color: TEAL }} /> : <ChevronRight size={15} style={{ color: TEAL }} />}
                       <User size={15} style={{ color: TEAL }} />
                       <span className="font-bold text-gray-800">{groupe.vendeuse}</span>
                     </div>
                     <span className="text-xs font-semibold px-2 py-0.5 rounded-full text-white" style={{ backgroundColor: TEAL }}>
                       {groupe.contacts.length} client{groupe.contacts.length > 1 ? 's' : ''} à appeler
                     </span>
-                  </div>
-                  <table className="w-full text-sm border-collapse">
+                  </button>
+                  {groupOpen && <table className="w-full text-sm border-collapse">
                     <thead>
                       <tr className="bg-gray-50 border-b border-gray-200">
                         <th className="text-left px-3 py-2.5 font-semibold text-gray-700">Client</th>
@@ -512,9 +516,10 @@ export function CallCenterPage() {
                         );
                       })}
                     </tbody>
-                  </table>
+                  </table>}
                 </div>
-              ))}
+                );
+              })}
             </div>
           )
         ) : (

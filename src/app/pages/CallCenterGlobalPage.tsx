@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router';
 import {
   Phone, PhoneCall, Search, X, Clock, Timer, CheckCircle2, History, User, Store,
-  Plus, Upload, Trash2, FileText, Loader2,
+  Plus, Upload, Trash2, FileText, Loader2, ChevronDown, ChevronRight,
 } from 'lucide-react';
 import { parseEtatClientPdf } from '../utils/callCenterPdf';
 import { doc, onSnapshot, setDoc } from '../utils/firestoreCompat';
@@ -67,6 +67,8 @@ export function CallCenterGlobalPage() {
   // suppression de clients.
   const peutModifierClients = user?.role !== 'responsable_call_center';
   const conseillere = user?.prenom || user?.name || user?.email?.split('@')[0] || 'Conseillère';
+  const [expandedStores, setExpandedStores] = useState<Set<string>>(new Set());
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
   // Liste des magasins, rafraîchie si un magasin est ajouté/modifié.
   const [magasins, setMagasins] = useState<Magasin[]>(() => getActiveMagasins());
@@ -489,10 +491,16 @@ export function CallCenterGlobalPage() {
   // Contacts par magasin, regroupés par vendeuse (mois + rôle appliqués).
   const magasinsData = useMemo(() => {
     return visibleMagasins.map(m => {
-      let contacts = [
+      const rawContacts = [
         ...buildContacts(ventesByMag[m.id] || [], month),
         ...extrasToContacts(extrasByMag[m.id] || [], month, m.id),
       ];
+      const seen = new Set<string>();
+      let contacts = rawContacts.filter(c => {
+        const key = (c.telephone || '').replace(/\D/g, '') || c.client.toLowerCase().replace(/\s+/g, ' ').trim();
+        if (!key || seen.has(key)) return false;
+        seen.add(key); return true;
+      });
       if (!isAdmin) contacts = contacts.filter(c => matchesUser(c.vendeuse, user));
       const q = search.toLowerCase();
       const groupes = groupByVendeuse(contacts)
@@ -680,66 +688,60 @@ export function CallCenterGlobalPage() {
             <div className="text-center py-12 text-gray-400 border border-gray-200 rounded">Aucun magasin actif.</div>
           ) : (
             <div className="flex flex-col gap-6">
-              {magasinsData.map(({ magasin, groupes, total }) => (
-                <div key={magasin.id}>
+              {magasinsData.map(({ magasin, groupes, total }) => {
+                const storeOpen = expandedStores.has(magasin.id);
+                return <div key={magasin.id}>
                   <div className="flex items-center gap-2 mb-2 flex-wrap">
-                    <Store size={16} style={{ color: TEAL }} />
-                    <span className="font-bold text-gray-800">{magasin.label}</span>
-                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full text-white" style={{ backgroundColor: TEAL }}>
-                      {total} client{total > 1 ? 's' : ''} à appeler
-                    </span>
+                    <button type="button" onClick={() => setExpandedStores(prev => { const n = new Set(prev); n.has(magasin.id) ? n.delete(magasin.id) : n.add(magasin.id); return n; })}
+                      className="inline-flex items-center gap-2 text-left px-2 py-2 rounded hover:bg-gray-50" title={storeOpen ? 'Refermer la liste' : 'Dérouler la liste'}>
+                      {storeOpen ? <ChevronDown size={17} style={{ color: TEAL }} /> : <ChevronRight size={17} style={{ color: TEAL }} />}
+                      <Store size={16} style={{ color: TEAL }} />
+                      <span className="font-bold text-gray-800">{magasin.label}</span>
+                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full text-white" style={{ backgroundColor: TEAL }}>
+                        {total} client{total > 1 ? 's' : ''} à appeler
+                      </span>
+                    </button>
                     <div className="flex-1" />
-                    {peutModifierClients && (<>
-                    <button
-                      onClick={() => setAddModal({ magasinId: magasin.id })}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-semibold text-white"
-                      style={{ backgroundColor: TEAL }}>
-                      <Plus size={13} /> Ajouter un client
-                    </button>
-                    <button
-                      onClick={() => openImport(magasin.id)}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-semibold border"
-                      style={{ borderColor: TEAL, color: TEAL }}>
-                      <Upload size={13} /> Importer (CSV)
-                    </button>
-                    <button
-                      onClick={() => openImportPdf(magasin.id)}
-                      disabled={pdfImporting}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-semibold text-white disabled:opacity-50"
-                      style={{ backgroundColor: '#9a3412' }}
-                      title="Importer un ou plusieurs états clients PDF (le mois est détecté automatiquement)">
-                      {pdfImporting ? <Loader2 size={13} className="animate-spin" /> : <FileText size={13} />}
-                      {pdfImporting ? 'Import…' : 'Importer (PDF)'}
-                    </button>
-                    {lastImport && lastImport.magasinId === magasin.id && (
-                      <button
-                        onClick={undoLastImport}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-semibold border"
-                        style={{ borderColor: '#b91c1c', color: '#b91c1c' }}
-                        title="Retirer le dernier lot de clients importé par PDF">
-                        <Trash2 size={13} /> Annuler le dernier import ({lastImport.ids.length})
+                    {peutModifierClients && (<div className="flex items-center gap-2 flex-wrap">
+                      <button onClick={() => setAddModal({ magasinId: magasin.id })} className="inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-semibold text-white" style={{ backgroundColor: TEAL }}>
+                        <Plus size={13} /> Ajouter un client
                       </button>
-                    )}
-                    </>)}
+                      <button onClick={() => openImport(magasin.id)} className="inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-semibold border" style={{ borderColor: TEAL, color: TEAL }}>
+                        <Upload size={13} /> Importer (CSV)
+                      </button>
+                      <button onClick={() => openImportPdf(magasin.id)} disabled={pdfImporting} className="inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-semibold text-white disabled:opacity-50" style={{ backgroundColor: '#9a3412' }} title="Importer un ou plusieurs états clients PDF">
+                        {pdfImporting ? <Loader2 size={13} className="animate-spin" /> : <FileText size={13} />}
+                        {pdfImporting ? 'Import…' : 'Importer (PDF)'}
+                      </button>
+                      {lastImport && lastImport.magasinId === magasin.id && (
+                        <button onClick={undoLastImport} className="inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-semibold border" style={{ borderColor: '#b91c1c', color: '#b91c1c' }} title="Retirer le dernier lot de clients importé par PDF">
+                          <Trash2 size={13} /> Annuler le dernier import ({lastImport.ids.length})
+                        </button>
+                      )}
+                    </div>)}
                   </div>
-                  {total === 0 ? (
+                  {storeOpen && (total === 0 ? (
                     <div className="text-sm text-gray-400 border border-gray-200 rounded px-4 py-4">
                       Aucun client pour {monthLabel(month)}{!isAdmin ? ' (vos ventes)' : ''}.
                       {peutModifierClients && ' Utilisez « Ajouter un client » ou « Importer (CSV) ».'}
                     </div>
                   ) : (
                     <div className="flex flex-col gap-4">
-                      {groupes.map(groupe => (
-                        <div key={groupe.vendeuse} className="border border-gray-200 rounded overflow-hidden">
-                          <div className="flex items-center justify-between px-4 py-2.5" style={{ backgroundColor: TEAL + '14' }}>
-                            <div className="flex items-center gap-2">
+                      {groupes.map(groupe => {
+                        const groupKey = `${magasin.id}__${groupe.vendeuse}`;
+                        const groupOpen = expandedGroups.has(groupKey);
+                        return <div key={groupKey} className="border border-gray-200 rounded overflow-hidden">
+                          <button type="button" onClick={() => setExpandedGroups(prev => { const n = new Set(prev); n.has(groupKey) ? n.delete(groupKey) : n.add(groupKey); return n; })} className="w-full flex items-center justify-between px-4 py-2.5 text-left hover:bg-gray-50" style={{ backgroundColor: TEAL + '14' }}>
+                            <span className="flex items-center gap-2">
+                              {groupOpen ? <ChevronDown size={15} style={{ color: TEAL }} /> : <ChevronRight size={15} style={{ color: TEAL }} />}
                               <User size={15} style={{ color: TEAL }} />
                               <span className="font-bold text-gray-800">{groupe.vendeuse}</span>
-                            </div>
+                            </span>
                             <span className="text-xs font-semibold px-2 py-0.5 rounded-full text-white" style={{ backgroundColor: TEAL }}>
                               {groupe.contacts.length} client{groupe.contacts.length > 1 ? 's' : ''}
                             </span>
-                          </div>
+                          </button>
+                          {groupOpen && <>
                           {/* Desktop table */}
                           <div className="hidden md:block">
                           <table className="w-full text-sm border-collapse">
@@ -857,12 +859,13 @@ export function CallCenterGlobalPage() {
                               );
                             })}
                           </div>
-                        </div>
-                      ))}
+                          </>}
+                        </div>;
+                      })}
                     </div>
                   )}
-                </div>
-              ))}
+                </div>;
+              })}
             </div>
           )
         ) : tab === 'decroches' ? (
