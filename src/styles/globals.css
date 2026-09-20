@@ -1,3 +1,13 @@
+/* ── Call Center : bascule bureau / mobile (fiable, sans dépendre des
+   classes Tailwind hidden/md:block qui peuvent être écrasées par un style
+   inline) ─────────────────────────────────────────────────────────────── */
+.cc-desktop-view { display: none; }
+.cc-mobile-view { display: flex; }
+@media (min-width: 768px) {
+  .cc-desktop-view { display: block; }
+  .cc-mobile-view { display: none; }
+}
+
 /* ── Responsive mobile global ─────────────────────────────────────────────── */
 
 /* Empêche le débordement horizontal sur tout le document */

@@ -743,7 +743,7 @@ export function CallCenterGlobalPage() {
                           </button>
                           {groupOpen && <>
                           {/* Desktop table */}
-                          <div className="hidden md:block">
+                          <div className="cc-desktop-view">
                           <table className="w-full text-sm border-collapse">
                             <thead>
                               <tr className="bg-gray-50 border-b border-gray-200">
@@ -809,7 +809,7 @@ export function CallCenterGlobalPage() {
                           </table>
                           </div>
                           {/* Mobile cards */}
-                          <div className="md:hidden" style={{ display: 'flex', flexDirection: 'column', gap: '10px', padding: '10px' }}>
+                          <div className="cc-mobile-view" style={{ flexDirection: 'column', gap: '10px', padding: '10px' }}>
                             {groupe.contacts.map(r => {
                               const last = lastCallByRdv[r.id] || lastCallByRdv[r.numRef] || lastCallByRdv[r.client];
                               const nb = nbAppelsByRdv[r.id] || nbAppelsByRdv[r.numRef] || nbAppelsByRdv[r.client] || 0;
@@ -871,7 +871,7 @@ export function CallCenterGlobalPage() {
         ) : tab === 'decroches' ? (
           <>
             {/* Desktop table */}
-            <div className="hidden md:block border border-gray-200 rounded overflow-hidden">
+            <div className="cc-desktop-view border border-gray-200 rounded overflow-hidden">
               <table className="w-full text-sm border-collapse">
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-200">
@@ -916,7 +916,7 @@ export function CallCenterGlobalPage() {
               </table>
             </div>
             {/* Mobile cards */}
-            <div className="md:hidden" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div className="cc-mobile-view" style={{ flexDirection: 'column', gap: '10px' }}>
               {decrochesList.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '48px 0', color: '#9ca3af' }}>Aucun appel décroché aujourd'hui</div>
               ) : decrochesList.map(l => (
@@ -946,7 +946,7 @@ export function CallCenterGlobalPage() {
         ) : tab === 'rappeler' ? (
           <>
             {/* Desktop table */}
-            <div className="hidden md:block border border-gray-200 rounded overflow-hidden">
+            <div className="cc-desktop-view border border-gray-200 rounded overflow-hidden">
               <table className="w-full text-sm border-collapse">
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-200">
@@ -993,7 +993,7 @@ export function CallCenterGlobalPage() {
               </table>
             </div>
             {/* Mobile cards */}
-            <div className="md:hidden" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div className="cc-mobile-view" style={{ flexDirection: 'column', gap: '10px' }}>
               {aRappelerList.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '48px 0', color: '#9ca3af' }}>Aucun numéro à rappeler</div>
               ) : aRappelerList.map(l => (
@@ -1025,7 +1025,7 @@ export function CallCenterGlobalPage() {
         ) : (
           <>
             {/* Desktop table */}
-            <div className="hidden md:block border border-gray-200 rounded overflow-hidden">
+            <div className="cc-desktop-view border border-gray-200 rounded overflow-hidden">
               <table className="w-full text-sm border-collapse">
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-200">
@@ -1064,7 +1064,7 @@ export function CallCenterGlobalPage() {
               </table>
             </div>
             {/* Mobile cards */}
-            <div className="md:hidden" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div className="cc-mobile-view" style={{ flexDirection: 'column', gap: '10px' }}>
               {filteredLogs.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '48px 0', color: '#9ca3af' }}>Aucun appel enregistré</div>
               ) : filteredLogs.map(l => (
