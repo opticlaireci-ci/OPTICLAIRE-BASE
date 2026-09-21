@@ -284,7 +284,20 @@ export function CallCenterGlobalPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [extrasByMag]);
 
-  const [month, setMonth] = useState<string>(() => currentMonthKey());
+  // Mois d'appel mémorisé : lorsqu'on revient sur le Call Center après un appel,
+  // une navigation ou un rechargement, on retrouve automatiquement le dernier mois choisi.
+  const CALL_CENTER_MONTH_KEY = 'leclaire_callcenter_selected_month';
+  const [month, setMonthState] = useState<string>(() => {
+    try {
+      return localStorage.getItem(CALL_CENTER_MONTH_KEY) || currentMonthKey();
+    } catch {
+      return currentMonthKey();
+    }
+  });
+  const setMonth = (value: string) => {
+    setMonthState(value);
+    try { localStorage.setItem(CALL_CENTER_MONTH_KEY, value); } catch { /* stockage indisponible */ }
+  };
   const monthOptions = useMemo(() => {
     const all: VenteSupabase[] = [];
     for (const list of Object.values(ventesByMag)) all.push(...list);

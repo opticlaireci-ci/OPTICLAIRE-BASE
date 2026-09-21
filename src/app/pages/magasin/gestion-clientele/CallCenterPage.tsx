@@ -292,7 +292,20 @@ export function CallCenterPage() {
   }, [magasinId, magKey]);
 
   const isAdmin = isAdminRole(user?.role);
-  const [month, setMonth] = useState<string>(() => currentMonthKey());
+  // Conserve le dernier mois sélectionné pour que le retour au Call Center
+  // après un appel ou une navigation ne force pas une nouvelle sélection.
+  const CALL_CENTER_MONTH_KEY = 'leclaire_callcenter_selected_month';
+  const [month, setMonthState] = useState<string>(() => {
+    try {
+      return localStorage.getItem(CALL_CENTER_MONTH_KEY) || currentMonthKey();
+    } catch {
+      return currentMonthKey();
+    }
+  });
+  const setMonth = (value: string) => {
+    setMonthState(value);
+    try { localStorage.setItem(CALL_CENTER_MONTH_KEY, value); } catch { /* stockage indisponible */ }
+  };
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const monthOptions = useMemo(() => listMonthOptions(ventes), [ventes]);
 
