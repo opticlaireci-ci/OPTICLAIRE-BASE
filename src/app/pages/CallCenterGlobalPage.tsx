@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router';
 import {
-  Phone, PhoneCall, Search, X, Clock, Timer, CheckCircle2, History, User, Store,
+  Phone, PhoneCall, Search, X, Clock, Timer, CheckCircle2, History, User, Store, Calendar,
   Plus, Upload, Trash2, FileText, Loader2, ChevronDown, ChevronRight,
 } from 'lucide-react';
 import { parseEtatClientPdf } from '../utils/callCenterPdf';
@@ -16,7 +16,7 @@ import {
   type CallContact, type ExtraContact,
 } from '../utils/callCenter';
 import {
-  CallPanel, Stat, type CallLog, LOG_KEY, issueColor, resultatColor,
+  CallPanel, Stat, type CallLog, type CallAppointment, LOG_KEY, RDV_KEY, issueColor, resultatColor,
   fmtDuree, fmtDureeLong, fmtDateTime, fmtDate, lancerAppel,
 } from './magasin/gestion-clientele/CallCenterPage';
 import { PALMERAIE_2024_SEED, PALMERAIE_MAGASIN_ID } from '../data/palmeraieCallCenter2024';
@@ -125,6 +125,40 @@ export function CallCenterGlobalPage() {
     );
     return () => unsubs.forEach(u => u());
   }, [magasins]);
+
+  // Rendez-vous pris depuis le Call Center, synchronisés par magasin.
+  const [rdvByMag, setRdvByMag] = useState<Record<string, CallAppointment[]>>(() =>
+    readCacheByMagasin<CallAppointment>(getMagasins(), RDV_KEY),
+  );
+  useEffect(() => {
+    const unsubs = magasins.map(m =>
+      onSnapshot(
+        doc(db, 'app_data', RDV_KEY(m.id)),
+        snap => {
+          const value = (snap.exists() ? (snap.data()?.value ?? []) : []) as CallAppointment[];
+          setRdvByMag(prev => ({ ...prev, [m.id]: value }));
+          try { localStorage.setItem(RDV_KEY(m.id), JSON.stringify(value)); } catch {}
+        },
+        () => {},
+      ),
+    );
+    return () => unsubs.forEach(u => u());
+  }, [magasins]);
+
+  const saveRdvForMagasin = (magasinId: string, dateRdv: string, commentaire: string) => {
+    if (!activeCall || !dateRdv) return;
+    const item: CallAppointment = {
+      id: `rdv_call_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,
+      callId: `call_${Date.now()}`, rdvId: activeCall.contact.id, numRef: activeCall.contact.numRef,
+      client: activeCall.contact.client, telephone: activeCall.contact.telephone || '', dateRdv, commentaire,
+      conseillere, magasinId, createdAt: new Date().toISOString(), statut: 'Planifié',
+    };
+    const next = [item, ...(rdvByMag[magasinId] || [])];
+    setRdvByMag(prev => ({ ...prev, [magasinId]: next }));
+    const key = RDV_KEY(magasinId);
+    setDoc(doc(db, 'app_data', key), { key, value: next, updated_at: new Date().toISOString() }, { merge: true }).catch(() => {});
+    try { localStorage.setItem(key, JSON.stringify(next)); } catch {}
+  };
 
   // Enregistre un appel dans le journal du magasin concerné (Firestore direct).
   const saveLogForMagasin = (magasinId: string, log: Omit<CallLog, 'id'>) => {
@@ -314,11 +348,11 @@ export function CallCenterGlobalPage() {
   // raccourcis du tableau de bord Call Center.
   const [searchParams, setSearchParams] = useSearchParams();
   const tabUrl = searchParams.get('tab');
-  const [tab, setTab] = useState<'clients' | 'historique' | 'rappeler' | 'decroches'>(
-    tabUrl === 'rappeler' || tabUrl === 'decroches' || tabUrl === 'historique' ? tabUrl : 'clients',
+  const [tab, setTab] = useState<'clients' | 'historique' | 'rappeler' | 'decroches' | 'rendezvous'>(
+    tabUrl === 'rappeler' || tabUrl === 'decroches' || tabUrl === 'historique' || tabUrl === 'rendezvous' ? tabUrl : 'clients',
   );
   useEffect(() => {
-    if (tabUrl === 'rappeler' || tabUrl === 'decroches' || tabUrl === 'historique' || tabUrl === 'clients') {
+    if (tabUrl === 'rappeler' || tabUrl === 'decroches' || tabUrl === 'historique' || tabUrl === 'rendezvous' || tabUrl === 'clients') {
       setTab(tabUrl);
     }
   }, [tabUrl]);
@@ -500,6 +534,12 @@ export function CallCenterGlobalPage() {
     for (const m of visibleMagasins) for (const l of (logsByMag[m.id] || [])) list.push({ ...l, magasinId: m.id });
     return list;
   }, [visibleMagasins, logsByMag]);
+  const allRdv = useMemo(() => {
+    const list: (CallAppointment & { magasinId: string })[] = [];
+    for (const m of visibleMagasins) for (const r of (rdvByMag[m.id] || [])) list.push({ ...r, magasinId: m.id });
+    return list.sort((a, b) => a.dateRdv.localeCompare(b.dateRdv));
+  }, [visibleMagasins, rdvByMag]);
+
 
   // Contacts par magasin, regroupés par vendeuse (mois + rôle appliqués).
   const magasinsData = useMemo(() => {
@@ -615,6 +655,7 @@ export function CallCenterGlobalPage() {
           startedAt={activeCall.startedAt}
           conseillere={conseillere}
           onSave={log => { saveLogForMagasin(activeCall.magasinId, log); terminerAppel(); changerTab('historique'); }}
+          onAppointment={(dateRdv, commentaire) => saveRdvForMagasin(activeCall.magasinId, dateRdv, commentaire)}
           onCancel={terminerAppel}
         />
       )}
@@ -684,6 +725,7 @@ export function CallCenterGlobalPage() {
           ['clients', `Clients à appeler (${totalClients})`],
           ['rappeler', `À rappeler (${aRappelerList.length})`],
           ['decroches', `Décrochés du jour (${decrochesList.length})`],
+          ['rendezvous', `Rendez-vous (${allRdv.filter(r => r.statut === 'Planifié').length})`],
           ['historique', `Historique des appels (${allLogs.length})`],
         ] as const).map(([key, label]) => (
           <button key={key} onClick={() => changerTab(key)}
@@ -1035,6 +1077,21 @@ export function CallCenterGlobalPage() {
               ))}
             </div>
           </>
+        ) : tab === 'rendezvous' ? (
+          <div className="flex flex-col gap-3">
+            {allRdv.length === 0 ? (
+              <div className="text-center py-12 text-gray-400">Aucun rendez-vous pris depuis le Call Center.</div>
+            ) : allRdv.map(r => (
+              <div key={r.id} className="border border-gray-200 rounded-lg p-4 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className="font-bold text-gray-800">{r.client}</div>
+                  <div className="text-xs text-gray-500">{r.telephone || '—'} · {getMagasinLabel(r.magasinId)} · Réf. {r.numRef || '—'}</div>
+                  {r.commentaire && <div className="text-sm text-gray-600 mt-1">Observation : {r.commentaire}</div>}
+                </div>
+                <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-sm font-semibold bg-blue-50 text-blue-700"><Calendar size={14}/> {fmtDate(r.dateRdv)}</span>
+              </div>
+            ))}
+          </div>
         ) : (
           <>
             {/* Desktop table */}

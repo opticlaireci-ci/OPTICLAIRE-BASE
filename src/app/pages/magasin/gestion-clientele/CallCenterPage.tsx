@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams } from 'react-router';
 import {
-  Phone, PhoneCall, PhoneOff, Search, X, Clock, Timer, CheckCircle2, History, User, Smartphone, ChevronDown, ChevronRight,
+  Phone, PhoneCall, PhoneOff, Search, X, Clock, Timer, CheckCircle2, History, User, Smartphone, ChevronDown, ChevronRight, Calendar, Trash2,
 } from 'lucide-react';
 import { useLiveData } from '../../../hooks/useLiveData';
 import { useAuth } from '../../../contexts/AuthContext';
@@ -14,6 +14,23 @@ import {
 import { savePendingCall, readPendingCall, clearPendingCall } from '../../../utils/pendingCall';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
+export interface CallAppointment {
+  id: string;
+  callId?: string;
+  rdvId: string;
+  numRef?: string;
+  client: string;
+  telephone: string;
+  dateRdv: string;
+  commentaire?: string;
+  conseillere: string;
+  magasinId?: string;
+  createdAt: string;
+  statut: 'Planifié' | 'Réalisé' | 'Annulé';
+}
+
+export const RDV_KEY = (id: string) => `leclaire_call_center_rdv_${id}`;
+
 export interface CallLog {
   id: string;
   rdvId?: string;
@@ -26,6 +43,7 @@ export interface CallLog {
   statut: string;  // 'Décroché' | 'Pas décroché' | 'Injoignable'
   resultat: string;
   commentaire: string;
+  rdvDate?: string;
 }
 
 // Les trois issues possibles d'un appel.
@@ -86,10 +104,11 @@ export const lancerAppel = (tel: string) => {
 // au retour de la conseillère, le temps écoulé = durée réelle passée au téléphone.
 // La durée n'est donc PAS déclarée à la main : elle est chronométrée par l'appareil.
 export function CallPanel({
-  rdv, conseillere, onSave, onCancel, startedAt,
+  rdv, conseillere, onSave, onCancel, startedAt, onAppointment,
 }: {
   rdv: { id: string; numRef: string; client: string; telephone?: string }; conseillere: string;
   onSave: (log: Omit<CallLog, 'id'>) => void; onCancel: () => void;
+  onAppointment?: (dateRdv: string, commentaire: string) => void;
   /** Heure réelle de composition. Fournie lors d'une reprise après que le
    *  système mobile a déchargé la page : la durée reste ainsi correcte. */
   startedAt?: string;
@@ -105,6 +124,8 @@ export function CallPanel({
   const [statut, setStatut] = useState<string>('Décroché'); // Décroché / Pas décroché / Injoignable
   const [resultat, setResultat] = useState('Répondu');
   const [commentaire, setCommentaire] = useState('');
+  const [prendreRdv, setPrendreRdv] = useState(false);
+  const [dateRdv, setDateRdv] = useState('');
   const hiddenAtRef = useRef<number | null>(null);   // horodatage du passage en arrière-plan
   const accumRef = useRef(dejaEcoule);               // cumul du temps hors de l'app
   const overlayRef = useRef<HTMLDivElement>(null);
@@ -154,7 +175,7 @@ export function CallPanel({
   const enregistrer = (statut: string, res: string, duree: number) => {
     onSave({
       rdvId: rdv.id, numRef: rdv.numRef, client: rdv.client, telephone: rdv.telephone || '',
-      conseillere, debut: debut.toISOString(), duree, statut, resultat: res, commentaire,
+      conseillere, debut: debut.toISOString(), duree, statut, resultat: res, commentaire, rdvDate: dateRdv || undefined,
     });
   };
 
@@ -232,11 +253,25 @@ export function CallPanel({
                 </select>
               </div>
               <div>
-                <label className="text-xs text-gray-600 mb-1 block">Commentaire</label>
+                <label className="text-xs text-gray-600 mb-1 block">Commentaire / observation</label>
                 <textarea className={iCls + ' resize-none'} rows={2} placeholder="Notes de l'appel..." value={commentaire} onChange={e => setCommentaire(e.target.value)} />
               </div>
-              <button onClick={() => enregistrer(statut, resultat, statut === 'Décroché' ? dureeAuto : 0)}
-                className="w-full px-4 py-2.5 rounded-lg text-sm text-white font-semibold flex items-center justify-center gap-2" style={{ backgroundColor: '#dc2626' }}>
+              <div className="border border-blue-100 bg-blue-50 rounded-lg p-3">
+                <button type="button" onClick={() => setPrendreRdv(v => !v)}
+                  className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold border" style={{ backgroundColor: prendreRdv ? '#1a7a96' : '#fff', color: prendreRdv ? '#fff' : '#1a7a96', borderColor: '#1a7a96' }}>
+                  <Calendar size={16} /> {prendreRdv ? 'Rendez-vous sélectionné' : 'Prendre un rendez-vous'}
+                </button>
+                {prendreRdv && (
+                  <div className="mt-3 grid grid-cols-1 gap-2">
+                    <label className="text-xs font-semibold text-gray-700">Date du rendez-vous</label>
+                    <input type="date" min={new Date().toISOString().slice(0,10)} className={iCls} value={dateRdv} onChange={e => setDateRdv(e.target.value)} />
+                    <div className="text-xs text-gray-500">La date sera enregistrée dans l'onglet <b>Rendez-vous</b>.</div>
+                  </div>
+                )}
+              </div>
+              <button onClick={() => { if (dateRdv && onAppointment) onAppointment(dateRdv, commentaire); enregistrer(statut, resultat, statut === 'Décroché' ? dureeAuto : 0); }}
+                disabled={prendreRdv && !dateRdv}
+                className="w-full px-4 py-2.5 rounded-lg text-sm text-white font-semibold flex items-center justify-center gap-2 disabled:opacity-50" style={{ backgroundColor: '#dc2626' }}>
                 <PhoneOff size={16} /> Enregistrer l'appel{statut === 'Décroché' ? ` (${fmtDuree(dureeAuto)})` : ''}
               </button>
             </>
@@ -271,6 +306,7 @@ export function CallCenterPage() {
   const conseillere = user?.prenom || user?.name || user?.email?.split('@')[0] || 'Conseillère';
 
   const [logs, setLogs] = useLiveData<CallLog>(LOG_KEY(magasinId), []);
+  const [appointments, setAppointments] = useLiveData<CallAppointment>(RDV_KEY(magasinId), []);
 
   // Source des contacts : TOUTES les ventes / factures du magasin (plus les RDV en ligne).
   const magKey = magasinId.toUpperCase();
@@ -338,6 +374,17 @@ export function CallCenterPage() {
 
   const terminerAppel = () => { clearPendingCall(); setActiveCall(null); };
 
+  const enregistrerRdv = (dateRdv: string, commentaire: string) => {
+    const contact = activeCall?.contact;
+    if (!contact || !dateRdv) return;
+    const item: CallAppointment = {
+      id: `rdv_call_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,
+      callId: `call_${Date.now()}`, rdvId: contact.id, numRef: contact.numRef, client: contact.client,
+      telephone: contact.telephone || '', dateRdv, commentaire, conseillere, magasinId, createdAt: new Date().toISOString(), statut: 'Planifié',
+    };
+    setAppointments([item, ...appointments]);
+  };
+
   // Retour au premier plan (fin de l'appel) → réafficher la fiche à remplir.
   useEffect(() => {
     const restaurer = () => {
@@ -354,7 +401,7 @@ export function CallCenterPage() {
       window.removeEventListener('pageshow', restaurer);
     };
   }, [magasinId]);
-  const [tab, setTab] = useState<'clients' | 'historique'>('clients');
+  const [tab, setTab] = useState<'clients' | 'rendezvous' | 'historique'>('clients');
 
   // Filtrage recherche appliqué à l'intérieur de chaque groupe de vendeuse.
   const filteredGroupes = useMemo(() => {
@@ -417,6 +464,7 @@ export function CallCenterPage() {
           startedAt={activeCall.startedAt}
           conseillere={conseillere}
           onSave={saveLog}
+          onAppointment={enregistrerRdv}
           onCancel={terminerAppel}
         />
       )}
@@ -454,7 +502,7 @@ export function CallCenterPage() {
 
       {/* Onglets */}
       <div className="flex gap-2">
-        {([['clients', `Clients à appeler (${totalClients})`], ['historique', `Historique des appels (${logs.length})`]] as const).map(([key, label]) => (
+        {([['clients', `Clients à appeler (${totalClients})`], ['rendezvous', `Rendez-vous (${appointments.filter(a => a.statut === 'Planifié').length})`], ['historique', `Historique des appels (${logs.length})`]] as const).map(([key, label]) => (
           <button key={key} onClick={() => setTab(key)}
             className="px-4 py-2 rounded-t-lg text-sm font-semibold"
             style={{ backgroundColor: tab === key ? '#fff' : 'transparent', color: tab === key ? TEAL : '#4b5563' }}>
@@ -535,6 +583,24 @@ export function CallCenterPage() {
               })}
             </div>
           )
+        ) : tab === 'rendezvous' ? (
+          <div className="flex flex-col gap-3">
+            {appointments.length === 0 ? (
+              <div className="text-center py-12 text-gray-400">Aucun rendez-vous pris depuis le Call Center.</div>
+            ) : appointments.slice().sort((a,b) => a.dateRdv.localeCompare(b.dateRdv)).map(a => (
+              <div key={a.id} className="border border-gray-200 rounded-lg p-4 flex flex-wrap items-center gap-3 justify-between">
+                <div>
+                  <div className="font-bold text-gray-800">{a.client}</div>
+                  <div className="text-xs text-gray-500">{a.telephone || '—'} · Réf. {a.numRef || '—'}</div>
+                  {a.commentaire && <div className="text-sm text-gray-600 mt-1">Observation : {a.commentaire}</div>}
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-sm font-semibold bg-blue-50 text-blue-700"><Calendar size={14}/> {fmtDate(a.dateRdv)}</span>
+                  <button type="button" onClick={() => setAppointments(appointments.filter(x => x.id !== a.id))} className="p-2 rounded border border-red-200 text-red-500 hover:bg-red-50" title="Supprimer le rendez-vous"><Trash2 size={15}/></button>
+                </div>
+              </div>
+            ))}
+          </div>
         ) : (
           <div className="border border-gray-200 rounded overflow-hidden">
             <table className="w-full text-sm border-collapse">
