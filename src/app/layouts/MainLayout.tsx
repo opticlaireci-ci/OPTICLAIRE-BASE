@@ -73,11 +73,13 @@ import { useAuth } from '../contexts/AuthContext';
 import { SessionIndicator } from '../components/SessionIndicator';
 import { SeasonLogo } from '../components/SeasonLogo';
 import { SyncIndicator } from '../components/SyncIndicator';
-import { getMagasins } from '../constants/magasins';
+import { getMagasins, getActiveMagasins } from '../constants/magasins';
 import { pathToButtonKey } from '../constants/appButtons';
 import { TENANT } from '../config/tenant';
 import { loadCreditsSms, etatCreditSms, SMS_CREDITS_EVENT } from '../services/smsService';
 import { afficherHtml } from '../utils/inAppViewer';
+import { doc, onSnapshot } from '../utils/firestoreCompat';
+import { db } from '../utils/firebaseClient';
 
 // Suit en direct le crédit de SMS restant + son état (couleur).
 function useSmsCredits() {
@@ -163,6 +165,73 @@ function useLiveShortcuts() {
   return { annivPersonnel, relanceRenouvellement, annivClient, distrib, transfert, retour, rdvRetrait, rdvEnLigne, demandesAttente };
 }
 
+function useCallCenterTodayAppointments() {
+  const [count, setCount] = useState(0);
+  const [magasins, setMagasins] = useState(() => getActiveMagasins());
+
+  useEffect(() => {
+    const refresh = () => setMagasins(getActiveMagasins());
+    window.addEventListener('storage', refresh);
+    window.addEventListener('leclaire-sync-update', refresh);
+    window.addEventListener('supabase-realtime-update', refresh);
+    return () => {
+      window.removeEventListener('storage', refresh);
+      window.removeEventListener('leclaire-sync-update', refresh);
+      window.removeEventListener('supabase-realtime-update', refresh);
+    };
+  }, []);
+
+  useEffect(() => {
+    let total = 0;
+    const today = new Date().toISOString().slice(0, 10);
+    const unsubs = magasins.map(m => {
+      const key = `leclaire_call_center_rdv_${m.id}`;
+      try {
+        const raw = localStorage.getItem(key);
+        const rows = raw ? JSON.parse(raw) : [];
+        if (Array.isArray(rows)) {
+          total += rows.filter((r: any) => r?.statut === 'Planifié' && String(r?.dateRdv || '').slice(0, 10) === today).length;
+        }
+      } catch {}
+      const unsub = onSnapshot(
+        doc(db, 'app_data', key),
+        snap => {
+          const rows = (snap.exists() ? snap.data()?.value ?? [] : []) as any[];
+          try { localStorage.setItem(key, JSON.stringify(rows)); } catch {}
+          // Recalcule le total sur les caches de tous les magasins afin d'éviter
+          // de compter deux fois les mises à jour de plusieurs snapshots.
+          let next = 0;
+          for (const mag of getActiveMagasins()) {
+            const k = `leclaire_call_center_rdv_${mag.id}`;
+            try {
+              const cached = k === key ? rows : JSON.parse(localStorage.getItem(k) || '[]');
+              if (Array.isArray(cached)) {
+                next += cached.filter((r: any) => r?.statut === 'Planifié' && String(r?.dateRdv || '').slice(0, 10) === today).length;
+              }
+            } catch {}
+          }
+          setCount(next);
+        },
+        () => {},
+      );
+      return unsub;
+    });
+
+    // Premier calcul à partir des caches locaux.
+    let initial = 0;
+    for (const m of magasins) {
+      try {
+        const rows = JSON.parse(localStorage.getItem(`leclaire_call_center_rdv_${m.id}`) || '[]');
+        if (Array.isArray(rows)) initial += rows.filter((r: any) => r?.statut === 'Planifié' && String(r?.dateRdv || '').slice(0, 10) === today).length;
+      } catch {}
+    }
+    setCount(initial);
+    return () => unsubs.forEach(u => u());
+  }, [magasins]);
+
+  return count;
+}
+
 function ShortcutBadge({ count, icon, label, onClick }: { count: number; icon: React.ReactNode; label: string; onClick?: () => void }) {
   return (
     <div
@@ -199,7 +268,26 @@ function ShortcutBadge({ count, icon, label, onClick }: { count: number; icon: R
 
 function ShortcutBar() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const isResponsableCallCenter = user?.role === 'responsable_call_center';
+  const rdvAujourdHui = useCallCenterTodayAppointments();
   const c = useLiveShortcuts();
+
+  if (isResponsableCallCenter) {
+    return (
+      <>
+        <Box sx={{ flexGrow: 1 }} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginRight: 10, flexShrink: 0 }}>
+          <ShortcutBadge
+            count={rdvAujourdHui}
+            icon={<Event sx={{ fontSize: 22, color: '#fff', backgroundColor: '#8b5cf6', padding: '4px', borderRadius: '5px' }} />}
+            label={`Rendez-vous du jour à appeler : ${rdvAujourdHui}`}
+            onClick={() => navigate('/call-center?tab=rendezvous')}
+          />
+        </div>
+      </>
+    );
+  }
 
   const handleEmploiDuTempsClick = () => {
     navigate('/emploi-du-temps');
