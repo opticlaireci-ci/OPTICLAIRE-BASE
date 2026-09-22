@@ -348,11 +348,11 @@ export function CallCenterGlobalPage() {
   // raccourcis du tableau de bord Call Center.
   const [searchParams, setSearchParams] = useSearchParams();
   const tabUrl = searchParams.get('tab');
-  const [tab, setTab] = useState<'clients' | 'historique' | 'rappeler' | 'decroches' | 'rendezvous'>(
-    tabUrl === 'rappeler' || tabUrl === 'decroches' || tabUrl === 'historique' || tabUrl === 'rendezvous' ? tabUrl : 'clients',
+  const [tab, setTab] = useState<'clients' | 'historique' | 'rappeler' | 'pasDecroche' | 'injoignable' | 'decroches' | 'rendezvous'>(
+    tabUrl === 'rappeler' || tabUrl === 'pasDecroche' || tabUrl === 'injoignable' || tabUrl === 'decroches' || tabUrl === 'historique' || tabUrl === 'rendezvous' ? tabUrl : 'clients',
   );
   useEffect(() => {
-    if (tabUrl === 'rappeler' || tabUrl === 'decroches' || tabUrl === 'historique' || tabUrl === 'rendezvous' || tabUrl === 'clients') {
+    if (tabUrl === 'rappeler' || tabUrl === 'pasDecroche' || tabUrl === 'injoignable' || tabUrl === 'decroches' || tabUrl === 'historique' || tabUrl === 'rendezvous' || tabUrl === 'clients') {
       setTab(tabUrl);
     }
   }, [tabUrl]);
@@ -555,6 +555,26 @@ export function CallCenterGlobalPage() {
         seen.add(key); return true;
       });
       if (!isAdmin) contacts = contacts.filter(c => matchesUser(c.vendeuse, user));
+
+      // Classement selon le dernier « Détail / suite à donner ».
+      // RDV confirmé / À rappeler / Numéro incorrect quittent « Clients à appeler ».
+      // A relancer reste volontairement dans la liste.
+      const dernierParCle = new Map<string, CallLog>();
+      for (const l of (logsByMag[m.id] || [])) {
+        const keys = [l.rdvId, l.numRef, (l.telephone || '').replace(/\D/g, ''), l.client.trim().toLowerCase()].filter(Boolean) as string[];
+        for (const key of keys) {
+          const prec = dernierParCle.get(key);
+          if (!prec || new Date(l.debut).getTime() > new Date(prec.debut).getTime()) dernierParCle.set(key, l);
+        }
+      }
+      const sortisDeLaListe = new Set(['RDV confirmé', 'À rappeler', 'Numéro incorrect']);
+      const statutsSortisDeLaListe = new Set(['Pas décroché', 'Injoignable']);
+      contacts = contacts.filter(c => {
+        const keys = [c.id, c.numRef, (c.telephone || '').replace(/\D/g, ''), c.client.trim().toLowerCase()].filter(Boolean) as string[];
+        const last = keys.map(k => dernierParCle.get(k)).find(Boolean);
+        return !last || (!sortisDeLaListe.has(last.resultat) && !statutsSortisDeLaListe.has(last.statut));
+      });
+
       const q = search.toLowerCase();
       const groupes = groupByVendeuse(contacts)
         .map(g => ({
@@ -565,7 +585,7 @@ export function CallCenterGlobalPage() {
       const total = groupes.reduce((s, g) => s + g.contacts.length, 0);
       return { magasin: m, groupes, total };
     });
-  }, [visibleMagasins, ventesByMag, extrasByMag, month, isAdmin, user, search]);
+  }, [visibleMagasins, ventesByMag, extrasByMag, logsByMag, month, isAdmin, user, search]);
 
   const totalClients = useMemo(() => magasinsData.reduce((s, d) => s + d.total, 0), [magasinsData]);
 
@@ -606,9 +626,25 @@ export function CallCenterGlobalPage() {
     }
     const q = search.toLowerCase();
     return Array.from(dernier.values())
-      .filter(l => l.statut !== 'Décroché' || l.resultat === 'À rappeler')
+      .filter(l => l.resultat === 'À rappeler' && l.statut !== 'Pas décroché' && l.statut !== 'Injoignable')
       .filter(l => !q || [l.client, l.telephone, l.conseillere, l.resultat, l.commentaire, getMagasinLabel(l.magasinId)].some(v => (v || '').toLowerCase().includes(q)))
       .sort((a, b) => new Date(b.debut).getTime() - new Date(a.debut).getTime());
+  }, [allLogs, search]);
+
+  // Dernier appel par client pour les onglets « Pas décroché » et « Injoignable ».
+  const derniersStatuts = useMemo(() => {
+    const dernier = new Map<string, (typeof allLogs)[number]>();
+    for (const l of allLogs) {
+      const cle = `${l.magasinId}__${(l.telephone || l.client || '').trim().toLowerCase()}`;
+      const prec = dernier.get(cle);
+      if (!prec || new Date(l.debut).getTime() > new Date(prec.debut).getTime()) dernier.set(cle, l);
+    }
+    const q = search.toLowerCase();
+    const filt = (statut: string) => Array.from(dernier.values())
+      .filter(l => l.statut === statut)
+      .filter(l => !q || [l.client, l.telephone, l.conseillere, l.resultat, l.commentaire, getMagasinLabel(l.magasinId)].some(v => (v || '').toLowerCase().includes(q)))
+      .sort((a, b) => new Date(b.debut).getTime() - new Date(a.debut).getTime());
+    return { pasDecroche: filt('Pas décroché'), injoignable: filt('Injoignable') };
   }, [allLogs, search]);
 
   /** Appels décrochés du jour, du plus récent au plus ancien. */
@@ -724,6 +760,8 @@ export function CallCenterGlobalPage() {
         {([
           ['clients', `Clients à appeler (${totalClients})`],
           ['rappeler', `À rappeler (${aRappelerList.length})`],
+          ['pasDecroche', `Pas décroché (${derniersStatuts.pasDecroche.length})`],
+          ['injoignable', `Injoignable (${derniersStatuts.injoignable.length})`],
           ['decroches', `Décrochés du jour (${decrochesList.length})`],
           ['rendezvous', `Rendez-vous (${allRdv.filter(r => r.statut === 'Planifié').length})`],
           ['historique', `Historique des appels (${allLogs.length})`],
@@ -1077,6 +1115,29 @@ export function CallCenterGlobalPage() {
               ))}
             </div>
           </>
+        ) : (tab === 'pasDecroche' || tab === 'injoignable') ? (
+          <div className="flex flex-col gap-3">
+            {(() => {
+              const list = tab === 'pasDecroche' ? derniersStatuts.pasDecroche : derniersStatuts.injoignable;
+              const label = tab === 'pasDecroche' ? "Pas décroché" : "Injoignable";
+              const bg = tab === 'pasDecroche' ? '#fffbeb' : '#fef2f2';
+              const border = tab === 'pasDecroche' ? '#fde68a' : '#fecaca';
+              return list.length === 0 ? (
+                <div className="text-center py-12 text-gray-400">Aucun client {label.toLowerCase()}.</div>
+              ) : list.map(l => (
+                <div key={l.id} style={{ backgroundColor: bg, border: `1px solid ${border}`, borderRadius: '8px', padding: '12px', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+                  <div>
+                    <div style={{ fontWeight: 700, color: '#1f2937' }}>{l.client}</div>
+                    <div style={{ fontSize: '12px', color: '#6b7280' }}>{l.telephone || '—'} · {getMagasinLabel(l.magasinId)} · {fmtDateTime(l.debut)}</div>
+                    {l.commentaire && <div style={{ fontSize: '13px', color: '#4b5563', marginTop: '4px', fontStyle: 'italic' }}>Observation : {l.commentaire}</div>}
+                  </div>
+                  <button type="button" onClick={() => rappeler(l)} disabled={!l.telephone} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '7px 14px', borderRadius: '6px', backgroundColor: tab === 'pasDecroche' ? '#d97706' : '#dc2626', color: '#fff', border: 'none', fontSize: '13px', fontWeight: 600, cursor: 'pointer', opacity: l.telephone ? 1 : 0.4 }}>
+                    <Phone size={13} /> Rappeler
+                  </button>
+                </div>
+              ));
+            })()}
+          </div>
         ) : tab === 'rendezvous' ? (
           <div className="flex flex-col gap-3">
             {allRdv.length === 0 ? (

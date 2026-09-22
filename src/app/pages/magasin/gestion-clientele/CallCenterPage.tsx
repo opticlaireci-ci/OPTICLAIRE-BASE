@@ -55,12 +55,12 @@ export const issueColor: Record<string, string> = {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 export const LOG_KEY = (id: string) => `leclaire_call_logs_${id}`;
 
-const RESULTATS = ['Répondu', 'Pas de réponse', 'Occupé', 'Numéro incorrect', 'À rappeler', 'RDV confirmé', 'RDV annulé'];
+const RESULTATS = ['RDV confirmé', 'À rappeler', 'Numéro incorrect', 'A relancer'];
 
 export const resultatColor = (r: string) => {
   const map: Record<string, string> = {
-    'Répondu': '#16a34a', 'RDV confirmé': '#16a34a', 'Pas de réponse': '#d97706',
-    'Occupé': '#d97706', 'À rappeler': '#2563eb', 'Numéro incorrect': '#dc2626', 'RDV annulé': '#dc2626',
+    'Répondu': '#16a34a', 'RDV confirmé': '#16a34a',
+    'À rappeler': '#2563eb', 'Numéro incorrect': '#dc2626', 'A relancer': '#7c3aed',
   };
   return map[r] ?? '#6b7280';
 };
@@ -122,9 +122,8 @@ export function CallPanel({
   const [dureeAuto, setDureeAuto] = useState(dejaEcoule);  // temps mesuré hors de l'app (secondes)
   const [revenu, setRevenu] = useState(dejaEcoule > 0);    // la conseillère est revenue dans l'app
   const [statut, setStatut] = useState<string>('Décroché'); // Décroché / Pas décroché / Injoignable
-  const [resultat, setResultat] = useState('Répondu');
+  const [resultat, setResultat] = useState('A relancer');
   const [commentaire, setCommentaire] = useState('');
-  const [prendreRdv, setPrendreRdv] = useState(false);
   const [dateRdv, setDateRdv] = useState('');
   const hiddenAtRef = useRef<number | null>(null);   // horodatage du passage en arrière-plan
   const accumRef = useRef(dejaEcoule);               // cumul du temps hors de l'app
@@ -218,11 +217,11 @@ export function CallPanel({
                 <Smartphone size={18} className="text-blue-600 mt-0.5 flex-shrink-0" />
                 <span>Passez votre appel dans l'application téléphone. Si le client décroche, la durée est <b>mesurée automatiquement</b> : revenez ici une fois raccroché. Sinon, indiquez tout de suite l'issue :</span>
               </div>
-              <button onClick={() => enregistrer('Pas décroché', 'Pas de réponse', 0)}
+              <button onClick={() => enregistrer('Pas décroché', 'À rappeler', 0)}
                 className="w-full px-4 py-2.5 rounded-lg text-sm font-semibold text-white flex items-center justify-center gap-2" style={{ backgroundColor: issueColor['Pas décroché'] }}>
                 <PhoneOff size={16} /> Le client n'a pas décroché
               </button>
-              <button onClick={() => enregistrer('Injoignable', 'Injoignable', 0)}
+              <button onClick={() => enregistrer('Injoignable', 'À rappeler', 0)}
                 className="w-full px-4 py-2.5 rounded-lg text-sm font-semibold text-white flex items-center justify-center gap-2" style={{ backgroundColor: issueColor['Injoignable'] }}>
                 <PhoneOff size={16} /> Injoignable (occupé / faux numéro / éteint)
               </button>
@@ -256,21 +255,15 @@ export function CallPanel({
                 <label className="text-xs text-gray-600 mb-1 block">Commentaire / observation</label>
                 <textarea className={iCls + ' resize-none'} rows={2} placeholder="Notes de l'appel..." value={commentaire} onChange={e => setCommentaire(e.target.value)} />
               </div>
-              <div className="border border-blue-100 bg-blue-50 rounded-lg p-3">
-                <button type="button" onClick={() => setPrendreRdv(v => !v)}
-                  className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold border" style={{ backgroundColor: prendreRdv ? '#1a7a96' : '#fff', color: prendreRdv ? '#fff' : '#1a7a96', borderColor: '#1a7a96' }}>
-                  <Calendar size={16} /> {prendreRdv ? 'Rendez-vous sélectionné' : 'Prendre un rendez-vous'}
-                </button>
-                {prendreRdv && (
-                  <div className="mt-3 grid grid-cols-1 gap-2">
-                    <label className="text-xs font-semibold text-gray-700">Date du rendez-vous</label>
-                    <input type="date" min={new Date().toISOString().slice(0,10)} className={iCls} value={dateRdv} onChange={e => setDateRdv(e.target.value)} />
-                    <div className="text-xs text-gray-500">La date sera enregistrée dans l'onglet <b>Rendez-vous</b>.</div>
-                  </div>
-                )}
-              </div>
-              <button onClick={() => { if (dateRdv && onAppointment) onAppointment(dateRdv, commentaire); enregistrer(statut, resultat, statut === 'Décroché' ? dureeAuto : 0); }}
-                disabled={prendreRdv && !dateRdv}
+              {resultat === 'RDV confirmé' && (
+                <div className="border border-blue-100 bg-blue-50 rounded-lg p-3">
+                  <div className="text-sm font-semibold text-blue-800 flex items-center gap-2"><Calendar size={16} /> Date du rendez-vous</div>
+                  <input type="date" min={new Date().toISOString().slice(0,10)} className={iCls + ' mt-2'} value={dateRdv} onChange={e => setDateRdv(e.target.value)} />
+                  <div className="text-xs text-gray-500 mt-1">Le rendez-vous sera automatiquement ajouté dans l'onglet <b>Rendez-vous</b>.</div>
+                </div>
+              )}
+              <button onClick={() => { if (resultat === 'RDV confirmé' && dateRdv && onAppointment) onAppointment(dateRdv, commentaire); enregistrer(statut, resultat, statut === 'Décroché' ? dureeAuto : 0); }}
+                disabled={resultat === 'RDV confirmé' && !dateRdv}
                 className="w-full px-4 py-2.5 rounded-lg text-sm text-white font-semibold flex items-center justify-center gap-2 disabled:opacity-50" style={{ backgroundColor: '#dc2626' }}>
                 <PhoneOff size={16} /> Enregistrer l'appel{statut === 'Décroché' ? ` (${fmtDuree(dureeAuto)})` : ''}
               </button>
@@ -401,18 +394,42 @@ export function CallCenterPage() {
       window.removeEventListener('pageshow', restaurer);
     };
   }, [magasinId]);
-  const [tab, setTab] = useState<'clients' | 'rendezvous' | 'historique'>('clients');
+  const [tab, setTab] = useState<'clients' | 'rappeler' | 'pasDecroche' | 'injoignable' | 'rendezvous' | 'historique'>('clients');
 
-  // Filtrage recherche appliqué à l'intérieur de chaque groupe de vendeuse.
+  // Filtrage recherche + classement selon le dernier « Détail / suite à donner ».
+  // RDV confirmé / À rappeler / Numéro incorrect quittent la liste à appeler.
+  // A relancer reste dans la liste afin de pouvoir être rappelé dans le cycle courant.
   const filteredGroupes = useMemo(() => {
     const q = search.toLowerCase();
+    const dernierParCle = new Map<string, CallLog>();
+    for (const l of logs) {
+      const keys = [l.rdvId, l.numRef, (l.telephone || '').replace(/\D/g, ''), l.client.trim().toLowerCase()].filter(Boolean) as string[];
+      for (const key of keys) {
+        const prec = dernierParCle.get(key);
+        if (!prec || new Date(l.debut).getTime() > new Date(prec.debut).getTime()) dernierParCle.set(key, l);
+      }
+    }
+    const sortisDeLaListe = new Set(['RDV confirmé', 'À rappeler', 'Numéro incorrect']);
+    const statutsSortisDeLaListe = new Set(['Pas décroché', 'Injoignable']);
+    const getDernier = (r: CallContact) => {
+      const keys = [r.id, r.numRef, (r.telephone || '').replace(/\D/g, ''), r.client.trim().toLowerCase()].filter(Boolean) as string[];
+      for (const key of keys) {
+        const hit = dernierParCle.get(key);
+        if (hit) return hit;
+      }
+      return undefined;
+    };
     return groupes
       .map(g => ({
         vendeuse: g.vendeuse,
-        contacts: g.contacts.filter(r => !q || [r.client, r.telephone, r.numRef, r.motif].some(v => (v || '').toLowerCase().includes(q))),
+        contacts: g.contacts.filter(r => {
+          const last = getDernier(r);
+          if (last && (sortisDeLaListe.has(last.resultat) || statutsSortisDeLaListe.has(last.statut))) return false;
+          return !q || [r.client, r.telephone, r.numRef, r.motif].some(v => (v || '').toLowerCase().includes(q));
+        }),
       }))
       .filter(g => g.contacts.length > 0);
-  }, [groupes, search]);
+  }, [groupes, search, logs]);
 
   // Dernier appel par RDV (pour afficher l'état d'appel dans la liste).
   const lastCallByRdv = useMemo(() => {
@@ -438,15 +455,49 @@ export function CallCenterPage() {
       .sort((a, b) => new Date(b.debut).getTime() - new Date(a.debut).getTime());
   }, [logs, search]);
 
+  // Dernier résultat de chaque client : la liste « À rappeler » ne montre que
+  // les clients dont le dernier appel est explicitement classé « À rappeler ».
+  const aRappelerList = useMemo(() => {
+    const dernier = new Map<string, CallLog>();
+    for (const l of logs) {
+      const keys = [l.rdvId, l.numRef, (l.telephone || '').replace(/\D/g, ''), l.client.trim().toLowerCase()].filter(Boolean) as string[];
+      for (const key of keys) {
+        const prec = dernier.get(key);
+        if (!prec || new Date(l.debut).getTime() > new Date(prec.debut).getTime()) dernier.set(key, l);
+      }
+    }
+    const q = search.toLowerCase();
+    return Array.from(new Set(Array.from(dernier.values()).filter(l => l.resultat === 'À rappeler' && l.statut !== 'Pas décroché' && l.statut !== 'Injoignable')))
+      .filter(l => !q || [l.client, l.telephone, l.conseillere, l.resultat, l.commentaire].some(v => (v || '').toLowerCase().includes(q)))
+      .sort((a, b) => new Date(b.debut).getTime() - new Date(a.debut).getTime());
+  }, [logs, search]);
+
+  // Dernier appel par client pour les onglets « Pas décroché » et « Injoignable ».
+  const derniersStatuts = useMemo(() => {
+    const dernier = new Map<string, CallLog>();
+    for (const l of logs) {
+      const keys = [l.rdvId, l.numRef, (l.telephone || '').replace(/\D/g, ''), l.client.trim().toLowerCase()].filter(Boolean) as string[];
+      for (const key of keys) {
+        const prec = dernier.get(key);
+        if (!prec || new Date(l.debut).getTime() > new Date(prec.debut).getTime()) dernier.set(key, l);
+      }
+    }
+    const q = search.toLowerCase();
+    const filt = (statut: string) => Array.from(new Set(Array.from(dernier.values()).filter(l => l.statut === statut)))
+      .filter(l => !q || [l.client, l.telephone, l.conseillere, l.resultat, l.commentaire].some(v => (v || '').toLowerCase().includes(q)))
+      .sort((a, b) => new Date(b.debut).getTime() - new Date(a.debut).getTime());
+    return { pasDecroche: filt('Pas décroché'), injoignable: filt('Injoignable') };
+  }, [logs, search]);
+
   // Statistiques du jour.
   const stats = useMemo(() => {
     const today = new Date().toDateString();
     const todayLogs = logs.filter(l => new Date(l.debut).toDateString() === today);
     const tempsTotal = todayLogs.filter(l => l.statut === 'Décroché').reduce((s, l) => s + (l.duree || 0), 0);
     const aboutis = todayLogs.filter(l => l.statut === 'Décroché').length;
-    const aRappeler = logs.filter(l => l.statut !== 'Décroché' || l.resultat === 'À rappeler').length;
-    return { nbAppels: todayLogs.length, tempsTotal, aboutis, aRappeler };
-  }, [logs]);
+    const aRappeler = aRappelerList.length;
+    return { nbAppels: todayLogs.length, tempsTotal, aboutis, aRappeler }; 
+  }, [logs, aRappelerList]);
 
   const saveLog = (log: Omit<CallLog, 'id'>) => {
     const full: CallLog = { ...log, id: `call_${Date.now()}_${Math.random().toString(36).slice(2, 6)}` };
@@ -502,7 +553,7 @@ export function CallCenterPage() {
 
       {/* Onglets */}
       <div className="flex gap-2">
-        {([['clients', `Clients à appeler (${totalClients})`], ['rendezvous', `Rendez-vous (${appointments.filter(a => a.statut === 'Planifié').length})`], ['historique', `Historique des appels (${logs.length})`]] as const).map(([key, label]) => (
+        {([['clients', `Clients à appeler (${totalClients})`], ['rappeler', `À rappeler (${aRappelerList.length})`], ['pasDecroche', `Pas décroché (${derniersStatuts.pasDecroche.length})`], ['injoignable', `Injoignable (${derniersStatuts.injoignable.length})`], ['rendezvous', `Rendez-vous (${appointments.filter(a => a.statut === 'Planifié').length})`], ['historique', `Historique des appels (${logs.length})`]] as const).map(([key, label]) => (
           <button key={key} onClick={() => setTab(key)}
             className="px-4 py-2 rounded-t-lg text-sm font-semibold"
             style={{ backgroundColor: tab === key ? '#fff' : 'transparent', color: tab === key ? TEAL : '#4b5563' }}>
@@ -583,6 +634,56 @@ export function CallCenterPage() {
               })}
             </div>
           )
+        ) : tab === 'rappeler' ? (
+          <div className="flex flex-col gap-3">
+            {aRappelerList.length === 0 ? (
+              <div className="text-center py-12 text-gray-400">Aucun client à rappeler.</div>
+            ) : aRappelerList.map(l => (
+              <div key={l.id} className="border border-amber-200 bg-amber-50 rounded-lg p-4 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className="font-bold text-gray-800">{l.client}</div>
+                  <div className="text-xs text-gray-500">{l.telephone || '—'} · Dernier appel : {fmtDateTime(l.debut)}</div>
+                  {l.commentaire && <div className="text-sm text-gray-600 mt-1">Observation : {l.commentaire}</div>}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const contact = groupes.flatMap(g => g.contacts).find(c => c.id === l.rdvId || c.numRef === l.numRef || (c.telephone || '').replace(/\D/g, '') === (l.telephone || '').replace(/\D/g, '') || c.client.trim().toLowerCase() === l.client.trim().toLowerCase());
+                    if (contact) demarrerAppel(contact);
+                  }}
+                  disabled={!l.telephone}
+                  className="inline-flex items-center gap-2 px-3 py-2 rounded text-white text-sm font-semibold disabled:opacity-40"
+                  style={{ backgroundColor: '#d97706' }}>
+                  <Phone size={14} /> Rappeler
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : (tab === 'pasDecroche' || tab === 'injoignable') ? (
+          <div className="flex flex-col gap-3">
+            {(() => {
+              const list = tab === 'pasDecroche' ? derniersStatuts.pasDecroche : derniersStatuts.injoignable;
+              const label = tab === 'pasDecroche' ? "Pas décroché" : "Injoignable";
+              const bg = tab === 'pasDecroche' ? 'bg-amber-50 border-amber-200' : 'bg-red-50 border-red-200';
+              return list.length === 0 ? (
+                <div className="text-center py-12 text-gray-400">Aucun client {label.toLowerCase()}.</div>
+              ) : list.map(l => (
+                <div key={l.id} className={`border rounded-lg p-4 flex flex-wrap items-center justify-between gap-3 ${bg}`}>
+                  <div>
+                    <div className="font-bold text-gray-800">{l.client}</div>
+                    <div className="text-xs text-gray-500">{l.telephone || '—'} · Dernier appel : {fmtDateTime(l.debut)}</div>
+                    {l.commentaire && <div className="text-sm text-gray-600 mt-1">Observation : {l.commentaire}</div>}
+                  </div>
+                  <button type="button" onClick={() => {
+                    const contact = groupes.flatMap(g => g.contacts).find(c => c.id === l.rdvId || c.numRef === l.numRef || (c.telephone || '').replace(/\D/g, '') === (l.telephone || '').replace(/\D/g, '') || c.client.trim().toLowerCase() === l.client.trim().toLowerCase());
+                    if (contact) demarrerAppel(contact);
+                  }} disabled={!l.telephone} className="inline-flex items-center gap-2 px-3 py-2 rounded text-white text-sm font-semibold disabled:opacity-40" style={{ backgroundColor: tab === 'pasDecroche' ? '#d97706' : '#dc2626' }}>
+                    <Phone size={14} /> Rappeler
+                  </button>
+                </div>
+              ));
+            })()}
+          </div>
         ) : tab === 'rendezvous' ? (
           <div className="flex flex-col gap-3">
             {appointments.length === 0 ? (
