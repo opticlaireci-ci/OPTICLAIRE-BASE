@@ -10,7 +10,7 @@ import {
 import { doc, onSnapshot } from '../utils/firestoreCompat';
 import { db } from '../utils/firebaseClient';
 import { getActiveMagasins, getMagasinLabel, type Magasin } from '../constants/magasins';
-import { LOG_KEY, fmtDureeLong, type CallLog } from './magasin/gestion-clientele/CallCenterPage';
+import { LOG_KEY, RDV_KEY, fmtDureeLong, type CallLog, type CallAppointment } from './magasin/gestion-clientele/CallCenterPage';
 import { Combobox } from '../components/Combobox';
 
 const TEAL = '#1a7a96';
@@ -84,7 +84,11 @@ export function CallCenterDashboardPage() {
   }, []);
 
   // Journaux d'appels de tous les magasins (temps réel).
-  const [logsByMag, setLogsByMag] = useState<Record<string, CallLog[]>>({});
+  const [logsByMag, setLogsByMag] = useState<Record<string, CallLog[]>>(() => {
+    const out: Record<string, CallLog[]> = {};
+    for (const m of getActiveMagasins()) { try { const raw = localStorage.getItem(LOG_KEY(m.id)); if (raw) out[m.id] = JSON.parse(raw); } catch {} }
+    return out;
+  });
   useEffect(() => {
     const unsubs = magasins.map(m =>
       onSnapshot(
@@ -92,10 +96,26 @@ export function CallCenterDashboardPage() {
         snap => {
           const value = (snap.exists() ? (snap.data()?.value ?? []) : []) as CallLog[];
           setLogsByMag(prev => ({ ...prev, [m.id]: value }));
+          try { localStorage.setItem(LOG_KEY(m.id), JSON.stringify(value)); } catch {}
         },
         () => {},
       ),
     );
+    return () => unsubs.forEach(u => u());
+  }, [magasins]);
+
+  // Rendez-vous du Call Center : source des compteurs du jour et du suivi des RDV.
+  const [rdvByMag, setRdvByMag] = useState<Record<string, CallAppointment[]>>(() => {
+    const out: Record<string, CallAppointment[]> = {};
+    for (const m of getActiveMagasins()) { try { const raw = localStorage.getItem(RDV_KEY(m.id)); if (raw) out[m.id] = JSON.parse(raw); } catch {} }
+    return out;
+  });
+  useEffect(() => {
+    const unsubs = magasins.map(m => onSnapshot(doc(db, 'app_data', RDV_KEY(m.id)), snap => {
+      const value = (snap.exists() ? (snap.data()?.value ?? []) : []) as CallAppointment[];
+      setRdvByMag(prev => ({ ...prev, [m.id]: value }));
+      try { localStorage.setItem(RDV_KEY(m.id), JSON.stringify(value)); } catch {}
+    }, () => {}));
     return () => unsubs.forEach(u => u());
   }, [magasins]);
 
@@ -111,6 +131,10 @@ export function CallCenterDashboardPage() {
     }
     return out;
   }, [logsByMag, selectedMag]);
+
+  const allRdv = useMemo(() => Object.entries(rdvByMag).flatMap(([magasinId, rows]) =>
+    (selectedMag === 'ALL' || selectedMag === magasinId) ? rows.map(r => ({ ...r, magasinId })) : []
+  ), [rdvByMag, selectedMag]);
 
   const buckets = useMemo(() => buildBuckets(gran), [gran]);
 
@@ -143,12 +167,16 @@ export function CallCenterDashboardPage() {
     const total = periodLogs.length;
     const decroches = periodLogs.filter(l => isAnswered(l.statut)).length;
     const temps = periodLogs.filter(l => isAnswered(l.statut)).reduce((s, l) => s + (l.duree || 0), 0);
-    const aRappeler = periodLogs.filter(l => l.resultat === 'À rappeler' || (!isAnswered(l.statut))).length;
+    const aRappeler = periodLogs.filter(l => l.resultat === 'À rappeler').length;
+    const pasDecroche = periodLogs.filter(l => l.statut === 'Pas décroché').length;
+    const injoignable = periodLogs.filter(l => l.statut === 'Injoignable').length;
+    const rdvConfirmes = periodLogs.filter(l => l.resultat === 'RDV confirmé').length;
     const today = new Date().toDateString();
     const aujourdhui = allLogs.filter(l => new Date(l.debut).toDateString() === today).length;
     const taux = total > 0 ? Math.round((decroches / total) * 100) : 0;
-    return { total, decroches, temps, aRappeler, aujourdhui, taux };
-  }, [periodLogs, allLogs]);
+    const rdvAujourdhui = allRdv.filter(r => r.statut === 'Planifié' && new Date(r.dateRdv + 'T00:00:00').toDateString() === today).length;
+    return { total, decroches, temps, aRappeler, pasDecroche, injoignable, rdvConfirmes, aujourdhui, taux, rdvAujourdhui };
+  }, [periodLogs, allLogs, allRdv]);
 
   const parStatut = useMemo(() => {
     const map = new Map<string, number>();
@@ -229,13 +257,17 @@ export function CallCenterDashboardPage() {
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <KpiCard icon={<Phone size={18} />} value={String(kpis.total)} label="Appels (période)" color={TEAL} onClick={() => navigate('/call-center?tab=historique')} />
+        <KpiCard icon={<PhoneCall size={18} />} value={String(kpis.aujourdhui)} label="Appels aujourd'hui" color={RED} onClick={() => navigate('/call-center?tab=historique')} />
         <KpiCard icon={<CheckCircle2 size={18} />} value={String(kpis.decroches)} label="Décrochés" color={GREEN} onClick={() => navigate('/call-center?tab=decroches')} />
         <KpiCard icon={<PhoneMissed size={18} />} value={`${kpis.taux}%`} label="Taux de décroché" color={PURPLE} />
         <KpiCard icon={<Timer size={18} />} value={fmtDureeLong(kpis.temps)} label="Temps au téléphone" color="#0891b2" />
         <KpiCard icon={<RotateCcw size={18} />} value={String(kpis.aRappeler)} label="À rappeler" color={AMBER} onClick={() => navigate('/call-center?tab=rappeler')} />
-        <KpiCard icon={<PhoneCall size={18} />} value={String(kpis.aujourdhui)} label="Appels aujourd'hui" color={RED} onClick={() => navigate('/call-center?tab=decroches')} />
+        <KpiCard icon={<PhoneMissed size={18} />} value={String(kpis.pasDecroche)} label="Pas décroché" color={AMBER} onClick={() => navigate('/call-center?tab=pasDecroche')} />
+        <KpiCard icon={<PhoneMissed size={18} />} value={String(kpis.injoignable)} label="Injoignable" color={RED} onClick={() => navigate('/call-center?tab=injoignable')} />
+        <KpiCard icon={<CheckCircle2 size={18} />} value={String(kpis.rdvConfirmes)} label="RDV confirmés" color={GREEN} onClick={() => navigate('/call-center?tab=rendezvous')} />
+        <KpiCard icon={<PhoneCall size={18} />} value={String(kpis.rdvAujourdhui)} label="RDV aujourd'hui" color={TEAL} onClick={() => navigate('/call-center?tab=rendezvous')} />
       </div>
 
       {/* Évolution des appels */}

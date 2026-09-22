@@ -11,7 +11,7 @@ import {
   buildContacts, groupByVendeuse, listMonthOptions, monthLabel, currentMonthKey,
   matchesUser, isAdminRole, type CallContact,
 } from '../../../utils/callCenter';
-import { savePendingCall, readPendingCall, clearPendingCall } from '../../../utils/pendingCall';
+import { savePendingCall, readPendingCall, clearPendingCall, type PendingCall } from '../../../utils/pendingCall';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 export interface CallAppointment {
@@ -352,16 +352,16 @@ export function CallCenterPage() {
   const [search, setSearch] = useState('');
   // Appel en cours, restauré depuis le localStorage : sur mobile le composeur
   // met l'application en arrière-plan, la fiche doit se rouvrir seule au retour.
-  const [activeCall, setActiveCall] = useState<{ contact: CallContact; startedAt: string } | null>(() => {
+  const [activeCall, setActiveCall] = useState<PendingCall | null>(() => {
     const p = readPendingCall();
-    return p && p.magasinId === magasinId ? { contact: p.contact, startedAt: p.startedAt } : null;
+    return p && p.magasinId === magasinId ? p : null;
   });
 
   // Lance l'appel et mémorise le contact pour la reprise au retour d'arrière-plan.
-  const demarrerAppel = (contact: CallContact) => {
-    savePendingCall(contact, magasinId);
+  const demarrerAppel = (contact: CallContact, sourceTab?: string, appointmentId?: string) => {
+    savePendingCall(contact, magasinId, sourceTab, appointmentId);
     const p = readPendingCall();
-    setActiveCall({ contact, startedAt: p?.startedAt || new Date().toISOString() });
+    setActiveCall(p || { contact, magasinId, startedAt: new Date().toISOString(), sourceTab, appointmentId });
     if (contact.telephone) lancerAppel(contact.telephone);
   };
 
@@ -370,6 +370,10 @@ export function CallCenterPage() {
   const enregistrerRdv = (dateRdv: string, commentaire: string) => {
     const contact = activeCall?.contact;
     if (!contact || !dateRdv) return;
+    if (activeCall?.appointmentId) {
+      setAppointments(appointments.map(a => a.id === activeCall.appointmentId ? { ...a, dateRdv, commentaire, statut: 'Planifié' as const } : a));
+      return;
+    }
     const item: CallAppointment = {
       id: `rdv_call_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,
       callId: `call_${Date.now()}`, rdvId: contact.id, numRef: contact.numRef, client: contact.client,
@@ -383,7 +387,7 @@ export function CallCenterPage() {
     const restaurer = () => {
       if (document.visibilityState !== 'visible') return;
       const p = readPendingCall();
-      if (p && p.magasinId === magasinId) setActiveCall({ contact: p.contact, startedAt: p.startedAt });
+      if (p && p.magasinId === magasinId) setActiveCall(p);
     };
     document.addEventListener('visibilitychange', restaurer);
     window.addEventListener('focus', restaurer);
@@ -500,10 +504,15 @@ export function CallCenterPage() {
   }, [logs, aRappelerList]);
 
   const saveLog = (log: Omit<CallLog, 'id'>) => {
+    // Un rendez-vous appelé puis reclassé quitte immédiatement l'onglet Rendez-vous.
+    if (activeCall?.appointmentId && log.resultat !== 'RDV confirmé') {
+      setAppointments(appointments.filter(a => a.id !== activeCall.appointmentId));
+    }
     const full: CallLog = { ...log, id: `call_${Date.now()}_${Math.random().toString(36).slice(2, 6)}` };
     setLogs([full, ...logs]);
+    const destination = log.statut === 'Pas décroché' ? 'pasDecroche' : log.statut === 'Injoignable' ? 'injoignable' : log.resultat === 'RDV confirmé' ? 'rendezvous' : log.resultat === 'À rappeler' ? 'rappeler' : log.resultat === 'A relancer' ? 'clients' : 'historique';
     terminerAppel();
-    setTab('historique');
+    setTab(destination as any);
   };
 
   return (
@@ -697,6 +706,7 @@ export function CallCenterPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-sm font-semibold bg-blue-50 text-blue-700"><Calendar size={14}/> {fmtDate(a.dateRdv)}</span>
+                  <button type="button" onClick={() => demarrerAppel({ id: a.rdvId || a.id, numRef: a.numRef || '', client: a.client, telephone: a.telephone }, 'rendezvous', a.id)} disabled={!a.telephone} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-white text-xs font-semibold disabled:opacity-40" style={{backgroundColor:'#16a34a'}}><Phone size={13}/> Appeler</button>
                   <button type="button" onClick={() => setAppointments(appointments.filter(x => x.id !== a.id))} className="p-2 rounded border border-red-200 text-red-500 hover:bg-red-50" title="Supprimer le rendez-vous"><Trash2 size={15}/></button>
                 </div>
               </div>

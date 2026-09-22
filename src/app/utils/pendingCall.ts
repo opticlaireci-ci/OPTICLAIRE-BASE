@@ -21,11 +21,15 @@ export interface PendingCall {
   magasinId: string;
   /** Horodatage ISO du lancement de l'appel. */
   startedAt: string;
+  /** Onglet depuis lequel l'appel a été lancé. */
+  sourceTab?: string;
+  /** Rendez-vous existant si l'appel vient de l'onglet Rendez-vous. */
+  appointmentId?: string;
 }
 
-export function savePendingCall(contact: CallContact, magasinId: string): void {
+export function savePendingCall(contact: CallContact, magasinId: string, sourceTab?: string, appointmentId?: string): void {
   try {
-    const payload: PendingCall = { contact, magasinId, startedAt: new Date().toISOString() };
+    const payload: PendingCall = { contact, magasinId, startedAt: new Date().toISOString(), sourceTab, appointmentId };
     localStorage.setItem(KEY, JSON.stringify(payload));
   } catch {}
 }

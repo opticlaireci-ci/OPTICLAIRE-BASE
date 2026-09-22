@@ -23,7 +23,7 @@ import { PALMERAIE_2024_SEED, PALMERAIE_MAGASIN_ID } from '../data/palmeraieCall
 import { PALMERAIE_2025_SEED } from '../data/palmeraieCallCenter2025';
 import { PALMERAIE_2026_SEED } from '../data/palmeraieCallCenter2026';
 import { Combobox } from '../components/Combobox';
-import { savePendingCall, readPendingCall, clearPendingCall } from '../utils/pendingCall';
+import { savePendingCall, readPendingCall, clearPendingCall, type PendingCall } from '../utils/pendingCall';
 import { ajouterNumerosCallCenterAuxExclusions } from '../utils/callCenterSmsExclusions';
 
 const PALMERAIE_SEED = [...PALMERAIE_2024_SEED, ...PALMERAIE_2025_SEED, ...PALMERAIE_2026_SEED];
@@ -147,13 +147,17 @@ export function CallCenterGlobalPage() {
 
   const saveRdvForMagasin = (magasinId: string, dateRdv: string, commentaire: string) => {
     if (!activeCall || !dateRdv) return;
+    const existingId = activeCall.appointmentId;
+    const existing = existingId ? (rdvByMag[magasinId] || []).find(r => r.id === existingId) : undefined;
     const item: CallAppointment = {
       id: `rdv_call_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,
       callId: `call_${Date.now()}`, rdvId: activeCall.contact.id, numRef: activeCall.contact.numRef,
       client: activeCall.contact.client, telephone: activeCall.contact.telephone || '', dateRdv, commentaire,
       conseillere, magasinId, createdAt: new Date().toISOString(), statut: 'Planifié',
     };
-    const next = [item, ...(rdvByMag[magasinId] || [])];
+    const next = existing
+      ? (rdvByMag[magasinId] || []).map(r => r.id === existing.id ? { ...r, dateRdv, commentaire, statut: 'Planifié' as const, conseillere, createdAt: r.createdAt } : r)
+      : [item, ...(rdvByMag[magasinId] || [])];
     setRdvByMag(prev => ({ ...prev, [magasinId]: next }));
     const key = RDV_KEY(magasinId);
     setDoc(doc(db, 'app_data', key), { key, value: next, updated_at: new Date().toISOString() }, { merge: true }).catch(() => {});
@@ -162,6 +166,14 @@ export function CallCenterGlobalPage() {
 
   // Enregistre un appel dans le journal du magasin concerné (Firestore direct).
   const saveLogForMagasin = (magasinId: string, log: Omit<CallLog, 'id'>) => {
+    // Si l'appel vient d'un rendez-vous, tout nouveau résultat le retire de l'ancien onglet.
+    if (activeCall?.appointmentId && log.resultat !== 'RDV confirmé') {
+      const nextRdv = (rdvByMag[magasinId] || []).filter(r => r.id !== activeCall.appointmentId);
+      setRdvByMag(prev => ({ ...prev, [magasinId]: nextRdv }));
+      const rkey = RDV_KEY(magasinId);
+      setDoc(doc(db, 'app_data', rkey), { key: rkey, value: nextRdv, updated_at: new Date().toISOString() }, { merge: true }).catch(() => {});
+      try { localStorage.setItem(rkey, JSON.stringify(nextRdv)); } catch {}
+    }
     const full: CallLog = { ...log, id: `call_${Date.now()}_${Math.random().toString(36).slice(2, 6)}` };
     const next = [full, ...(logsByMag[magasinId] || [])];
     setLogsByMag(prev => ({ ...prev, [magasinId]: next }));
@@ -368,13 +380,13 @@ export function CallCenterGlobalPage() {
   // Appel en cours : on retient le magasin pour journaliser au bon endroit.
   // Restauré depuis le localStorage : sur mobile, le composeur met l'application
   // en arrière-plan et la fiche doit se rouvrir automatiquement au retour.
-  const [activeCall, setActiveCall] = useState<{ contact: CallContact; magasinId: string; startedAt: string } | null>(
+  const [activeCall, setActiveCall] = useState<PendingCall | null>(
     () => readPendingCall(),
   );
 
   // Lance l'appel et mémorise le contact pour la reprise au retour d'arrière-plan.
-  const demarrerAppel = (contact: CallContact, magasinId: string) => {
-    savePendingCall(contact, magasinId);
+  const demarrerAppel = (contact: CallContact, magasinId: string, sourceTab?: string, appointmentId?: string) => {
+    savePendingCall(contact, magasinId, sourceTab, appointmentId);
     setActiveCall(readPendingCall());
     if (contact.telephone) lancerAppel(contact.telephone);
   };
@@ -690,7 +702,12 @@ export function CallCenterGlobalPage() {
           rdv={activeCall.contact}
           startedAt={activeCall.startedAt}
           conseillere={conseillere}
-          onSave={log => { saveLogForMagasin(activeCall.magasinId, log); terminerAppel(); changerTab('historique'); }}
+          onSave={log => {
+            saveLogForMagasin(activeCall.magasinId, log);
+            const destination = log.statut === 'Pas décroché' ? 'pasDecroche' : log.statut === 'Injoignable' ? 'injoignable' : log.resultat === 'RDV confirmé' ? 'rendezvous' : log.resultat === 'À rappeler' ? 'rappeler' : log.resultat === 'A relancer' ? 'clients' : 'historique';
+            terminerAppel();
+            changerTab(destination as any);
+          }}
           onAppointment={(dateRdv, commentaire) => saveRdvForMagasin(activeCall.magasinId, dateRdv, commentaire)}
           onCancel={terminerAppel}
         />
@@ -1149,7 +1166,10 @@ export function CallCenterGlobalPage() {
                   <div className="text-xs text-gray-500">{r.telephone || '—'} · {getMagasinLabel(r.magasinId)} · Réf. {r.numRef || '—'}</div>
                   {r.commentaire && <div className="text-sm text-gray-600 mt-1">Observation : {r.commentaire}</div>}
                 </div>
-                <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-sm font-semibold bg-blue-50 text-blue-700"><Calendar size={14}/> {fmtDate(r.dateRdv)}</span>
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-sm font-semibold bg-blue-50 text-blue-700"><Calendar size={14}/> {fmtDate(r.dateRdv)}</span>
+                  <button type="button" onClick={() => demarrerAppel({ id: r.rdvId || r.id, numRef: r.numRef || '', client: r.client, telephone: r.telephone }, r.magasinId, 'rendezvous', r.id)} disabled={!r.telephone} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-white text-xs font-semibold disabled:opacity-40" style={{backgroundColor:'#16a34a'}}><Phone size={13}/> Appeler</button>
+                </div>
               </div>
             ))}
           </div>
