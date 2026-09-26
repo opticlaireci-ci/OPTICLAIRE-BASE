@@ -27,7 +27,7 @@ import { useLentillesOpticStock } from '../../../hooks/useLentillesOpticStock';
 import { collection, onSnapshot } from '../../../utils/firestoreCompat';
 import { db } from '../../../utils/firebaseClient';
 import { reportFirebaseError } from '../../../services/firebaseErrorBus';
-import { pdfHeader, printHeaderHTML, excelHeaderRows, getEntete } from '../../../utils/documentHeader';
+import { pdfHeader, printHeaderHTML, excelHeaderRows, getEntete, formatNomClient } from '../../../utils/documentHeader';
 import { logNetworkAware } from '../../../utils/networkErrors';
 import { canEdit, canDelete } from '../../../utils/actionRights';
 import { useLiveData } from '../../../hooks/useLiveData';
@@ -103,7 +103,7 @@ async function telechargerFacturePDF(factureData: {
   // Format monétaire du reçu : milliers séparés par une espace, décimales à points.
   const fmtF = (n: number) => (Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).replace(/,/g, ' ');
 
-  const nomClient = `${factureData.civilite ? factureData.civilite + ' ' : ''}${factureData.client || ''}`.trim().toUpperCase();
+  const nomClient = formatNomClient(factureData.civilite, factureData.client).toUpperCase();
   const verres = factureData.verres || [];
   const articles = factureData.articles || [];
 
@@ -390,7 +390,7 @@ async function telechargerFichePDF(vente: any, magasinId?: string) {
   const dateEdition = (vente as any).createdAt || vente.date;
   const rdv = vente.recap?.rdvRetrait;
   const civilite = vente.clientInfo?.civilite || vente.civilite || '';
-  const nomClient = `${civilite ? civilite + ' ' : ''}${vente.client || ''}`.trim().toUpperCase();
+  const nomClient = formatNomClient(civilite, vente.client).toUpperCase();
   const email = vente.clientInfo?.email || vente.email || '';
   const assurance = (vente.bonsAssurance && vente.bonsAssurance[0]?.assurance) || '';
   const verres = vente.verres || [];
@@ -585,7 +585,7 @@ async function telechargerDossierClientPDF(vente: any, magasinId?: string) {
   const editePar = (vente as any).createdBy || (vente as any).updatedBy || vente.edite_par || '—';
   const dateEdition = (vente as any).createdAt || vente.date;
   const civilite = clientInfo.civilite || vente.civilite || '';
-  const nomClient = `${civilite ? civilite + ' ' : ''}${vente.client || ''}`.trim().toUpperCase();
+  const nomClient = formatNomClient(civilite, vente.client).toUpperCase();
   const email = clientInfo.email || vente.email || '';
   const adresse = clientInfo.adresse || '';
   const profession = clientInfo.profession || '';
@@ -917,7 +917,7 @@ async function telechargerBonExecutionPDF(vente: any, magasinId?: string) {
   const [{ default: jsPDF }] = await Promise.all([import('jspdf')]);
   const doc = new jsPDF({ format: 'a4' });
   const e = getEntete(magasinId);
-  const nomClient = `${vente.civilite ? vente.civilite + ' ' : ''}${vente.client || ''}`.trim().toUpperCase();
+  const nomClient = formatNomClient(vente.civilite, vente.client).toUpperCase();
   const numFacture = vente.recap?.numFacture || '—';
   const dateRetrait = vente.recap?.rdvRetrait || vente.recap?.dateRecuperation || '';
   const dateStr = dateRetrait ? new Date(dateRetrait).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '-') : new Date().toLocaleDateString('fr-FR').replace(/\//g, '-');

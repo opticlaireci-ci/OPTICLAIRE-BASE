@@ -102,6 +102,25 @@ export function getLogoUrl(): string {
   return logoUrl;
 }
 
+
+/** 
+ * Construit un nom client sans répéter la civilité.
+ * Les anciennes données peuvent contenir la civilité à la fois dans
+ * `civilite` et au début de `nom`; on retire donc toute civilité initiale
+ * avant de la préfixer une seule fois.
+ */
+export function formatNomClient(civilite?: string, nom?: string): string {
+  const civ = String(civilite || '').trim().replace(/[.]+$/, '');
+  let n = String(nom || '').trim();
+  // Retire une ou plusieurs civilités placées au début du nom.
+  // Ex.: "Mme Mme ADJ..." / "M. M. DJABOU..." / "Mme. ADJ..."
+  if (n) {
+    const civPattern = /^(?:(?:M(?:me|lle)?|Dr)\.?\s+)+/i;
+    n = n.replace(civPattern, '').trim();
+  }
+  return [civ, n].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+}
+
 /** Date longue en français, ex. « 08 juillet 2026 ». */
 export function frLongDate(date?: string): string {
   const d = date ? new Date(date) : new Date();

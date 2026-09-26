@@ -11,7 +11,7 @@ import { autoSaveClient } from '../../../utils/autoClient';
 import { afficherPdfBlob } from '../../../utils/inAppViewer';
 import { useTypesVerre, useVerresList, useTraitementOptions, findVerreByName, VerreRecord, useOphtalmologues, useCabinets, useProfessions, useClientRecordsMagasin, ClientRecord, useVenteProducts, findVenteProduct, VenteProduct, useModesPaiement, autoSaveModePaiement } from '../../../utils/venteLookups';
 import { genCodeBarre, genNumFacture } from '../../../utils/autoNumbers';
-import { printHeaderHTML } from '../../../utils/documentHeader';
+import { printHeaderHTML, formatNomClient } from '../../../utils/documentHeader';
 import { useSupabaseSync } from '../../../hooks/useSupabaseSync';
 import { ajouterVente, chargerVentes, readVentesCache, supprimerVente, mettreAJourVente, VenteSupabase } from '../../../services/ventesService';
 import { loadFromSupabase, saveToSupabase } from '../../../services/supabaseRealtime';
@@ -101,7 +101,7 @@ const vInput = 'w-full min-w-0 max-w-full text-[11px] sm:text-xs text-center bor
 
 // ── Téléchargement PDF du devis (jsPDF, modèle DEVIS | PROFORMA) ─────────────
 async function telechargerDevisPDF(d: DevisRecord, magasinId: string) {
-  const { pdfHeader, getEntete } = await import('../../../utils/documentHeader');
+  const { pdfHeader, getEntete, formatNomClient } = await import('../../../utils/documentHeader');
   const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
     import('jspdf'),
     import('jspdf-autotable'),
@@ -116,7 +116,7 @@ async function telechargerDevisPDF(d: DevisRecord, magasinId: string) {
   const props = d.propositions || [];
   const prop = props.find((p: any) => (p.verres?.length || 0) + (p.articles?.length || 0) > 0) || props[0] || { verres: [], articles: [], totalVerres: 0, totalArticles: 0, remisePct: '0', totalNet: 0, valeurRemise: 0 };
 
-  const nomClient = `${raw?.civilite ? raw.civilite + '. ' : ''}${d.client || ''}`.trim().toUpperCase();
+  const nomClient = formatNomClient(raw?.civilite, d.client).toUpperCase();
   let y = pdfHeader(doc, magasinId, { date: d.date });
 
   // Bloc client (bandeau gris) + N° devis / édition
