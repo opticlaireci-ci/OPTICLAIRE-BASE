@@ -126,6 +126,13 @@ interface MouvementAdministrationRecap {
   commentaire: string;
 }
 
+function normaliserTypeMouvement(type: unknown): 'entree' | 'sortie' | '' {
+  const t = String(type || '').trim().toLowerCase();
+  if (t === 'entree' || t === 'entrée' || t === 'in' || t === 'credit') return 'entree';
+  if (t === 'sortie' || t === 'out' || t === 'debit') return 'sortie';
+  return '';
+}
+
 function mouvementsCaisseParJour(
   magasinId: string,
   semaine: string,
@@ -136,8 +143,48 @@ function mouvementsCaisseParJour(
   const jourDates = JOURS.map((_, i) => dateDuJour(semaine, i));
   mouvements.forEach(m => {
     if (String(m.magasinId || '').toUpperCase() !== String(magasinId).toUpperCase()) return;
-    if (String(m.type || '').toLowerCase() !== type) return;
+    if (normaliserTypeMouvement(m.type) !== type) return;
     const idx = jourDates.indexOf(dateMouvementISO(m.date));
+    if (idx === -1) return;
+    result[JOURS[idx]] += Number(m.montant) || 0;
+  });
+  return result;
+}
+
+/**
+ * Les mouvements créés dans la comptabilité générale sont stockés dans
+ * `leclaire_mouvements` avec des types `Entrée` / `Sortie` et un magasin sous
+ * forme de libellé, alors que la caisse utilise `leclaire_mouvements_caisse`
+ * avec `entree` / `sortie` et un magasinId. Le récap hebdomadaire doit lire
+ * les deux formats, sinon une entrée enregistrée dans la comptabilité n'arrive
+ * jamais dans la colonne RECETTES.
+ */
+function mouvementsAdministrationParJour(
+  magasinId: string,
+  semaine: string,
+  mouvements: MouvementAdministrationRecap[],
+  type: 'entree' | 'sortie',
+): Record<Jour, number> {
+  const result = Object.fromEntries(JOURS.map(j => [j, 0])) as Record<Jour, number>;
+  const jourDates = JOURS.map((_, i) => dateDuJour(semaine, i));
+  const magasins = getMagasins();
+  const cible = magasins.find(m => String(m.id).toUpperCase() === String(magasinId).toUpperCase());
+  const cibleId = String(magasinId).trim().toUpperCase();
+  const cibleLabels = new Set([
+    cibleId,
+    String(cible?.label || '').trim().toUpperCase(),
+    String(cible?.label || '').replace(`${TENANT.nom} `, '').trim().toUpperCase(),
+    String(cible?.id || '').trim().toUpperCase(),
+  ].filter(Boolean));
+
+  mouvements.forEach(m => {
+    const libMag = String(m.magasin || '').trim().toUpperCase();
+    if (libMag && !cibleLabels.has(libMag) && !libMag.includes(cibleId)) return;
+    // Si un mouvement général n'a pas de magasin, on ne l'attribue pas
+    // arbitrairement à une officine.
+    if (!libMag) return;
+    if (normaliserTypeMouvement(m.type) !== type) return;
+    const idx = jourDates.indexOf(dateMouvementISO(m.dateMouvement));
     if (idx === -1) return;
     result[JOURS[idx]] += Number(m.montant) || 0;
   });
@@ -150,6 +197,7 @@ function calcRecapMagasin(
   semaine: string,
   entries: RecapEntry[],
   mouvementsCaisse: MouvementCaisseRecap[] = [],
+  mouvementsAdministration: MouvementAdministrationRecap[] = [],
   ventesSource?: VenteSupabase[],
 ): RecapMagasin {
   // Le Récap Hebdomadaire est désormais alimenté directement par les
@@ -158,12 +206,17 @@ function calcRecapMagasin(
   //   - toutes les SORTIES = dépenses
   // Les ventes et anciennes saisies manuelles ne sont donc plus additionnées
   // afin d'éviter les doubles comptages.
-  const recettesAuto = mouvementsCaisseParJour(magasinId, semaine, mouvementsCaisse, 'entree');
-  const depensesAuto = mouvementsCaisseParJour(magasinId, semaine, mouvementsCaisse, 'sortie');
+  const recettesCaisse = mouvementsCaisseParJour(magasinId, semaine, mouvementsCaisse, 'entree');
+  const depensesCaisse = mouvementsCaisseParJour(magasinId, semaine, mouvementsCaisse, 'sortie');
+  const recettesAdministration = mouvementsAdministrationParJour(magasinId, semaine, mouvementsAdministration, 'entree');
+  const depensesAdministration = mouvementsAdministrationParJour(magasinId, semaine, mouvementsAdministration, 'sortie');
   let totalR = 0, totalD = 0;
   const lignes = JOURS.map(jour => {
-    const recettes = recettesAuto[jour] || 0;
-    const depenses = depensesAuto[jour] || 0;
+    // Les ENTRÉES et SORTIES peuvent provenir de la caisse ou de la
+    // comptabilité générale. On additionne les deux sources après normalisation
+    // du type et du magasin.
+    const recettes = (recettesCaisse[jour] || 0) + (recettesAdministration[jour] || 0);
+    const depenses = (depensesCaisse[jour] || 0) + (depensesAdministration[jour] || 0);
     totalR += recettes; totalD += depenses;
     return { jour, recettes, depenses, rd: recettes - depenses };
   });
@@ -438,10 +491,11 @@ export function RecapHebdomadairePage() {
         semaine,
         recaps.filter(r => r.magasinId === m.id && r.semaine === semaine),
         mouvementsCaisse,
+        mouvementsAdministration,
         ventesAll === null ? undefined : ventesAll,
       ),
     }));
-  }, [magasins, semaine, recaps, mouvementsCaisse, ventesAll]);
+  }, [magasins, semaine, recaps, mouvementsCaisse, mouvementsAdministration, ventesAll]);
 
   const handleSet = (magasinId: string) => (jour: Jour, champ: 'recettes' | 'depenses', valeur: number) => {
     const id = `${magasinId}_${semaine}_${jour}`;
