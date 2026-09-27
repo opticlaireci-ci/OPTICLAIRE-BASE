@@ -41,6 +41,11 @@ function firstMatch(text: string, patterns: RegExp[]): string {
   return '';
 }
 
+function firstGroups(text: string, pattern: RegExp): string[] {
+  const m = text.match(pattern);
+  return m ? m.slice(1).map(normalizeSpace) : [];
+}
+
 function stripCivilite(name: string): { civilite: string; nom: string } {
   let s = normalizeSpace(name);
   // On retire les doublons éventuels : « MME. MME ... » -> « MME ... ».
@@ -75,6 +80,12 @@ export interface LegacyPdfParsed {
   modePaiement?: string;
   numeroFacture?: string;
   conseillere?: string;
+  rdvRetrait?: string;
+  dateRecuperation?: string;
+  articles?: any[];
+  verres?: any[];
+  ordonnance?: any;
+  bonsAssurance?: any[];
   notes?: string;
 }
 
@@ -110,8 +121,8 @@ export async function parseLegacyClientPdf(file: File): Promise<LegacyPdfParsed 
   const compactText = normalizeSpace(text);
 
   const conseillere = firstMatch(compactText, [
-    /(?:É|E)dit(?:é|e)\s+par\s*[:\-]?\s*([^\n|]+?)(?=\s+(?:É|E)dit(?:é|e)\s+le|\s+Date|\s+DEVIS|\s+FACTURE|$)/i,
-    /(?:Conseill(?:è|e)re|Conseiller|Vendeur|Commercial(?:e)?)\s*[:\-]?\s*([^\n|]+)/i,
+    /(?:É|E)dit(?:é|e)\s+par\s*[:\-]?\s*(.+?)(?=\s+Téléphone|\s+(?:É|E)dit(?:é|e)\s+le|\s+Date|\s+DEVIS|\s+FACTURE|$)/i,
+    /(?:Conseill(?:è|e)re|Conseiller|Vendeur|Commercial(?:e)?)\s*[:\-]?\s*(.+?)(?=\s+Téléphone|\s+Email|\s+FACTURE|$)/i,
   ]).replace(/\s{2,}/g, ' ').trim();
 
   const numeroFacture = firstMatch(compactText, [
@@ -129,24 +140,43 @@ export async function parseLegacyClientPdf(file: File): Promise<LegacyPdfParsed 
   ]);
   const { civilite, nom } = stripCivilite(rawName);
 
-  const telephone = firstMatch(compactText, [
+  // Le premier téléphone/email du PDF appartient au magasin. On lit donc le bloc client
+  // situé entre le nom du client et « Édité par ».
+  const clientStart = rawName ? Math.max(0, compactText.indexOf(rawName)) : 0;
+  const editedPos = compactText.search(/\s+(?:É|E)dit(?:é|e)\s+par\s*[:\-]?/i);
+  const clientBlock = compactText.slice(clientStart, editedPos > clientStart ? editedPos : clientStart + 500);
+  const telephone = firstMatch(clientBlock, [
     /(?:Téléphone(?:\s*I)?|Tél\.?|Mobile|Contact)\s*[:\-]?\s*(\+?\d[\d\s().-]{7,})/i,
   ]).replace(/\s+/g, ' ').trim();
-  const email = firstMatch(compactText, [/(?:E-?mail|Email)\s*[:\-]?\s*([\w.+-]+@[\w.-]+\.[A-Za-z]{2,})/i]);
-  const adresse = firstMatch(compactText, [/(?:Adresse)\s*[:\-]?\s*([^\n|]+?)(?=\s+(?:Téléphone|Tél|Email|E-mail)\s*[:\-]|$)/i]);
+  const email = firstMatch(clientBlock, [/(?:E-?mail|Email)\s*[:\-]?\s*([\w.+-]+@[\w.-]+\.[A-Za-z]{2,})/i]);
+  const adresse = firstMatch(clientBlock, [/(?:Adresse)\s*[:\-]?\s*([^\n|]+?)(?=\s+(?:Téléphone|Tél|Email|E-mail)\s*[:\-]|$)/i]);
 
-  const date = firstMatch(compactText, [
-    /(?:Date\s*[:\-]?\s*)(\d{1,2}[\/-]\d{1,2}[\/-]\d{4})/i,
-    /(?:Abidjan|C[ôo]te d['’]Ivoire)\s*,?\s*le\s+(\d{1,2}\s+[A-Za-zéûîôàè]+\s+\d{4})/i,
+  // La date « Abidjan, le 27 septembre 2026 » correspond à la date d'impression.
+  // Pour une vente historique, on privilégie la date « Édité le » de la facture,
+  // qui est la date commerciale enregistrée par l'ancien logiciel.
+  const dateEdition = firstMatch(compactText, [
+    /(?:É|E)dit(?:é|e)\s+le\s*[,;:]?\s*(\d{1,2}[\/-]\d{1,2}[\/-]\d{4})/i,
   ]);
+  const dateFactureExplicite = firstMatch(compactText, [
+    /(?:Date\s+facture|Date\s+de\s+facture|Date\s+vente|Date)\s*[:\-]?\s*(\d{1,2}[\/-]\d{1,2}[\/-]\d{4})/i,
+  ]);
+  const date = dateFactureExplicite || dateEdition;
   const venteDate = normalizeDate(date);
+
+  const rdvRetrait = normalizeDate(firstMatch(compactText, [
+    /Rendez-vous\s*[:\-]?\s*(\d{1,2}[\/-]\d{1,2}[\/-]\d{4})/i,
+  ]));
+  const dateRecuperation = normalizeDate(firstMatch(compactText, [
+    /Date\s+R[ée]cup[ée]ration\s*[:\-]?\s*(\d{1,2}[\/-]\d{1,2}[\/-]\d{4})/i,
+  ]));
 
   const totalNetRaw = firstMatch(compactText, [
     /TOTAL\s+NET\s*[:\-]?\s*([\d\s.,]+)\s*(?:F\s*CFA|FCFA|CFA)?/i,
     /TOTAL\s+NET\s+([\d\s.,]+)\s*(?:F\s*CFA|FCFA|CFA)/i,
   ]);
   const totalBrutRaw = firstMatch(compactText, [
-    /(?:TOTAL(?:\s+BRUT)?|MONTANT\s+TOTAL)\s*[:\-]?\s*([\d\s.,]+)\s*(?:F\s*CFA|FCFA|CFA)?/i,
+    /TOTAL\s*[:\-]?\s*([\d\s.,]+)\s*(?:F\s*CFA|FCFA|CFA)?/i,
+    /(?:MONTANT\s+TOTAL)\s*[:\-]?\s*([\d\s.,]+)\s*(?:F\s*CFA|FCFA|CFA)?/i,
   ]);
   const acompteRaw = firstMatch(compactText, [
     /(?:Acompte|Avance|Vers[ée]ment)\s*[:\-]?\s*([\d\s.,]+)\s*(?:F\s*CFA|FCFA|CFA)?/i,
@@ -158,6 +188,64 @@ export async function parseLegacyClientPdf(file: File): Promise<LegacyPdfParsed 
   const totalBrut = money(totalBrutRaw) || totalNet;
   const acompte = money(acompteRaw);
   const remisePct = Number(String(remiseRaw || '').replace(',', '.')) || 0;
+
+  // ── Verres / ordonnance ──────────────────────────────────────────────────
+  const prescriptionBlock = firstMatch(compactText, [
+    /VERRES\s+PRESCIPTION\s+QUANTIT[ÉE]\s+PRIX\s+REMISE\s+TOTAL\s+(.+?)\s+Sph[èe]re/i,
+  ]);
+  const warrantyVerres = firstMatch(compactText, [/Garantie\s*:\s*([^\n]+?)(?=\s+Sph[èe]re|\s+MONTURES|$)/i]);
+  const rightEye = firstGroups(compactText, /Oeil\s+Droit\s+(?:1\s+[\d\s.,]+?\s+[\d.,]+\s+[\d\s.,]+\s+)?([+\-]?\d+[.,]?\d*)\s+([+\-]?\d+[.,]?\d*)\s+(\d+)\s+([+\-]?\d+[.,]?\d*)/i);
+  const leftEye = firstGroups(compactText, /Oeil\s+Gauche\s+([+\-]?\d+[.,]?\d*)\s+([+\-]?\d+[.,]?\d*)\s+(\d+)\s+([+\-]?\d+[.,]?\d*)/i);
+  const parseEye = (raw: string[]) => raw.length >= 4 ? { sphere: raw[0], cylindre: raw[1], axe: raw[2], addition: raw[3] } : {};
+  const prescriptionLabel = prescriptionBlock || firstMatch(compactText, [
+    /VERRES\s+PRESCIPTION.*?\s+(Progressif\s*\|.*?)(?=\s+Garantie:)/i,
+  ]);
+  const verresBlock = firstMatch(compactText, [/VERRES\s+PRESCIPTION[\s\S]*?(?=\s+MONTURES)/i]);
+  const glassRows = Array.from(verresBlock.matchAll(/\b1\s+([\d ]+\.\d{2})\s+0(?:\.00)?\s+([\d ]+\.\d{2})/gi)).map(m => ({ prix: money(m[1]), total: money(m[2]) }));
+  const rightPrice = glassRows[0]?.prix || 0;
+  const leftPrice = glassRows[1]?.prix || 0;
+  const verres = (prescriptionLabel || rightEye.length || leftEye.length) ? [{
+    type: 'Verres',
+    prescription: prescriptionLabel || '',
+    garantie: warrantyVerres || '',
+    quantite: 2,
+    oeilDroit: parseEye(rightEye),
+    oeilGauche: parseEye(leftEye),
+    lignes: [
+      rightEye.length ? { oeil: 'Droit', quantite: 1, prix: rightPrice, total: rightPrice } : null,
+      leftEye.length ? { oeil: 'Gauche', quantite: 1, prix: leftPrice, total: leftPrice } : null,
+    ].filter(Boolean),
+  }] : [];
+  const ordonnance = (rightEye.length || leftEye.length || prescriptionLabel) ? {
+    source: 'PDF facture ancien logiciel',
+    prescription: prescriptionLabel || '',
+    garantie: warrantyVerres || '',
+    oeilDroit: parseEye(rightEye),
+    oeilGauche: parseEye(leftEye),
+  } : null;
+
+  // ── Monture ───────────────────────────────────────────────────────────────
+  const fournisseur = firstMatch(compactText, [/Fournisseur\s*\|\s*([^\n]+?)(?=\s+LUSORIA|\s+Garantie|$)/i]);
+  const mountDesignation = firstMatch(compactText, [
+    /Fournisseur\s*\|[^\n]+\s+(LUSORIA\s*-[^\n]+?)(?=\s+Garantie\s*:)/i,
+  ]);
+  const mountWarranty = firstMatch(compactText, [
+    /MONTURES.*?Garantie\s*:\s*([^\n]+?)(?=\s+TOTAL\s+|$)/i,
+  ]);
+  const mountMatch = compactText.match(/(LUSORIA\s*-[^\n]+?)\s+(\d+)\s+([\d ]+\.\d{2})\s+([\d]+(?:\.\d{2})?)\s+([\d ]+\.\d{2})/i);
+  let articles: any[] = [];
+  if (mountMatch) {
+    articles.push({
+      type: 'Monture', designation: normalizeSpace(mountMatch[1]), quantite: Number(mountMatch[2]),
+      prix: money(mountMatch[3]), remise: money(mountMatch[4]), total: money(mountMatch[5]),
+      fournisseur: fournisseur || '', garantie: mountWarranty || '',
+    });
+  } else if (mountDesignation) {
+    articles.push({ type: 'Monture', designation: mountDesignation.trim(), fournisseur: fournisseur || '', garantie: mountWarranty || '' });
+  }
+
+  // Un PDF sans bloc « assuré » ne doit pas créer artificiellement une assurance.
+  const bonsAssurance: any[] = [];
 
   // On considère le PDF comme facture/vente si des marqueurs commerciaux sont présents.
   const isSale = /(FACTURE|DEVIS|PROFORMA|TOTAL\s+NET|MONTANT\s+TOTAL|BON\s+DE\s+COMMANDE)/i.test(compactText);
@@ -181,6 +269,18 @@ export async function parseLegacyClientPdf(file: File): Promise<LegacyPdfParsed 
     modePaiement,
     numeroFacture,
     conseillere,
-    notes: conseillere ? `Conseillère / vendeur détecté sur le PDF : ${conseillere}${numeroFacture ? ` · Facture : ${numeroFacture}` : ''}` : numeroFacture ? `Facture : ${numeroFacture}` : '',
+    rdvRetrait,
+    dateRecuperation,
+    articles,
+    verres,
+    ordonnance,
+    bonsAssurance,
+    notes: [
+      conseillere ? `Conseillère / vendeur détecté sur le PDF : ${conseillere}` : '',
+      numeroFacture ? `Facture : ${numeroFacture}` : '',
+      rdvRetrait ? `Rendez-vous : ${rdvRetrait}` : '',
+      dateRecuperation ? `Date récupération : ${dateRecuperation}` : '',
+      !bonsAssurance.length ? 'Aucun bloc assurance détecté sur cette facture.' : '',
+    ].filter(Boolean).join(' · '),
   };
 }

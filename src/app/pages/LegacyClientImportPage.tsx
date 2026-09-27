@@ -15,6 +15,9 @@ interface ParsedData {
   bonsAssurance?: any[];
   ordonnance?: any;
   conseillere?: string;
+  numeroFacture?: string;
+  rdvRetrait?: string;
+  dateRecuperation?: string;
 }
 
 function first(obj: any, keys: string[], fallback = ''): any {
@@ -120,7 +123,7 @@ export function LegacyClientImportPage() {
     numeroClient: '', civilite: '', nom: '', telephone: '', telephone2: '', email: '', adresse: '', profession: '', dateNaissance: '',
     matriculeAssurance: '', entreprise: '', ophtalmologue: '', telOphtalmologue: '', cabinetOphtalmologue: '', telCabinet: '', solde: '',
     venteDate: '', totalBrut: '', totalNet: '', remisePct: '', acompte: '', acompteDate: '', modePaiement: 'Espèces', compteBanque: '', detailsAcompte: '', sourceLogiciel: '',
-    ordonnanceJson: '', articlesJson: '', verresJson: '', assuranceJson: '', reglementsJson: '', notes: '', conseillere: '',
+    ordonnanceJson: '', articlesJson: '', verresJson: '', assuranceJson: '', reglementsJson: '', notes: '', conseillere: '', numeroFacture: '', rdvRetrait: '', dateRecuperation: '',
   });
 
   const update = (k: string, v: string) => setForm(prev => ({ ...prev, [k]: v }));
@@ -180,15 +183,22 @@ export function LegacyClientImportPage() {
       email: p.email || prev.email,
       adresse: p.adresse || prev.adresse,
       venteDate: p.venteDate || prev.venteDate,
-      totalBrut: p.totalBrut ? String(p.totalBrut) : prev.totalBrut,
-      totalNet: p.totalNet ? String(p.totalNet) : prev.totalNet,
-      remisePct: p.remisePct ? String(p.remisePct) : prev.remisePct,
-      acompte: p.acompte ? String(p.acompte) : prev.acompte,
+      totalBrut: p.totalBrut != null ? String(p.totalBrut) : prev.totalBrut,
+      totalNet: p.totalNet != null ? String(p.totalNet) : prev.totalNet,
+      remisePct: p.remisePct != null ? String(p.remisePct) : prev.remisePct,
+      acompte: p.acompte != null ? String(p.acompte) : prev.acompte,
       acompteDate: p.acompteDate || prev.acompteDate,
       modePaiement: p.modePaiement || prev.modePaiement,
       conseillere: p.conseillere || prev.conseillere,
+      numeroFacture: p.numeroFacture || prev.numeroFacture,
+      rdvRetrait: p.rdvRetrait || prev.rdvRetrait,
+      dateRecuperation: p.dateRecuperation || prev.dateRecuperation,
+      articlesJson: p.articles?.length ? JSON.stringify(p.articles, null, 2) : prev.articlesJson,
+      verresJson: p.verres?.length ? JSON.stringify(p.verres, null, 2) : prev.verresJson,
+      ordonnanceJson: p.ordonnance ? JSON.stringify(p.ordonnance, null, 2) : prev.ordonnanceJson,
+      assuranceJson: p.bonsAssurance?.length ? JSON.stringify(p.bonsAssurance, null, 2) : prev.assuranceJson,
       sourceLogiciel: prev.sourceLogiciel || `PDF ancien logiciel — ${p.sourceFile}`,
-      notes: [prev.notes, p.notes].filter(Boolean).join('\n'),
+      notes: [prev.notes, p.notes, p.rawText ? 'Contenu intégral du PDF conservé comme pièce jointe.' : ''].filter(Boolean).join('\n'),
     }));
   };
 
@@ -309,6 +319,9 @@ export function LegacyClientImportPage() {
         notesImport: form.notes,
         sourceLogiciel: form.sourceLogiciel,
         conseillere: form.conseillere,
+        numeroFacture: form.numeroFacture,
+        rdvRetrait: normalizeDate(form.rdvRetrait),
+        dateRecuperation: normalizeDate(form.dateRecuperation),
       });
       setMessage(`Import réussi. Client ${result.clientId}, vente ${result.venteId}. ${result.reglementIds.length} règlement(s) et ${result.documents} pièce(s) importé(s). La vente porte sa date d'origine ${normalizeDate(form.venteDate)} pour les tableaux de bord.`);
     } catch (e: any) {
@@ -365,6 +378,9 @@ export function LegacyClientImportPage() {
             <label className="text-sm"><span className="block font-semibold mb-1">Date d'origine</span><input type="date" className="w-full border rounded-lg px-3 py-2" value={form.venteDate} onChange={e=>update('venteDate',e.target.value)} /></label>
             <label className="text-sm"><span className="block font-semibold mb-1">Source / ancien logiciel</span><input className="w-full border rounded-lg px-3 py-2" value={form.sourceLogiciel} onChange={e=>update('sourceLogiciel',e.target.value)} /></label>
             <label className="text-sm"><span className="block font-semibold mb-1">Conseillère / vendeur de la vente</span><input className="w-full border rounded-lg px-3 py-2" value={form.conseillere} onChange={e=>update('conseillere',e.target.value)} placeholder="Détecté automatiquement depuis la facture PDF" /></label>
+            <label className="text-sm"><span className="block font-semibold mb-1">N° facture d'origine</span><input className="w-full border rounded-lg px-3 py-2" value={form.numeroFacture} onChange={e=>update('numeroFacture',e.target.value)} /></label>
+            <label className="text-sm"><span className="block font-semibold mb-1">Rendez-vous</span><input type="date" className="w-full border rounded-lg px-3 py-2" value={form.rdvRetrait} onChange={e=>update('rdvRetrait',e.target.value)} /></label>
+            <label className="text-sm"><span className="block font-semibold mb-1">Date récupération</span><input type="date" className="w-full border rounded-lg px-3 py-2" value={form.dateRecuperation} onChange={e=>update('dateRecuperation',e.target.value)} /></label>
             <label className="text-sm"><span className="block font-semibold mb-1">Total brut</span><input type="number" className="w-full border rounded-lg px-3 py-2" value={form.totalBrut} onChange={e=>update('totalBrut',e.target.value)} /></label>
             <label className="text-sm"><span className="block font-semibold mb-1">Total net</span><input type="number" className="w-full border rounded-lg px-3 py-2" value={form.totalNet} onChange={e=>update('totalNet',e.target.value)} /></label>
             <label className="text-sm"><span className="block font-semibold mb-1">Remise %</span><input type="number" className="w-full border rounded-lg px-3 py-2" value={form.remisePct} onChange={e=>update('remisePct',e.target.value)} /></label>

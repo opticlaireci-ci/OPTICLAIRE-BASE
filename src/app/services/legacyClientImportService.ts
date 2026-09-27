@@ -58,6 +58,9 @@ export interface LegacyClientImportPayload {
   notesImport?: string;
   sourceLogiciel?: string;
   conseillere?: string;
+  numeroFacture?: string;
+  rdvRetrait?: string;
+  dateRecuperation?: string;
 }
 
 function safeId(value: string): string {
@@ -130,7 +133,9 @@ export async function importerDossierClient(payload: LegacyClientImportPayload):
       modePaiement: payload.modePaiementAcompte || '',
       compteBanque: payload.compteBanqueAcompte || '',
       details: payload.detailsAcompte || '',
-      numFacture: payload.numeroClient ? `IMP-${numeroClient}` : `IMP-${Date.now()}`,
+      rdvRetrait: payload.rdvRetrait || '',
+      dateRecuperation: payload.dateRecuperation || '',
+      numFacture: payload.numeroFacture || (payload.numeroClient ? `IMP-${numeroClient}` : `IMP-${Date.now()}`),
       numRecu: '',
       imported: true,
       importId,
