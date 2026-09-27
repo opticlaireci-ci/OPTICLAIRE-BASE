@@ -179,7 +179,7 @@ export async function ajouterVente(
 
     // SMS de remerciement pour une VENTE réelle (pas un devis). Idempotent :
     // un seul SMS par vente, en arrière-plan (n'impacte pas l'enregistrement).
-    if (data.type === 'vente') {
+    if (data.type === 'vente' && !data?.recap?.imported) {
       import('./smsService')
         .then(({ envoyerSmsRemerciementVente }) => envoyerSmsRemerciementVente({
           id: data.id, client: data.client, telephone: data.telephone,

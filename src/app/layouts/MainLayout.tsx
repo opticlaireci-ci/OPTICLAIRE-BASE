@@ -439,6 +439,7 @@ const menuItems: MenuItemType[] = [
       { title: 'RDV En Ligne', icon: <Event />, path: '/rdv-en-ligne' },
       { title: 'Géolocalisation', icon: <LocationOn />, path: '/geolocalisation' },
       { title: 'Base de Données Client', icon: <People />, path: '/clients' },
+      { title: 'Importer ancien dossier client', icon: <People />, path: '/import-ancien-client' },
       { title: 'Gestion Utilisateurs', icon: <People />, path: '/utilisateurs' },
       { title: 'Gestion Profils', icon: <Person />, path: '/profils' },
       { title: 'Synchronisation', icon: <SyncIcon />, path: '/synchronisation' },

@@ -422,6 +422,7 @@ export function MagasinLayout() {
         { title: 'RDV Retrait', icon: <Event />, path: `/magasin/${magasinId}/clientele/rdv-retrait` },
         { title: 'RDV en Ligne', icon: <Event />, path: `/magasin/${magasinId}/clientele/rdv-enligne` },
         { title: 'Call Center', icon: <Phone />, path: `/magasin/${magasinId}/clientele/call-center` },
+        { title: 'Importer ancien dossier client', icon: <People />, path: `/magasin/${magasinId}/clientele/import-ancien-client` },
       ],
     },
     {

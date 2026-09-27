@@ -44,6 +44,7 @@ export const APP_BUTTON_GROUPS: AppButtonGroup[] = [
       { key: 'magasin:clientele/rdv-retrait', label: 'RDV Retrait' },
       { key: 'magasin:clientele/rdv-enligne', label: 'RDV en Ligne' },
       { key: 'magasin:clientele/call-center', label: 'Call Center' },
+      { key: 'magasin:clientele/import-ancien-client', label: 'Importer ancien dossier client' },
     ],
   },
   {
@@ -64,6 +65,7 @@ export const APP_BUTTON_GROUPS: AppButtonGroup[] = [
       { key: '/rdv-en-ligne', label: 'RDV En Ligne' },
       { key: '/geolocalisation', label: 'Géolocalisation' },
       { key: '/clients', label: 'Base de Données Client' },
+      { key: '/import-ancien-client', label: 'Importer ancien dossier client' },
       { key: '/utilisateurs', label: 'Gestion Utilisateurs' },
       { key: '/profils', label: 'Gestion Profils' },
       { key: '/synchronisation', label: 'Synchronisation' },

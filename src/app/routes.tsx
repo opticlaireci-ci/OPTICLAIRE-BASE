@@ -100,6 +100,7 @@ export const router = createBrowserRouter([
       { path: "clientele/rdv-retrait", lazy: lazyRoute(() => import("./pages/magasin/gestion-clientele/RdvRetraitMagasinPage"), "RdvRetraitMagasinPage") },
       { path: "clientele/rdv-enligne", lazy: lazyRoute(() => import("./pages/magasin/gestion-clientele/RdvEnLigneMagasinPage"), "RdvEnLigneMagasinPage") },
       { path: "clientele/call-center", lazy: lazyRoute(() => import("./pages/magasin/gestion-clientele/CallCenterPage"), "CallCenterPage") },
+      { path: "clientele/import-ancien-client", lazy: lazyRoute(() => import("./pages/LegacyClientImportPage"), "LegacyClientImportPage") },
 
       // Gestion de Stock
       { path: "stocks/bon-distribution", lazy: lazyRoute(() => import("./pages/magasin/gestion-stocks/BonDistributionMagasinPage"), "BonDistributionMagasinPage") },
@@ -131,6 +132,7 @@ export const router = createBrowserRouter([
       { path: "call-center/dashboard", lazy: lazyRoute(() => import("./pages/CallCenterDashboardPage"), "CallCenterDashboardPage") },
       { path: "geolocalisation", lazy: lazyRoute(() => import("./pages/GeolocalisationPage"), "GeolocalisationPage") },
       { path: "clients", lazy: lazyRoute(() => import("./pages/gestion-magasin/ClientPage"), "ClientPage") },
+      { path: "import-ancien-client", lazy: lazyRoute(() => import("./pages/LegacyClientImportPage"), "LegacyClientImportPage") },
       { path: "utilisateurs", lazy: lazyRoute(() => import("./pages/GestionUtilisateursPage"), "GestionUtilisateursPage") },
       { path: "profils", lazy: lazyRoute(() => import("./pages/GestionProfilsPage"), "GestionProfilsPage") },
 
