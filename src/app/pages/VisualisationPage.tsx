@@ -454,7 +454,11 @@ export function VisualisationPage() {
           .filter(r => dansIntervalle(r.date))
           .filter(r => magasinOk(r.magasin_id))
           .filter(r => modePaiementCorrespond(r.mode_paiement || '', modePaiement));
-        const regRows = filteredR.map(r => {
+        const filteredRNoDuplicateImportAcompte = filteredR.filter(r => {
+          const v = vById.get(r.vente_id);
+          return !(v?.recap?.imported && String((r as any).details || '').trim().toLowerCase() === 'acompte importé');
+        });
+        const regRows = filteredRNoDuplicateImportAcompte.map(r => {
           const v = vById.get(r.vente_id);
           const totalNet = v ? montantVente(v) : 0;
           return mkRow(r.id, [
@@ -499,7 +503,7 @@ export function VisualisationPage() {
           (v.bons_assurance as any[]).reduce((ss, b) => ss + num(
             b?.montantPrisEnCharge ?? b?.montant ?? b?.total ?? b?.montantAssurance
           ), 0), 0);
-        const totalR = filteredR.reduce((s, r) => s + num(r.montant), 0);
+        const totalR = filteredRNoDuplicateImportAcompte.reduce((s, r) => s + num(r.montant), 0);
         const totalV = filteredV.reduce((s, v) => s + num((v.recap as any)?.acompte), 0);
         // Dans l'état RÈGLEMENTS, la ligne TOTAL ne doit contenir que le
         // montant réellement encaissé : la colonne « Total Net » reste vide

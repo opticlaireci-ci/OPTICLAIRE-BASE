@@ -102,8 +102,13 @@ export function SgopticDashboard({ title, ventes, reglements, objectif = 0, taux
     // rattachés à cette facture. Le restant = ce que le client doit encore,
     // après acompte, assurance et règlements complémentaires.
     const reglementsParVente: Record<string, number> = {};
+    const ventesById = new Map(realSales.map(v => [v.id, v]));
     for (const r of reglements) {
       if (!r.vente_id) continue;
+      const v = ventesById.get(r.vente_id);
+      // Anciennes importations : l'acompte était écrit dans recap.acompte ET
+      // dupliqué dans reglements. On ignore uniquement cette ligne technique.
+      if (v?.recap?.imported && String((r as any).details || '').trim().toLowerCase() === 'acompte importé') continue;
       reglementsParVente[r.vente_id] = (reglementsParVente[r.vente_id] || 0) + (Number(r.montant) || 0);
     }
     const acompteVente = (v: any) => Number(v?.recap?.acompte ?? 0) || 0;

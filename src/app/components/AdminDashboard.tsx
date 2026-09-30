@@ -229,7 +229,12 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
     // de paiement sur une autre facture. Le solde est calculé sur tout
     // l'historique, car il représente ce qui reste à recouvrer maintenant.
     const reglementsParVente: Record<string, number> = {};
+    const ventesById = new Map(realSales.map(v => [v.id, v]));
     for (const r of reglements) {
+      const v = ventesById.get(r.vente_id);
+      // Compatibilité avec les anciennes importations qui avaient dupliqué
+      // l'acompte dans la collection des règlements.
+      if (v?.recap?.imported && String((r as any).details || '').trim().toLowerCase() === 'acompte importé') continue;
       reglementsParVente[r.vente_id] = (reglementsParVente[r.vente_id] || 0) + (Number(r.montant) || 0);
     }
     const restantVente = (v: any) => {

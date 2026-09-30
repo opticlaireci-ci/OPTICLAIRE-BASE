@@ -3251,6 +3251,14 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
   const [showBonAssuranceReglement, setShowBonAssuranceReglement] = useState(false);
   const [showBonForm, setShowBonForm] = useState(false);
   const [reglementsSupabase, setReglementsSupabase] = useState<ReglementSupabase[]>([]);
+  // Compatibilité avec les anciennes importations : certaines avaient créé
+  // l'acompte à la fois dans recap.acompte et comme règlement séparé.
+  // On conserve la donnée historique, mais on ne la recompte pas dans les
+  // calculs d'une vente importée.
+  const reglementsEffectifs = reglementsSupabase.filter(r => !(
+    detail?.recap?.imported &&
+    String((r as any).details || '').trim().toLowerCase() === 'acompte importé'
+  ));
   // Bons de commande de verres (atelier) — partagés avec la page Atelier et le
   // Règlement verrier. La clé et le hook sont identiques pour rester cohérents.
   const [bonsVerres, setBonsVerres] = useLiveData<any>('leclaire_bons_commande_verres', []);
@@ -3594,7 +3602,7 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Total Reste</label>
                   {(() => {
-                    const totalReglements = reglementsSupabase.reduce((s, r) => s + r.montant, 0);
+                    const totalReglements = reglementsEffectifs.reduce((s, r) => s + r.montant, 0);
                     const acompteInitial = parseFloat(detail.recap.acompte) || 0;
                     const totalAssurance = detail.bonsAssurance.reduce((s, b) => s + (parseFloat(b.montantPrisEnCharge) || 0), 0);
                     // Déduction EN DIRECT de l'acompte en cours de saisie.
@@ -4124,7 +4132,7 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
                       {(() => {
                         const acompte = parseFloat(detail.recap.acompte) || 0;
                         const totalAssurance = detail.bonsAssurance.reduce((s, b) => s + (parseFloat(b.montantPrisEnCharge) || 0), 0);
-                        const totalReglements = (reglementsSupabase || []).reduce((s, r) => s + (r.montant || 0), 0);
+                        const totalReglements = reglementsEffectifs.reduce((s, r) => s + (r.montant || 0), 0);
                         const reste = normaliserTotauxVente(detail).totalNet - acompte - totalAssurance - totalReglements;
                         const solde = reste <= 0;
                         return (
@@ -4167,7 +4175,7 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
                       // enregistrés depuis. On tient compte des règlements ajoutés,
                       // même quand l'acompte initial était 0.
                       const acompteInitial = parseFloat(detail.recap.acompte || '0') || 0;
-                      const totalReglements = reglementsSupabase.reduce((s, r) => s + (Number(r.montant) || 0), 0);
+                      const totalReglements = reglementsEffectifs.reduce((s, r) => s + (Number(r.montant) || 0), 0);
                       const totalPaye = acompteInitial + totalReglements;
                       if (totalPaye <= 0) {
                         alert('Aucun règlement enregistré pour cette vente');
@@ -4176,8 +4184,8 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
                       // Dernier règlement enregistré (le plus récent) — sinon l'acompte
                       // initial de la vente. Le reçu utilise le MÊME format que le reçu
                       // de vente (imprimerReglement / telechargerReglementPDF).
-                      const dernier = reglementsSupabase.length > 0
-                        ? reglementsSupabase[reglementsSupabase.length - 1]
+                      const dernier = reglementsEffectifs.length > 0
+                        ? reglementsEffectifs[reglementsEffectifs.length - 1]
                         : null;
                       telechargerReglementPDF({
                         recu: dernier?.recu || detail.recap.numRecu || '—',
@@ -4466,13 +4474,13 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
                             <div className="opacity-80">Acompte</div>
                             <div className="text-base font-bold">{(() => {
                               const acompteInitial = parseFloat(detail.recap.acompte || '0');
-                              const totalReglements = reglementsSupabase.reduce((s, r) => s + r.montant, 0);
+                              const totalReglements = reglementsEffectifs.reduce((s, r) => s + r.montant, 0);
                               return (acompteInitial + totalReglements).toLocaleString('fr-FR');
                             })()}</div>
                           </div>
                           {(() => {
                             const acompteInitial = parseFloat(detail.recap.acompte) || 0;
-                            const totalReglements = reglementsSupabase.reduce((s, r) => s + r.montant, 0);
+                            const totalReglements = reglementsEffectifs.reduce((s, r) => s + r.montant, 0);
                             const totalAssurance = detail.bonsAssurance.reduce((s, b) => s + (parseFloat(b.montantPrisEnCharge) || 0), 0);
                             const reste = normaliserTotauxVente(detail).totalNet - acompteInitial - totalReglements - totalAssurance;
                             const solde = reste <= 0;
@@ -4512,16 +4520,16 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
                               {/* Règlements ajoutés depuis Supabase — nouveaux EN HAUT
                                   (ordre décroissant). Le cumul reste calculé selon
                                   l'ordre chronologique réel (idx croissant). */}
-                              {reglementsSupabase.map((_r, revIdx) => {
-                                const idx = reglementsSupabase.length - 1 - revIdx;
-                                const reglement = reglementsSupabase[idx];
+                              {reglementsEffectifs.map((_r, revIdx) => {
+                                const idx = reglementsEffectifs.length - 1 - revIdx;
+                                const reglement = reglementsEffectifs[idx];
                                 // Cumul déjà réglé À CE STADE = acompte initial (recap)
                                 // + somme des versements jusqu'à celui-ci inclus.
                                 // Permet au reçu d'afficher le bon ACOMPTE / RESTE
                                 // quand le client revient solder.
                                 const acompteInitial = parseFloat(detail.recap.acompte || '0') || 0;
                                 const totalPaye = acompteInitial
-                                  + reglementsSupabase.slice(0, idx + 1).reduce((s, r) => s + (Number(r.montant) || 0), 0);
+                                  + reglementsEffectifs.slice(0, idx + 1).reduce((s, r) => s + (Number(r.montant) || 0), 0);
                                 const reglementLocal = {
                                   id: reglement.id,
                                   recu: reglement.recu,
@@ -4674,7 +4682,7 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
                               )}
 
                               {/* Aucun règlement */}
-                              {(!detail.recap.acompte || parseFloat(detail.recap.acompte) <= 0) && reglementsSupabase.length === 0 && (
+                              {(!detail.recap.acompte || parseFloat(detail.recap.acompte) <= 0) && reglementsEffectifs.length === 0 && (
                                 <tr>
                                   <td colSpan={6} className="px-3 py-8 text-center text-gray-400 bg-white border border-gray-300">
                                     Aucun règlement enregistré
@@ -5038,9 +5046,11 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
           const rows = [...filtered].sort(ordreArrivee).map((v, i) => {
             const acompte = parseFloat(v.recap.acompte) || 0;
             const totalAssurance = v.bonsAssurance.reduce((s, b) => s + (parseFloat(b.montantPrisEnCharge) || 0), 0);
-            const totalReglements = (reglementsParVente[v.id] || []).reduce((s, r) => s + r.montant, 0);
+            const totalReglements = (reglementsParVente[v.id] || [])
+              .filter((r: any) => !(v.recap?.imported && String(r.details || '').trim().toLowerCase() === 'acompte importé'))
+              .reduce((s, r) => s + r.montant, 0);
             const totaux = normaliserTotauxVente(v);
-            const reste = totaux.totalNet - acompte - totalAssurance - totalReglements;
+            const reste = Math.max(0, totaux.totalNet - acompte - totalAssurance - totalReglements);
             const remisePct = totaux.remisePct;
             const totalBrut = totaux.totalBrut;
             // IMPORTANT : totalNet doit être calculé UNIQUEMENT depuis ce `totaux`

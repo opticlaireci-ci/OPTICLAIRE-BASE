@@ -72,6 +72,18 @@ function money(n: any): number {
   return Number.isFinite(v) ? Math.max(0, Math.round(v)) : 0;
 }
 
+function normalizeImportDate(value: any): string {
+  if (!value) return '';
+  const s = String(value).trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+  const m = s.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})$/);
+  if (m) {
+    const y = m[3].length === 2 ? `20${m[3]}` : m[3];
+    return `${y}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+  }
+  return s.slice(0, 10);
+}
+
 export async function importerDossierClient(payload: LegacyClientImportPayload): Promise<{ clientId: string; venteId: string; reglementIds: string[]; importId: string; documents: number }> {
   const now = new Date().toISOString();
   const numeroClient = payload.numeroClient?.trim() || `IMP-${Date.now().toString().slice(-8)}`;
@@ -167,27 +179,31 @@ export async function importerDossierClient(payload: LegacyClientImportPayload):
   await ajouterVente(vente);
 
   const reglementIds: string[] = [];
-  if (acompte > 0) {
-    const id = `reg-import-${venteId}-acompte`;
-    await ajouterReglement({
-      id,
-      vente_id: venteId,
-      magasin_id: payload.magasinId,
-      recu: '',
-      mode_paiement: payload.modePaiementAcompte || 'Espèces',
-      compte_banque: payload.compteBanqueAcompte || '',
-      details: payload.detailsAcompte || 'Acompte importé',
-      montant: acompte,
-      date: payload.acompteDate || payload.venteDate,
-      edite_par: 'IMPORT ANCIEN CLIENT',
-    });
-    reglementIds.push(id);
-  }
+  // IMPORTANT : l'acompte historique est déjà porté par recap.acompte.
+  // Il ne faut donc PAS créer un deuxième règlement pour ce même acompte,
+  // sinon les écrans qui calculent le reste (total - acompte - règlements)
+  // le déduisent deux fois et peuvent afficher un reste négatif.
+  // Les règlements importés ci-dessous correspondent uniquement aux paiements
+  // complémentaires distincts de l'acompte.
+  const acompteDate = normalizeImportDate(payload.acompteDate || payload.venteDate);
+  let acompteEquivalentIgnore = acompte > 0;
 
   for (let i = 0; i < (payload.reglements || []).length; i++) {
     const r = payload.reglements![i];
     const montant = money(r.montant);
     if (montant <= 0) continue;
+
+    const regDate = normalizeImportDate(r.date || payload.venteDate);
+    const memeAcompte = acompteEquivalentIgnore &&
+      montant === acompte &&
+      regDate === acompteDate;
+    if (memeAcompte) {
+      // Ce règlement représente le même acompte déjà stocké dans recap.acompte.
+      // On le consomme une seule fois afin de ne pas créer de double paiement.
+      acompteEquivalentIgnore = false;
+      continue;
+    }
+
     const id = `reg-import-${venteId}-${i + 1}`;
     await ajouterReglement({
       id,
