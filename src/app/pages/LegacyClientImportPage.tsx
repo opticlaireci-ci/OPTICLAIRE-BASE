@@ -280,22 +280,113 @@ export function LegacyClientImportPage() {
     if (!selected.length) return;
     setBatchMessage(''); setError(''); setBatchImporting(true);
     try {
-      // Avec webkitdirectory, le chemin relatif permet de distinguer chaque dossier client.
-      // Exemple: ANCIENS_CLIENTS/CLIENT_001/facture.pdf -> groupe CLIENT_001.
-      const groups = new Map<string, File[]>();
-      for (const file of selected) {
-        const rel = String((file as any).webkitRelativePath || file.name).replace(/\\/g, '/');
+      /*
+       * IMPORTANT : ne plus supposer que le client est toujours parts[1].
+       * Selon la manière dont l'ancien logiciel a exporté les dossiers, on peut
+       * avoir : ANCIENS/CLIENT/facture.pdf, ANCIENS/2025/CLIENT/facture.pdf,
+       * ou encore plusieurs PDF dans des sous-dossiers.
+       *
+       * On identifie donc d'abord chaque facture PDF par le numéro client (ou
+       * nom + téléphone), puis on rattache les autres pièces au dossier qui
+       * contient ce PDF. Cela évite qu'un dossier soit fusionné avec un autre
+       * ou qu'il soit ignoré simplement parce que sa profondeur de dossier
+       * n'est pas identique.
+       */
+      const relPath = (file: File) => String((file as any).webkitRelativePath || file.name).replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+      const parentDir = (file: File) => {
+        const rel = relPath(file);
         const parts = rel.split('/').filter(Boolean);
-        const group = parts.length >= 2 ? parts[1] : 'Dossier unique';
-        if (!groups.has(group)) groups.set(group, []);
-        groups.get(group)!.push(file);
+        return parts.slice(0, -1).join('/');
+      };
+      const normalizeKey = (v: any) => String(v || '')
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+
+      const pdfFiles = selected.filter(f => /\.pdf$/i.test(f.name));
+      const parsedPdfEntries: { file: File; parsed: LegacyPdfParsed; dir: string; key: string }[] = [];
+      for (const file of pdfFiles) {
+        try {
+          const parsed = await parseLegacyClientPdf(file);
+          if (!parsed) continue;
+          const key = parsed.numeroClient
+            ? `numero:${normalizeKey(parsed.numeroClient)}`
+            : `client:${normalizeKey(parsed.nom)}|tel:${normalizeKey(parsed.telephone)}`;
+          if (parsed.nom || parsed.numeroClient) parsedPdfEntries.push({ file, parsed, dir: parentDir(file), key });
+        } catch { /* le PDF reste conservé ; il pourra être signalé si aucune facture exploitable n'est trouvée */ }
       }
+
+      const groups = new Map<string, File[]>();
+      const groupLabels = new Map<string, string>();
+      const groupRoots = new Map<string, string[]>();
+
+      // 1) Les PDF reconnaissables déterminent les dossiers clients.
+      for (const entry of parsedPdfEntries) {
+        if (!groups.has(entry.key)) groups.set(entry.key, []);
+        const arr = groups.get(entry.key)!;
+        if (!arr.includes(entry.file)) arr.push(entry.file);
+        const roots = groupRoots.get(entry.key) || [];
+        if (entry.dir && !roots.includes(entry.dir)) roots.push(entry.dir);
+        groupRoots.set(entry.key, roots);
+        if (!groupLabels.has(entry.key)) {
+          const label = entry.parsed.numeroClient
+            ? `Client ${entry.parsed.numeroClient}${entry.parsed.nom ? ` — ${entry.parsed.nom}` : ''}`
+            : (entry.parsed.nom || entry.file.name);
+          groupLabels.set(entry.key, label);
+        }
+      }
+
+      // 2) Les autres pièces sont rattachées au dossier dont le chemin est
+      //    l'ancêtre le plus long. Ainsi les sous-dossiers (assurance, docs...)
+      //    restent avec le bon client.
+      for (const file of selected) {
+        if (/\.pdf$/i.test(file.name)) {
+          // Le PDF a déjà été affecté ci-dessus lorsqu'il est lisible.
+          const parsedEntry = parsedPdfEntries.find(e => e.file === file);
+          if (parsedEntry) continue;
+        }
+        const rel = relPath(file);
+        let bestKey = '';
+        let bestRootLen = -1;
+        for (const [key, roots] of groupRoots.entries()) {
+          for (const root of roots) {
+            const prefix = root ? `${root}/` : '';
+            if (rel === root || rel.startsWith(prefix)) {
+              if (root.length > bestRootLen) {
+                bestRootLen = root.length;
+                bestKey = key;
+              }
+            }
+          }
+        }
+        if (bestKey) groups.get(bestKey)!.push(file);
+      }
+
+      // 3) Si aucun PDF n'a pu être reconnu, on garde un fallback par dossier
+      //    afin que l'utilisateur obtienne une erreur précise au lieu d'un import
+      //    silencieusement perdu.
+      if (!groups.size) {
+        const fallback = new Map<string, File[]>();
+        for (const file of selected) {
+          const rel = relPath(file);
+          const parts = rel.split('/').filter(Boolean);
+          const group = parts.length >= 2 ? parts.slice(0, -1).join('/') : 'Dossier unique';
+          if (!fallback.has(group)) fallback.set(group, []);
+          fallback.get(group)!.push(file);
+        }
+        for (const [k, v] of fallback) { groups.set(`fallback:${k}`, v); groupLabels.set(`fallback:${k}`, k); }
+      }
+
       const results: string[] = [];
       let ok = 0, failed = 0;
-      for (const [groupName, groupFiles] of groups) {
+      for (const [groupKey, groupFiles] of groups) {
+        const groupName = groupLabels.get(groupKey) || groupKey.replace(/^fallback:/, '');
         try {
           const payload = await buildPayloadFromPdfGroup(groupFiles, groupName);
-          if (!payload) { failed++; results.push(`❌ ${groupName} : facture PDF non lisible ou informations insuffisantes`); continue; }
+          if (!payload) {
+            failed++;
+            results.push(`❌ ${groupName} : facture PDF non lisible ou informations insuffisantes (nom, date de vente ou total net manquant)`);
+            continue;
+          }
           const result = await importerDossierClient(payload as any);
           ok++;
           results.push(`✅ ${groupName} : ${payload.nom} · vente ${result.venteId}`);
@@ -303,7 +394,9 @@ export function LegacyClientImportPage() {
           failed++; results.push(`❌ ${groupName} : ${e?.message || 'échec de l’import'}`);
         }
       }
-      setBatchMessage(`Import groupé terminé : ${ok} dossier(s) importé(s), ${failed} échec(s) sur ${groups.size}.\n\n${results.join('\n')}`);
+      setBatchMessage(`Import groupé terminé : ${ok} dossier(s) importé(s), ${failed} échec(s) sur ${groups.size}.
+
+${results.join('\n')}`);
     } finally { setBatchImporting(false); }
   };
 
