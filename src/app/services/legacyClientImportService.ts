@@ -76,7 +76,8 @@ export async function importerDossierClient(payload: LegacyClientImportPayload):
   const now = new Date().toISOString();
   const numeroClient = payload.numeroClient?.trim() || `IMP-${Date.now().toString().slice(-8)}`;
   const clientId = `client-${safeId(payload.magasinId)}-${safeId(numeroClient)}`;
-  const venteId = `vente-import-${safeId(payload.magasinId)}-${Date.now()}-${safeId(numeroClient)}`;
+  const unique = (globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2)).replace(/[^a-zA-Z0-9-]/g, '').slice(0, 12);
+  const venteId = `vente-import-${safeId(payload.magasinId)}-${Date.now()}-${unique}-${safeId(numeroClient)}`;
   const importId = `import-${venteId}`;
 
   const clientName = `${payload.civilite ? payload.civilite.trim() + ' ' : ''}${payload.nom.trim()}`.trim();

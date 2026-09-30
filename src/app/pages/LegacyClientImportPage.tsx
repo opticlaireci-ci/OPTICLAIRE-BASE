@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { useParams } from 'react-router';
 import * as XLSX from 'xlsx';
-import { Upload, FolderOpen, FileText, CheckCircle2, AlertTriangle, Loader2, Package, CalendarDays, ShieldCheck } from 'lucide-react';
+import { Upload, FolderOpen, FileText, CheckCircle2, AlertTriangle, Loader2, Package, CalendarDays, ShieldCheck, Users } from 'lucide-react';
 import { getMagasins } from '../constants/magasins';
 import { importerDossierClient, parseMoney, type ImportDocumentInput, type ImportReglementInput } from '../services/legacyClientImportService';
 import { parseLegacyClientPdf, type LegacyPdfParsed } from '../utils/legacyClientPdf';
@@ -108,6 +108,36 @@ async function fileToImportDocument(file: File): Promise<ImportDocumentInput> {
   return { name: file.name, type: file.type, size: file.size, relativePath: (file as any).webkitRelativePath || file.name, dataBase64: btoa(binary) };
 }
 
+function mergeLegacyPdfData(items: LegacyPdfParsed[]): LegacyPdfParsed | null {
+  if (!items.length) return null;
+  // Le PDF qui ressemble le plus à une facture sert de base, puis les autres
+  // PDF du même dossier complètent les champs manquants (ordonnance, assurance,
+  // dates, conseillère, etc.). Aucun PDF n'est perdu : ils restent tous dans files.
+  const score = (p: LegacyPdfParsed) =>
+    (p.totalNet ? 6 : 0) + (p.numeroFacture ? 4 : 0) + (p.nom ? 4 : 0) +
+    (p.conseillere ? 3 : 0) + (p.articles?.length ? 2 : 0) +
+    (p.verres?.length ? 2 : 0) + (p.ordonnance ? 2 : 0) + (p.acompte ? 1 : 0);
+  const ordered = [...items].sort((a, b) => score(b) - score(a));
+  const base = { ...ordered[0] };
+  for (const p of ordered.slice(1)) {
+    const keys: (keyof LegacyPdfParsed)[] = [
+      'numeroClient','civilite','nom','telephone','email','adresse','venteDate',
+      'totalBrut','totalNet','remisePct','acompte','acompteDate','modePaiement',
+      'numeroFacture','conseillere','rdvRetrait','dateRecuperation','ordonnance','notes'
+    ];
+    for (const k of keys) {
+      const current = base[k] as any;
+      const incoming = p[k] as any;
+      const empty = current === undefined || current === null || current === '' || current === 0;
+      if (empty && incoming !== undefined && incoming !== null && incoming !== '' && incoming !== 0) (base as any)[k] = incoming;
+    }
+    if ((!base.articles || !base.articles.length) && p.articles?.length) base.articles = p.articles;
+    if ((!base.verres || !base.verres.length) && p.verres?.length) base.verres = p.verres;
+    if ((!base.bonsAssurance || !base.bonsAssurance.length) && p.bonsAssurance?.length) base.bonsAssurance = p.bonsAssurance;
+  }
+  return base;
+}
+
 export function LegacyClientImportPage() {
   const { magasinId: routeMagasinId } = useParams<{ magasinId?: string }>();
   const magasins = getMagasins();
@@ -116,6 +146,8 @@ export function LegacyClientImportPage() {
   const [parsed, setParsed] = useState<ParsedData | null>(null);
   const [loadingFiles, setLoadingFiles] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [batchImporting, setBatchImporting] = useState(false);
+  const [batchMessage, setBatchMessage] = useState('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
@@ -202,6 +234,79 @@ export function LegacyClientImportPage() {
     }));
   };
 
+  const buildPayloadFromPdfGroup = async (groupFiles: File[], groupName: string) => {
+    const pdfs = groupFiles.filter(f => /\.pdf$/i.test(f.name));
+    const parsedPdfs: LegacyPdfParsed[] = [];
+    for (const f of pdfs) {
+      try {
+        const p = await parseLegacyClientPdf(f);
+        if (p) parsedPdfs.push(p);
+      } catch { /* la pièce reste conservée */ }
+    }
+    const best = mergeLegacyPdfData(parsedPdfs);
+    if (!best || !best.nom || !best.venteDate || !(best.totalNet || 0)) return null;
+    const docs = await Promise.all(groupFiles.map(fileToImportDocument));
+    return {
+      magasinId,
+      numeroClient: best.numeroClient || '',
+      civilite: best.civilite || '',
+      nom: best.nom || groupName,
+      telephone: best.telephone || '',
+      email: best.email || '',
+      adresse: best.adresse || '',
+      venteDate: best.venteDate || '',
+      totalBrut: best.totalBrut || best.totalNet || 0,
+      totalNet: best.totalNet || 0,
+      remisePct: best.remisePct || 0,
+      acompteInitial: best.acompte || 0,
+      acompteDate: best.acompteDate || best.venteDate || '',
+      modePaiementAcompte: best.modePaiement || 'Espèces',
+      articles: best.articles || [],
+      verres: best.verres || [],
+      bonsAssurance: best.bonsAssurance || [],
+      ordonnance: best.ordonnance || null,
+      documents: docs,
+      notesImport: `Import groupé — dossier : ${groupName}`,
+      sourceLogiciel: `Ancien logiciel — import groupé (${groupName})`,
+      conseillere: best.conseillere || '',
+      numeroFacture: best.numeroFacture || '',
+      rdvRetrait: best.rdvRetrait || '',
+      dateRecuperation: best.dateRecuperation || '',
+    };
+  };
+
+  const onMultipleClientsFolder = async (ev: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = Array.from(ev.target.files || []);
+    if (!selected.length) return;
+    setBatchMessage(''); setError(''); setBatchImporting(true);
+    try {
+      // Avec webkitdirectory, le chemin relatif permet de distinguer chaque dossier client.
+      // Exemple: ANCIENS_CLIENTS/CLIENT_001/facture.pdf -> groupe CLIENT_001.
+      const groups = new Map<string, File[]>();
+      for (const file of selected) {
+        const rel = String((file as any).webkitRelativePath || file.name).replace(/\\/g, '/');
+        const parts = rel.split('/').filter(Boolean);
+        const group = parts.length >= 2 ? parts[1] : 'Dossier unique';
+        if (!groups.has(group)) groups.set(group, []);
+        groups.get(group)!.push(file);
+      }
+      const results: string[] = [];
+      let ok = 0, failed = 0;
+      for (const [groupName, groupFiles] of groups) {
+        try {
+          const payload = await buildPayloadFromPdfGroup(groupFiles, groupName);
+          if (!payload) { failed++; results.push(`❌ ${groupName} : facture PDF non lisible ou informations insuffisantes`); continue; }
+          const result = await importerDossierClient(payload as any);
+          ok++;
+          results.push(`✅ ${groupName} : ${payload.nom} · vente ${result.venteId}`);
+        } catch (e: any) {
+          failed++; results.push(`❌ ${groupName} : ${e?.message || 'échec de l’import'}`);
+        }
+      }
+      setBatchMessage(`Import groupé terminé : ${ok} dossier(s) importé(s), ${failed} échec(s) sur ${groups.size}.\n\n${results.join('\n')}`);
+    } finally { setBatchImporting(false); }
+  };
+
   const onFolder = async (ev: React.ChangeEvent<HTMLInputElement>) => {
     const selected = Array.from(ev.target.files || []);
     setFiles(selected);
@@ -219,16 +324,17 @@ export function LegacyClientImportPage() {
       // Les anciens logiciels exportent souvent uniquement la facture en PDF.
       // On analyse aussi les PDF et récupère notamment la conseillère/vendeur.
       const pdfs = selected.filter(f => /\.pdf$/i.test(f.name));
-      let pdfBest: LegacyPdfParsed | null = null;
+      const parsedPdfs: LegacyPdfParsed[] = [];
       for (const f of pdfs) {
         try {
           const p = await parseLegacyClientPdf(f);
-          if (p && (!pdfBest || (p.conseillere ? 1 : 0) > (pdfBest.conseillere ? 1 : 0) || (p.totalNet || 0) > (pdfBest.totalNet || 0))) pdfBest = p;
+          if (p) parsedPdfs.push(p);
         } catch { /* PDF illisible : les pièces restent conservées */ }
       }
+      const pdfBest = mergeLegacyPdfData(parsedPdfs);
       if (pdfBest) {
         applyParsedPdf(pdfBest);
-        setMessage(`PDF analysé automatiquement : ${pdfBest.sourceFile}${pdfBest.conseillere ? ` · conseillère : ${pdfBest.conseillere}` : ''}. Vérifie les champs avant l'import.`);
+        setMessage(`${parsedPdfs.length} PDF analysé(s) automatiquement (${pdfs.length} sélectionné(s)). ${pdfBest.sourceFile}${pdfBest.conseillere ? ` · conseillère : ${pdfBest.conseillere}` : ''}. Tous les PDF seront conservés dans le dossier.`);
       } else if (!best && selected.length) {
         setMessage('Dossier chargé. Aucun fichier structuré/PDF lisible automatiquement : les PDF, images et autres pièces seront quand même conservés dans le dossier.');
       }
@@ -244,16 +350,17 @@ export function LegacyClientImportPage() {
     });
     setMessage(''); setError(''); setLoadingFiles(true);
     try {
-      let best: LegacyPdfParsed | null = null;
+      const parsedPdfs: LegacyPdfParsed[] = [];
       for (const f of selected) {
         try {
           const p = await parseLegacyClientPdf(f);
-          if (p && (!best || (p.conseillere ? 1 : 0) > (best.conseillere ? 1 : 0) || (p.totalNet || 0) > (best.totalNet || 0))) best = p;
+          if (p) parsedPdfs.push(p);
         } catch { /* le PDF reste conservé comme pièce */ }
       }
+      const best = mergeLegacyPdfData(parsedPdfs);
       if (best) {
         applyParsedPdf(best);
-        setMessage(`PDF analysé automatiquement : ${best.sourceFile}${best.conseillere ? ` · conseillère : ${best.conseillere}` : ''}. Vérifie les champs avant l'import.`);
+        setMessage(`${parsedPdfs.length} PDF analysé(s) automatiquement (${selected.length} sélectionné(s)). ${best.sourceFile}${best.conseillere ? ` · conseillère : ${best.conseillere}` : ''}. Tous les PDF seront conservés dans le dossier.`);
       } else {
         setMessage('PDF ajouté au dossier. Il sera conservé comme pièce jointe ; s’il s’agit d’un PDF scanné/image, les champs devront être complétés manuellement.');
       }
@@ -352,13 +459,20 @@ export function LegacyClientImportPage() {
           <label className="flex items-center gap-2 text-sm font-semibold mb-2"><FolderOpen size={17} /> Dossier de l'ancien client</label>
           <input type="file" multiple {...({ webkitdirectory: "", directory: "" } as any)} onChange={onFolder as any} className="block w-full border rounded-lg p-3" />
           <p className="text-xs text-gray-500 mt-2">Tu peux sélectionner tout le dossier client. JSON, CSV, Excel et PDF sont analysés automatiquement quand ils existent. Le PDF de facture permet notamment de récupérer la conseillère/vendeur, la date, le client et les montants ; le PDF original est aussi conservé comme pièce du dossier.</p>
+          <div className="mt-4 border-2 border-dashed border-indigo-200 bg-indigo-50 rounded-xl p-4">
+            <label className="flex items-center gap-2 text-sm font-bold mb-2 text-indigo-900"><Users size={18}/> Importer plusieurs dossiers clients en une seule fois</label>
+            <input type="file" multiple {...({ webkitdirectory: "", directory: "" } as any)} onChange={onMultipleClientsFolder as any} className="block w-full border rounded-lg p-3 bg-white" />
+            <p className="text-xs text-indigo-800 mt-2">Sélectionne le <b>grand dossier qui contient plusieurs dossiers clients</b>. Chaque sous-dossier est traité comme un client séparé, avec sa facture PDF, ordonnance, assurance et toutes ses pièces. Les ventes gardent leur date d'origine.</p>
+          </div>
           <div className="border-t pt-3">
-            <label className="flex items-center gap-2 text-sm font-semibold mb-2"><FileText size={17}/> Ou importer directement la facture / le dossier en PDF</label>
+            <label className="flex items-center gap-2 text-sm font-semibold mb-2"><FileText size={17}/> Ou importer une ou plusieurs pièces PDF du dossier client</label>
             <input type="file" accept="application/pdf,.pdf" multiple onChange={onPdfFiles} className="block w-full border rounded-lg p-3" />
-            <p className="text-xs text-gray-500 mt-2">Le PDF est lu automatiquement quand il contient du texte. Le nom de la conseillère/vendeur indiqué sur la facture est enregistré avec la vente. Un PDF scanné reste importé comme pièce jointe.</p>
+            <p className="text-xs text-gray-500 mt-2">Tu peux sélectionner plusieurs PDF en une seule fois : facture, ordonnance, assurance, justificatifs, etc. Ils sont tous conservés dans le même dossier. Les PDF lisibles sont analysés ensemble et les informations manquantes sont complétées automatiquement. Un PDF scanné reste importé comme pièce jointe.</p>
           </div>
         </div>
         {loadingFiles && <div className="text-sm text-blue-700 flex items-center gap-2"><Loader2 className="animate-spin" size={16}/> Analyse du dossier…</div>}
+        {batchImporting && <div className="text-sm text-indigo-700 flex items-center gap-2"><Loader2 className="animate-spin" size={16}/> Import de plusieurs dossiers clients en cours…</div>}
+        {batchMessage && <div className="whitespace-pre-line text-sm bg-indigo-50 border border-indigo-200 rounded-lg p-4">{batchMessage}</div>}
         {files.length > 0 && <div className="text-sm bg-blue-50 rounded-lg p-3">{files.length} fichier(s) trouvé(s) · {files.map(f => f.name).slice(0, 8).join(', ')}{files.length > 8 ? '…' : ''}</div>}
       </div>
 
