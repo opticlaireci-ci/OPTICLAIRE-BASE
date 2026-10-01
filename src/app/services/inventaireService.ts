@@ -428,7 +428,23 @@ export async function enregistrerDistribution(params: {
   const rows = params.items.filter(i => i.quantite > 0);
   if (rows.length === 0) return true;
 
-  const mouvementOk = await insertMouvements(rows.map(item => ({
+  // Idempotence forte : si le mouvement existe déjà (double-clic, retry réseau,
+  // réouverture du bon), on ne le réécrit pas et surtout on ne redéduit pas le
+  // stock central. Seules les nouvelles lignes sont prises en compte.
+  const nouvellesLignes: Item[] = [];
+  for (const item of rows) {
+    const existe = await mouvementStockExiste(
+      'distribution',
+      params.bonReference,
+      params.magasinId,
+      item.id,
+    );
+    if (!existe) nouvellesLignes.push(item);
+  }
+
+  if (nouvellesLignes.length === 0) return true;
+
+  const mouvementOk = await insertMouvements(nouvellesLignes.map(item => ({
     _docId: stableUuid(`distribution|${params.bonReference}|${params.magasinId}|${item.id}`),
     type: 'distribution', article_id: item.id, quantite: item.quantite,
     magasin_id: params.magasinId, magasin_destination: params.magasinId, bon_id: params.bonReference,
@@ -437,7 +453,8 @@ export async function enregistrerDistribution(params: {
   if (!mouvementOk) return false;
 
   // Une distribution sort du stock central et entre dans le magasin.
-  return ajusterStockGeneral(rows, -1);
+  // On ne déduit le central que pour les lignes nouvellement créées.
+  return ajusterStockGeneral(nouvellesLignes, -1);
 }
 
 export async function enregistrerTransfert(params: {

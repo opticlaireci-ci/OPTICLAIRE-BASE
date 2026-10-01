@@ -80,10 +80,9 @@ export function BonDistributionMagasinPage() {
 
   const handleValider = async (action: 'accepter' | 'refuser') => {
     if (!selectedBon) return;
-    // Garde anti-double : empêche une double validation (double-clic) qui
-    // réinjecterait le stock deux fois et fausserait la quantité reçue.
+    // Garde anti-double : empêche une double validation (double-clic).
     if (validatingRef.current) return;
-    // Idempotence : un bon déjà traité ne doit JAMAIS réajouter de stock.
+    // Un bon déjà traité ne doit jamais rejouer son mouvement de stock.
     if (selectedBon.statut === 'Validé' || selectedBon.statut === 'Refusé') {
       setShowValidationDialog(false);
       setShowDetailDialog(false);
@@ -92,85 +91,69 @@ export function BonDistributionMagasinPage() {
     }
     validatingRef.current = true;
 
-    const updatedBons = allBons.map((bon) => {
-      if (bon.id === selectedBon.id) {
-        return {
-          ...bon,
-          statut: action === 'accepter' ? 'Validé' : 'Refusé',
-          observations,
-          dateValidation: new Date().toISOString(),
-          valideePar: getCurrentUser(),
-          // La personne qui traite le bon est le récepteur/traitant visible
-          // dans la colonne « Récepteur » côté gestion globale.
-          recepteur: getCurrentUser(),
-          receiver: getCurrentUser(),
-        };
+    try {
+      // IMPORTANT : pour une ACCEPTATION, le mouvement de stock est écrit et
+      // confirmé AVANT de marquer le bon comme « Validé ». Ainsi, une panne
+      // réseau ne peut plus créer un bon validé avec un stock magasin vide.
+      let stockSuccess = true;
+
+      if (action === 'accepter' && selectedBon.items && magasinId) {
+        const items = selectedBon.items.map(item => ({
+          // Clé de stock stable : id catalogue si présent, sinon désignation
+          // (compatibilité avec les anciens bons).
+          id: item.id || item.designation,
+          type: item.type === 'accessoire' ? 'accessoire' as const : 'monture' as const,
+          designation: item.designation,
+          quantite: Number(item.quantite) || 0,
+          prixVente: Number(item.prixUnit) || 0,
+        }));
+
+        stockSuccess = await enregistrerDistribution({
+          magasinId: magasinId.toUpperCase(),
+          bonReference: selectedBon.numero,
+          items,
+        });
+
+        if (!stockSuccess) {
+          logger.error('❌ Distribution non confirmée : le bon reste En attente');
+          alert('La réception n’a pas pu être confirmée sur le serveur.\n\nLe bon reste « En attente » et pourra être réessayé sans perdre le stock.');
+          return;
+        }
       }
-      return bon;
-    });
 
-    setAllBons(updatedBons);
-    const changed = updatedBons.find((b) => b.id === selectedBon.id);
-    if (changed) upsertBon(distributionToRow(changed)).catch(e => logger.error('❌ upsertBon distribution:', e));
+      const changed = {
+        ...selectedBon,
+        statut: action === 'accepter' ? 'Validé' : 'Refusé',
+        observations,
+        dateValidation: new Date().toISOString(),
+        valideePar: getCurrentUser(),
+        recepteur: getCurrentUser(),
+        receiver: getCurrentUser(),
+      };
 
-    // Si le bon est accepté, enregistrer dans l'inventaire
-    if (action === 'accepter' && selectedBon.items && magasinId) {
-      logger.log('🔍 DEBUG: Acceptation du bon de distribution');
-      logger.log('   Magasin ID:', magasinId);
-      logger.log('   Bon numéro:', selectedBon.numero);
-      logger.log('   Items:', selectedBon.items);
+      const updatedBons = allBons.map((bon) => bon.id === selectedBon.id ? changed : bon);
+      setAllBons(updatedBons);
 
-      const items = selectedBon.items.map(item => ({
-        // Clé de stock stable : id catalogue si présent, sinon désignation (bons anciens)
-        id: item.id || item.designation,
-        type: item.type === 'accessoire' ? 'accessoire' as const : 'monture' as const,
-        designation: item.designation,
-        quantite: item.quantite,
-        prixVente: item.prixUnit || 0,
-      }));
+      // Attendre la persistance du statut : le stock a déjà été confirmé.
+      await upsertBon(distributionToRow(changed));
 
-      logger.log('   Items formatés:', items);
-
-      const success = await enregistrerDistribution({
-        magasinId: magasinId.toUpperCase(),
-        bonReference: selectedBon.numero,
-        items,
-      });
-
-      if (success) {
-        logger.log(`✅ Distribution acceptée: ${items.length} produits ajoutés au stock du magasin ${magasinId}`);
-        alert(`Bon accepté !\n${items.length} produit(s) ajouté(s) au stock.\n\nConsultez l'État de Stock pour vérifier.`);
-      } else {
-        logger.error('❌ Erreur lors de l\'enregistrement de la distribution');
-        alert('Erreur lors de la mise à jour du stock');
+      if (action === 'accepter') {
+        logger.log(`✅ Distribution acceptée et stock confirmé pour ${magasinId}`);
+        alert(`Bon accepté !\n${selectedBon.items?.length || 0} produit(s) ajouté(s) au stock.\n\nConsultez l'État de Stock pour vérifier.`);
       }
-    }
 
-    window.dispatchEvent(new CustomEvent('leclaire-sync-update'));
-
-    setShowValidationDialog(false);
-    setShowDetailDialog(false);
-    setSelectedBon(null);
-    setObservations('');
-    validatingRef.current = false;
-  };
-
-  const getStatutColor = (statut: string) => {
-    switch (statut?.toLowerCase()) {
-      case 'validé':
-        return 'success';
-      case 'refusé':
-        return 'error';
-      case 'en attente':
-      default:
-        return 'warning';
+      window.dispatchEvent(new CustomEvent('leclaire-sync-update'));
+      setShowValidationDialog(false);
+      setShowDetailDialog(false);
+      setSelectedBon(null);
+      setObservations('');
+    } catch (e) {
+      logger.error('❌ Validation du bon de distribution:', e);
+      alert('La validation n’a pas pu être terminée. Le bon reste en attente afin de permettre un nouvel essai.');
+    } finally {
+      validatingRef.current = false;
     }
   };
-
-  const bonsEnAttente = bons.filter(b => b.statut === 'En attente' || !b.statut);
-  const bonsValides = bons.filter(b => b.statut === 'Validé');
-  const bonsRefuses = bons.filter(b => b.statut === 'Refusé');
-
   return (
     <Box className="admin-stock-list-page" sx={{ p: { xs: 2, md: 3 } }}>
       <Typography
