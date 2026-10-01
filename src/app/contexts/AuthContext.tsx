@@ -62,6 +62,14 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+/** Empêche une panne réseau de laisser la connexion tourner indéfiniment. */
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), ms);
+    promise.then(v => { clearTimeout(timer); resolve(v); }, e => { clearTimeout(timer); reject(e); });
+  });
+}
+
 /** Lecture SYNCHRONE du dernier profil connu (cache) pour un démarrage instantané. */
 function readCachedUser(): User | null {
   try {
@@ -329,7 +337,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
       try {
-        const userProfile = await fetchUserProfile();
+        const userProfile = await withTimeout(
+        fetchUserProfile(),
+        18000,
+        'Chargement du profil trop long.'
+      );
         if (mounted && userProfile) {
           setUser(userProfile);
           localStorage.setItem('leclaire_current_user', JSON.stringify(userProfile));
@@ -392,7 +404,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Ne pas logger l'email : identifiant de connexion à ne pas exposer console.
       logger.log('🔐 Tentative de connexion…');
 
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      const { error } = await withTimeout(
+        supabase.auth.signInWithPassword({ email, password }),
+        15000,
+        'Connexion au serveur trop longue.'
+      );
       if (error) {
         logger.error('❌ Échec connexion Supabase:', error.message || error.name || error);
         const rawMsg = error.message || '';
@@ -411,7 +427,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { success: false, error: msg };
       }
 
-      const userProfile = await fetchUserProfile();
+      const userProfile = await withTimeout(
+        fetchUserProfile(),
+        18000,
+        'Chargement du profil trop long.'
+      );
       if (!userProfile) {
         // Les identifiants étaient bons mais le profil n'a pas pu être chargé
         // (session/token, compte non configuré, aucun magasin…). On termine la
@@ -431,9 +451,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { success: true };
     } catch (err: any) {
       logger.error('❌ Exception login Supabase:', err?.message || err);
-      const msg = isTransientNetworkError(err)
-        ? 'Serveur injoignable. Vérifiez votre connexion internet puis réessayez.'
-        : 'Erreur de connexion au serveur. Vérifiez votre connexion internet.';
+      const rawMsg = String(err?.message || '');
+      const msg = /trop longue|trop long/i.test(rawMsg)
+        ? 'La connexion prend trop de temps. Vérifiez Internet puis réessayez. Si cela continue, le serveur d’authentification doit être vérifié.'
+        : isTransientNetworkError(err)
+          ? 'Serveur injoignable. Vérifiez votre connexion internet puis réessayez.'
+          : 'Erreur de connexion au serveur. Vérifiez votre connexion internet.';
       return { success: false, error: msg };
     }
   };
