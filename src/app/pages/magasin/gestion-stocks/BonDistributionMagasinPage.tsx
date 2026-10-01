@@ -29,6 +29,7 @@ import { upsertBon, distributionToRow } from '../../../services/bonsService';
 import { useLiveData } from '../../../hooks/useLiveData';
 import { getCurrentUser, resolveUserName, formatDate } from '../../../utils/auditUtils';
 import { imprimerBonDistribution } from '../../../utils/stockActions';
+import { getMagasinLabel as getConfiguredMagasinLabel } from '../../../constants/magasins';
 
 const BON_DISTRIBUTION_KEY = 'leclaire_db_bon-distribution';
 
@@ -50,17 +51,14 @@ interface BonDistribution {
 
 }
 
-function getMagasinLabel(magasinId: string): string {
-  const labels: Record<string, string> = {
-    'ABOBO': 'Abobo',
-    'FAYA': 'Faya',
-    'KOUMASSI': 'Koumassi',
-    'PALMERAIE': 'Palmeraie',
-    'YOPOUGON': 'Yopougon',
-    'BINGERVILLE': 'Bingerville',
-    'MAN': 'Man',
-  };
-  return labels[magasinId.toUpperCase()] || magasinId;
+const getMagasinLabel = getConfiguredMagasinLabel;
+
+function getStatutColor(statut: string): 'success' | 'error' | 'warning' {
+  switch (String(statut || '').trim().toLowerCase()) {
+    case 'validé': return 'success';
+    case 'refusé': return 'error';
+    default: return 'warning';
+  }
 }
 
 export function BonDistributionMagasinPage() {
@@ -75,8 +73,14 @@ export function BonDistributionMagasinPage() {
 
   // Filtrer les bons destinés à ce magasin
   const bons = magasinId
-    ? allBons.filter((bon) => bon.magasinDest?.toUpperCase() === magasinId.toUpperCase())
+    ? allBons.filter((bon) => bon.magasinDest?.trim().toUpperCase() === magasinId.trim().toUpperCase())
     : [];
+
+  // Compteurs calculés à partir de la liste filtrée : ils restent donc
+  // cohérents pour Abobo comme pour n'importe quel autre magasin.
+  const bonsEnAttente = bons.filter((bon) => bon.statut === 'En attente' || !bon.statut);
+  const bonsValides = bons.filter((bon) => bon.statut === 'Validé');
+  const bonsRefuses = bons.filter((bon) => bon.statut === 'Refusé');
 
   const handleValider = async (action: 'accepter' | 'refuser') => {
     if (!selectedBon) return;

@@ -65,6 +65,19 @@ export function normaliserTotauxVente(vente: any): TotauxVenteNormalises {
     ? vente.bonsAssurance
     : (Array.isArray(vente?.bons_assurance) ? vente.bons_assurance : []);
   const aDesBonsAssurance = bonsAssurance.length > 0;
+  const venteImportee = !!(vente?.recap?.imported || vente?.source_import === 'ancien_logiciel' || vente?.import_id);
+
+  // Pour une vente historique importée, les montants imprimés sur la facture
+  // d'origine sont la source de vérité. Les lignes importées (notamment la
+  // monture) peuvent avoir un prix différent de celui enregistré dans l'ancien
+  // logiciel ; elles servent à conserver le détail du dossier, mais ne doivent
+  // pas recalculer le TOTAL / TOTAL NET historique.
+  if (venteImportee && (brutEnregistre > 0 || netEnregistre > 0)) {
+    const totalBrut = brutEnregistre > 0 ? brutEnregistre : netEnregistre;
+    const totalNet = netEnregistre > 0 ? netEnregistre : totalBrut;
+    const valeurRemise = Math.max(0, totalBrut - totalNet);
+    return { totalBrut, totalNet, remisePct, valeurRemise };
+  }
 
   // SOURCE DE VÉRITÉ : lorsque les lignes de la vente (monture/articles +
   // verres) existent, leur somme détermine TOUJOURS le TOTAL brut — que la

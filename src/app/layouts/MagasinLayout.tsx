@@ -310,8 +310,12 @@ function filterByAccess(items: MenuItemType[], allowed: string[]): MenuItemType[
       if (kids.some(k => k.path || (k.children && k.children.length > 0))) {
         out.push({ ...item, children: kids });
       }
-    } else if (item.path && allowed.includes(pathToButtonKey(item.path) || '')) {
-      out.push(item);
+    } else if (item.path) {
+      const key = pathToButtonKey(item.path) || '';
+      const legacyKey = key.startsWith('magasin:') ? key.slice('magasin:'.length) : '';
+      if (allowed.includes(key) || (legacyKey && allowed.includes(legacyKey))) {
+        out.push(item);
+      }
     }
   }
   return out;
@@ -360,7 +364,13 @@ export function MagasinLayout() {
     const path = location.pathname;
     if (path.endsWith('/accueil') || /\/magasin\/[^/]+\/?$/.test(path)) return;
     const key = pathToButtonKey(path);
-    if (key && !access.includes(key)) {
+    // Compatibilité avec les anciens profils : certaines anciennes versions
+    // enregistraient les droits des pages de stock sans le préfixe
+    // `magasin:`. On accepte les deux formes pour éviter de bloquer l'accès
+    // à un bon de distribution après une mise à jour, quel que soit le magasin.
+    const legacyKey = key?.startsWith('magasin:') ? key.slice('magasin:'.length) : null;
+    const accesAutorise = !!key && (access.includes(key) || (legacyKey ? access.includes(legacyKey) : false));
+    if (key && !accesAutorise) {
       navigate(`/magasin/${magasinId}/accueil`, { replace: true });
     }
   }, [isLoading, isAuthenticated, user, location.pathname, magasinId, navigate]);
