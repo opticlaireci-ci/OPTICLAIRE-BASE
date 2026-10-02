@@ -76,6 +76,7 @@ export function subscribeAssuranceRealtime(magasinIds: string[]): () => void {
   }));
 
   pollInterval = setInterval(() => {
+    if (typeof document !== 'undefined' && document.hidden) return; // onglet caché : pas de requête
     hydrateAssurance(magasinIds).catch(e => logger.error('❌ poll assurance:', e));
   }, 30_000);
 

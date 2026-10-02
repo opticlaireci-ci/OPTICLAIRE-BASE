@@ -9,6 +9,7 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { hasPermission } from '../../../utils/permissions';
 import { chargerToutesLesVentes, type VenteSupabase } from '../../../services/ventesService';
 import { TENANT } from '../../../config/tenant';
+import { setVisibleInterval, PAGE_POLL_MS } from '../../../utils/visibleInterval';
 
 const genRef = () => String(Date.now()).slice(-5).padStart(5, '0');
 
@@ -188,10 +189,10 @@ export function MouvementPage() {
       .then(rows => { if (!annule) setVentesAll(rows); })
       .catch(() => {});
     load();
-    const interval = setInterval(load, 15000);
+    const stopPolling = setVisibleInterval(load, PAGE_POLL_MS);
     const onUpdate = () => load();
     window.addEventListener('ventes-updated', onUpdate);
-    return () => { annule = true; clearInterval(interval); window.removeEventListener('ventes-updated', onUpdate); };
+    return () => { annule = true; stopPolling(); window.removeEventListener('ventes-updated', onUpdate); };
   }, []);
 
   useEffect(() => {

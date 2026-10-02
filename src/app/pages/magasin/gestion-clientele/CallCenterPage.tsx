@@ -12,6 +12,7 @@ import {
   matchesUser, isAdminRole, type CallContact,
 } from '../../../utils/callCenter';
 import { savePendingCall, readPendingCall, clearPendingCall, type PendingCall } from '../../../utils/pendingCall';
+import { setVisibleInterval, PAGE_POLL_MS } from '../../../utils/visibleInterval';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 export interface CallAppointment {
@@ -309,12 +310,12 @@ export function CallCenterPage() {
     let mounted = true;
     const load = () => chargerVentes(magKey).then(rows => { if (mounted && rows.length) setVentes(rows); }).catch(() => {});
     load();
-    const interval = setInterval(load, 10000);
+    const stopPolling = setVisibleInterval(load, PAGE_POLL_MS);
     window.addEventListener('leclaire-sync-update', load);
     window.addEventListener('ventes-updated', load);
     return () => {
       mounted = false;
-      clearInterval(interval);
+      stopPolling();
       window.removeEventListener('leclaire-sync-update', load);
       window.removeEventListener('ventes-updated', load);
     };

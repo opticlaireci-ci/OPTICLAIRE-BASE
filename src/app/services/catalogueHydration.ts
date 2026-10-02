@@ -48,6 +48,7 @@ export function subscribeCataloguesRealtime(): () => void {
   });
 
   pollInterval = setInterval(() => {
+    if (typeof document !== 'undefined' && document.hidden) return; // onglet caché : pas de requête
     hydrateCatalogues().catch(e => logger.error('❌ poll catalogues:', e));
   }, 30_000);
 

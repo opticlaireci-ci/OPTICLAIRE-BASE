@@ -9,6 +9,7 @@ import { loadStockMagasin, readStockCache, type StockMagasin } from '../../servi
 import { safeUuid } from '../../utils/safeId';
 import { TENANT, nomMagasin } from '../../config/tenant';
 import { imprimerGestionStock, imprimerFormatGestionStock } from '../../utils/stockActions';
+import { setVisibleInterval, PAGE_POLL_MS } from '../../utils/visibleInterval';
 
 interface InventaireItem {
   id: string;
@@ -152,13 +153,13 @@ export function InventairePage() {
     window.addEventListener('leclaire-sync-update', onSyncUpdate);
     window.addEventListener('storage', onStorage);
 
-    const poll = setInterval(loadInventaires, 30_000);
+    const stopPolling = setVisibleInterval(loadInventaires, PAGE_POLL_MS);
 
     return () => {
       window.removeEventListener('inventaires-updated', loadInventaires);
       window.removeEventListener('leclaire-sync-update', onSyncUpdate);
       window.removeEventListener('storage', onStorage);
-      clearInterval(poll);
+      stopPolling();
     };
   }, []);
 

@@ -30,6 +30,7 @@ import { chargerVentes, readVentesCache, VenteSupabase } from '../../services/ve
 import { chargerReglementsParMagasin, readReglementsCacheMap, ReglementSupabase } from '../../services/reglementsService';
 import { useAuth } from '../../contexts/AuthContext';
 import { canAdd } from '../../utils/actionRights';
+import { setVisibleInterval, PAGE_POLL_MS } from '../../utils/visibleInterval';
 const GridAny = Grid as any;
 
 interface MouvementCaisse {
@@ -158,13 +159,13 @@ export function MouvementsCaissePage() {
     };
     load();
     // Rafraîchissement AUTOMATIQUE : périodique + événements.
-    const interval = setInterval(load, 10000);
+    const stopPolling = setVisibleInterval(load, PAGE_POLL_MS);
     const onUpdate = () => load();
     window.addEventListener('ventes-updated', onUpdate);
     window.addEventListener('storage', onUpdate);
     return () => {
       annule = true;
-      clearInterval(interval);
+      stopPolling();
       window.removeEventListener('ventes-updated', onUpdate);
       window.removeEventListener('storage', onUpdate);
     };
@@ -182,13 +183,13 @@ export function MouvementsCaissePage() {
       }).catch(() => {});
     };
     load();
-    const interval = setInterval(load, 10000);
+    const stopPolling = setVisibleInterval(load, PAGE_POLL_MS);
     const onUpdate = () => load();
     window.addEventListener('reglements-updated', onUpdate);
     window.addEventListener('storage', onUpdate);
     return () => {
       annule = true;
-      clearInterval(interval);
+      stopPolling();
       window.removeEventListener('reglements-updated', onUpdate);
       window.removeEventListener('storage', onUpdate);
     };

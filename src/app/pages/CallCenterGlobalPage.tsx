@@ -25,6 +25,7 @@ import { PALMERAIE_2026_SEED } from '../data/palmeraieCallCenter2026';
 import { Combobox } from '../components/Combobox';
 import { savePendingCall, readPendingCall, clearPendingCall, type PendingCall } from '../utils/pendingCall';
 import { ajouterNumerosCallCenterAuxExclusions } from '../utils/callCenterSmsExclusions';
+import { setVisibleInterval, PAGE_POLL_MS } from '../utils/visibleInterval';
 
 const PALMERAIE_SEED = [...PALMERAIE_2024_SEED, ...PALMERAIE_2025_SEED, ...PALMERAIE_2026_SEED];
 
@@ -100,9 +101,9 @@ export function CallCenterGlobalPage() {
       }
     };
     loadAll();
-    const interval = setInterval(loadAll, 15000);
+    const stopPolling = setVisibleInterval(loadAll, PAGE_POLL_MS);
     window.addEventListener('ventes-updated', loadAll);
-    return () => { mounted = false; clearInterval(interval); window.removeEventListener('ventes-updated', loadAll); };
+    return () => { mounted = false; stopPolling(); window.removeEventListener('ventes-updated', loadAll); };
   }, [magasins]);
 
   // Journaux d'appels par magasin (temps réel Firestore, partagés entre navigateurs).

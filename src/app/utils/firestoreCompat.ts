@@ -221,7 +221,7 @@ export async function deleteDoc(ref: DocRef) {
  * absente de la publication, pas de session) : le polling porte alors seul la
  * fraîcheur des données.
  */
-const POLL_MS = 6000;
+const POLL_MS = 15_000;
 
 interface Subscriber {
   kind: 'doc' | 'query';
@@ -260,8 +260,8 @@ interface EntityPoller {
  */
 const pollers = new Map<string, EntityPoller>();
 
-// Un pull complet toutes les FULL_RESYNC_EVERY cycles (≈ toutes les 40-50s avec
-// POLL_MS=6000 + gigue). Suffisant pour rattraper une suppression faite sur un
+// Un pull complet toutes les FULL_RESYNC_EVERY cycles (≈ toutes les 1 min 30 avec
+// POLL_MS=15000 + gigue, davantage quand le temps réel est connecté). Suffisant pour rattraper une suppression faite sur un
 // autre navigateur sans perdre l'essentiel du gain de bande passante.
 const FULL_RESYNC_EVERY = 6;
 
@@ -398,7 +398,21 @@ function applyPollCadence(entity: string) {
   if (poller.timer) clearInterval(poller.timer);
   poller.currentPollMs = target;
   // Gigue : désynchronise les pollers entre eux pour éviter les rafales alignées.
-  poller.timer = setInterval(() => pollEntity(entity), target + Math.floor(Math.random() * 2000));
+  // Onglet en arrière-plan : aucun tick (économise les connexions Supabase) ;
+  // le rattrapage se fait au retour sur l'onglet (voir 'visibilitychange').
+  poller.timer = setInterval(() => {
+    if (typeof document !== 'undefined' && document.hidden) return;
+    pollEntity(entity);
+  }, target + Math.floor(Math.random() * 2000));
+}
+
+// Retour sur l'onglet : resynchronisation immédiate de toutes les entités suivies,
+// puisque leurs ticks ont été suspendus tant que l'onglet était caché.
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) return;
+    for (const entity of Array.from(pollers.keys())) pollEntity(entity);
+  });
 }
 
 // Le canal d'une table vient de se connecter ou de tomber : toutes les entités

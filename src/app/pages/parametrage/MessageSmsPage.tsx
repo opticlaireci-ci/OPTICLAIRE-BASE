@@ -11,6 +11,7 @@ import {
   supprimerRapportSms,
   type SmsRapport,
 } from '../../services/smsService';
+import { setVisibleInterval, PAGE_POLL_MS } from '../../utils/visibleInterval';
 
 const MAGASIN_IDS = getAllMagasinIds();
 
@@ -131,8 +132,8 @@ export function MessageSmsPage() {
       if (!stopped) setRapport(loadRapportSms());
     };
     void sync();
-    const timer = window.setInterval(() => void sync(), 10000);
-    return () => { stopped = true; window.clearInterval(timer); };
+    const stopPolling = setVisibleInterval(sync, PAGE_POLL_MS);
+    return () => { stopped = true; stopPolling(); };
   }, []);
 
   const anniversaireClients = useMemo(() => allClients.filter(c => isAnniversaireAujourdHui(c.dateNaissance)), [allClients]);
