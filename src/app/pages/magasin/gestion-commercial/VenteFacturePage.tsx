@@ -4118,7 +4118,7 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
                         })()}</div>
                       </div>
                       <div className="p-2">
-                        <div className="opacity-80">Remise ({detail.recap.remisePct}%)</div>
+                        <div className="opacity-80">Remise ({normaliserTotauxVente(detail).remisePct}%)</div>
                         <div className="text-base font-bold">{(() => {
                           return normaliserTotauxVente(detail).valeurRemise.toLocaleString('fr-FR');
                         })()}</div>
@@ -4459,7 +4459,7 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
                             })()}</div>
                           </div>
                           <div className="p-3">
-                            <div className="opacity-80">Remise ({detail.recap.remisePct}%)</div>
+                            <div className="opacity-80">Remise ({normaliserTotauxVente(detail).remisePct}%)</div>
                             <div className="text-base font-bold">{(() => {
                               return normaliserTotauxVente(detail).valeurRemise.toLocaleString('fr-FR');
                             })()}</div>

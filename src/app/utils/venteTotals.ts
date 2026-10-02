@@ -21,7 +21,9 @@ const roundMoney = (n: number): number => Math.max(0, Math.round(toNumber(n)));
 
 export function getRemisePct(vente: any): number {
   const raw = vente?.recap?.remisePct ?? vente?.remisePct ?? 0;
-  return Math.min(100, Math.max(0, toNumber(raw)));
+  // Arrondi à 2 décimales pour l'affichage : la remise d'un ancien dossier
+  // importé peut être une valeur exacte non entière (ex. 28,571428…).
+  return Math.round(Math.min(100, Math.max(0, toNumber(raw))) * 100) / 100;
 }
 
 export function calculerTotalLignesVente(vente: any): number {
@@ -83,6 +85,16 @@ export function normaliserTotauxVente(vente: any): TotauxVenteNormalises {
   // monture) peuvent avoir un prix différent de celui enregistré dans l'ancien
   // logiciel ; elles servent à conserver le détail du dossier, mais ne doivent
   // pas recalculer le TOTAL / TOTAL NET historique.
+  // Les montants d'origine figés à l'import (recap.totalBrutOrigine /
+  // totalNetOrigine) passent AVANT les colonnes total_brut / total_net, qu'un
+  // recalcul (trigger Supabase, ancien écran) a pu écraser par la monture seule.
+  const brutOrigine = roundMoney(vente?.recap?.totalBrutOrigine);
+  const netOrigine = roundMoney(vente?.recap?.totalNetOrigine);
+  if (venteImportee && (brutOrigine > 0 || netOrigine > 0)) {
+    const totalNet = netOrigine > 0 ? netOrigine : brutOrigine;
+    const totalBrut = Math.max(brutOrigine, totalNet);
+    return { totalBrut, totalNet, remisePct, valeurRemise: Math.max(0, totalBrut - totalNet) };
+  }
   if (venteImportee && (brutEnregistre > 0 || netEnregistre > 0)) {
     const totalBrut = brutEnregistre > 0 ? brutEnregistre : netEnregistre;
     const totalNet = netEnregistre > 0 ? netEnregistre : totalBrut;

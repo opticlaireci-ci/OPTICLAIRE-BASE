@@ -3,6 +3,7 @@ import { db } from '../utils/firebaseClient';
 import { ajouterReglement } from './reglementsService';
 import { ajouterVente } from './ventesService';
 import { upsertClient } from './clientsService';
+import { calculerTotalLignesVente } from '../utils/venteTotals';
 
 export interface ImportReglementInput {
   montant: number;
@@ -120,6 +121,37 @@ export async function importerDossierClient(payload: LegacyClientImportPayload):
   // Pour un ancien dossier, l'acompte disponible indiqué par le logiciel source
   // est prioritaire. Il ne doit jamais être remplacé par le prix de la monture.
   const acompte = money(payload.acompteDisponible ?? payload.acompteInitial);
+
+  // ── TOTAL / TOTAL NET d'origine : seule source de vérité d'un ancien dossier ──
+  // La base Supabase (trigger trg_normaliser_totaux_vente) et certains écrans
+  // recalculent le total à partir des lignes (monture + verres). Si le prix des
+  // verres n'a pas pu être lu, ce recalcul ne gardait que la monture. On
+  // verrouille donc les montants d'origine de trois façons :
+  //   1. recap.totalBrutOrigine / totalNetOrigine (relus en priorité partout) ;
+  //   2. les lignes sont alignées pour que monture + verres = TOTAL ;
+  //   3. la remise % est exacte pour que TOTAL − remise = TOTAL NET.
+  const totalNetOrigine = money(payload.totalNet);
+  const totalBrutOrigine = Math.max(money(payload.totalBrut), totalNetOrigine);
+  const articlesImport: any[] = Array.isArray(payload.articles) ? payload.articles.map(a => ({ ...a })) : [];
+  const verresImport: any[] = Array.isArray(payload.verres) ? payload.verres.map(v => ({ ...v })) : [];
+  const totalArticles = calculerTotalLignesVente({ articles: articlesImport, verres: [] });
+  const totalVerresLu = calculerTotalLignesVente({ articles: [], verres: verresImport });
+  const partVerres = totalBrutOrigine - totalArticles;
+  if (totalBrutOrigine > 0 && totalArticles + totalVerresLu !== totalBrutOrigine && partVerres >= 0) {
+    if (verresImport.length > 0) {
+      // Les verres portent la différence (prix non lus ou partiellement lus).
+      verresImport[0] = { ...verresImport[0], totalVerres: partVerres };
+      for (let i = 1; i < verresImport.length; i++) verresImport[i] = { ...verresImport[i], totalVerres: 0, lignes: [] };
+    } else if (partVerres > 0) {
+      // Aucun verre détaillé : ligne de complément pour que les lignes = TOTAL.
+      verresImport.push({ type: 'Verres', prescription: 'Verres (ancien dossier)', quantite: 1, totalVerres: partVerres, lignes: [] });
+    }
+  }
+  let remisePct = Math.min(100, Math.max(0, Number(payload.remisePct || 0)));
+  if (totalBrutOrigine > 0 && Math.round(totalBrutOrigine * (1 - remisePct / 100)) !== totalNetOrigine) {
+    remisePct = (totalBrutOrigine - totalNetOrigine) / totalBrutOrigine * 100;
+  }
+
   const vente: any = {
     id: venteId,
     magasin_id: payload.magasinId,
@@ -140,11 +172,13 @@ export async function importerDossierClient(payload: LegacyClientImportPayload):
     tel_ophtalmologue: payload.telOphtalmologue || '',
     cabinet_ophtalmologue: payload.cabinetOphtalmologue || '',
     tel_cabinet: payload.telCabinet || '',
-    verres: Array.isArray(payload.verres) ? payload.verres : [],
-    articles: Array.isArray(payload.articles) ? payload.articles : [],
+    verres: verresImport,
+    articles: articlesImport,
     bons_assurance: Array.isArray(payload.bonsAssurance) ? payload.bonsAssurance : [],
     recap: {
-      remisePct: Number(payload.remisePct || 0),
+      remisePct,
+      totalBrutOrigine,
+      totalNetOrigine,
       acompte,
       acompteDisponible: acompte,
       modePaiement: payload.modePaiementAcompte || '',
@@ -159,8 +193,8 @@ export async function importerDossierClient(payload: LegacyClientImportPayload):
       originalSource: payload.sourceLogiciel || 'ancien logiciel',
       ordonnance: payload.ordonnance || null,
     },
-    total_brut: money(payload.totalBrut),
-    total_net: money(payload.totalNet),
+    total_brut: totalBrutOrigine,
+    total_net: totalNetOrigine,
     // Pour une vente historique, la conseillère indiquée sur la facture est conservée
     // comme éditrice/vendeuse afin qu'elle reste visible dans les historiques et
     // les statistiques par conseillère. La trace d'import reste séparée.

@@ -297,7 +297,13 @@ export async function parseLegacyClientPdf(file: File): Promise<LegacyPdfParsed 
     /VERRES\s+PRESCIPTION.*?\s+(Progressif\s*\|.*?)(?=\s+Garantie:)/i,
   ]);
   const verresBlock = firstMatch(compactText, [/(VERRES\s+PRESCIPTION[\s\S]*?)(?=\s+MONTURES)/i]);
-  const glassRows = Array.from(verresBlock.matchAll(/\b1\s+([\d ]+\.\d{2})\s+0(?:\.00)?\s+([\d ]+\.\d{2})/gi)).map(m => ({ prix: money(m[1]), total: money(m[2]) }));
+  // Ligne de prix d'un œil : QUANTITÉ  PRIX  REMISE  TOTAL (remise et quantité
+  // quelconques, montants avec ou sans décimales, séparateur de milliers espace).
+  const MT = String.raw`\d{1,3}(?:[ \u00a0]\d{3})*(?:[.,]\d{2})?`;
+  const ligneVerre = new RegExp(String.raw`(?:^|\s)(\d{1,2})\s+(` + MT + String.raw`)\s+(\d+(?:[.,]\d{1,2})?)\s+(` + MT + String.raw`)(?=\s|$)`, 'g');
+  const glassRows = Array.from(verresBlock.matchAll(ligneVerre))
+    .map(m => ({ prix: money(m[2]), total: money(m[4]) }))
+    .filter(r => r.prix >= 1000 && r.total >= 0 && r.total <= r.prix * 10);
   const rightPrice = glassRows[0]?.prix || 0;
   const leftPrice = glassRows[1]?.prix || 0;
   const verres = (prescriptionLabel || hasRightEye || hasLeftEye) ? [{
@@ -308,8 +314,8 @@ export async function parseLegacyClientPdf(file: File): Promise<LegacyPdfParsed 
     oeilDroit: oeilDroitFinal,
     oeilGauche: oeilGaucheFinal,
     lignes: [
-      hasRightEye ? { oeil: 'Droit', quantite: 1, prix: rightPrice, total: rightPrice } : null,
-      hasLeftEye ? { oeil: 'Gauche', quantite: 1, prix: leftPrice, total: leftPrice } : null,
+      hasRightEye ? { oeil: 'Droit', quantite: 1, prix: rightPrice, total: glassRows[0]?.total ?? rightPrice } : null,
+      hasLeftEye ? { oeil: 'Gauche', quantite: 1, prix: leftPrice, total: glassRows[1]?.total ?? leftPrice } : null,
     ].filter(Boolean),
   }] : [];
   const ordonnance = (hasRightEye || hasLeftEye || prescriptionLabel) ? {
