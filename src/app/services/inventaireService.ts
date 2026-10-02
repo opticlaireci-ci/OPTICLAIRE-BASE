@@ -29,6 +29,15 @@ type Item = {
   prixVente: number;
 };
 
+/** Normalise les anciens libellés de magasin (ex. « LECLAIRE ABOBO ») vers l'ID métier. */
+function normalizeMagasinId(value: any): string {
+  return String(value ?? '')
+    .trim()
+    .toUpperCase()
+    .replace(/^LECLAIRE\s+/, '')
+    .replace(/\s+MAGASIN$/, '');
+}
+
 /** Clé de cache localStorage du stock calculé d'un magasin (affichage instantané). */
 export const stockCacheKey = (magasinId: string) => `leclaire_stock_cache_${magasinId.toUpperCase()}`;
 
@@ -55,7 +64,7 @@ export function readStockCache(magasinId: string): StockMagasin[] {
  * distributions déjà enregistrées.
  */
 async function chargerMouvementsAvecBonsAcceptes(targets: string[]) {
-  const wanted = new Set(targets.map(v => String(v || '').trim().toUpperCase()).filter(Boolean));
+  const wanted = new Set(targets.map(normalizeMagasinId).filter(Boolean));
   const snapM = await getDocs(collection(db, 'mouvements_stock'));
   const movements = snapM.docs.map((d: any) => ({ id: d.id, data: d.data() || {} }));
   const norm = (v: any) => String(v ?? '').trim().toUpperCase();
@@ -70,9 +79,14 @@ async function chargerMouvementsAvecBonsAcceptes(targets: string[]) {
       const b = d.data() || {};
       const type = norm(b.type);
       const statut = norm(b.statut);
-      if (!['DISTRIBUTION', 'TRANSFERT'].includes(type) || !['VALIDE', 'VALIDÉ'].includes(statut)) continue;
-      const source = norm(b.magasin_source);
-      const destination = norm(b.magasin_destination);
+      const statutAccepte = [
+        'VALIDE', 'VALIDÉ', 'VALIDEE', 'VALIDÉE',
+        'ACCEPTE', 'ACCEPTÉ', 'ACCEPTEE', 'ACCEPTÉE',
+        'RECU', 'REÇU', 'TERMINE', 'TERMINÉ'
+      ].includes(statut);
+      if (!['DISTRIBUTION', 'TRANSFERT'].includes(type) || !statutAccepte) continue;
+      const source = normalizeMagasinId(b.magasin_source);
+      const destination = normalizeMagasinId(b.magasin_destination);
       if (!wanted.has(source) && !wanted.has(destination)) continue;
       for (const item of Array.isArray(b.items) ? b.items : []) {
         const article = item.id || item.article_id || item.designation;
@@ -124,8 +138,8 @@ export async function loadStockMagasin(magasinId: string): Promise<StockMagasin[
 
     docs.forEach((d: any) => {
       const r = d.data || {};
-      const destination = norm(r.magasin_destination);
-      const source = norm(r.magasin_source);
+      const destination = normalizeMagasinId(r.magasin_destination);
+      const source = normalizeMagasinId(r.magasin_source);
       const isIncoming = destination === target && (r.type === 'distribution' || r.type === 'transfert');
       const isOutgoing = source === target && (r.type === 'vente' || r.type === 'retour' || r.type === 'transfert');
       if (!isIncoming && !isOutgoing) return;
@@ -164,7 +178,7 @@ export async function loadStockMagasin(magasinId: string): Promise<StockMagasin[
     return result;
   } catch (err) {
     logger.error('loadStockMagasin:', err);
-    return [];
+    return readStockCache(magasinId);
   }
 }
 
@@ -195,8 +209,8 @@ export async function loadStocksParMagasin(
       const stockMap = new Map<string, StockMagasin>();
       const seen = new Set<string>();
       for (const { id, data: r } of docs) {
-        const destination = norm(r.magasin_destination);
-        const source = norm(r.magasin_source);
+        const destination = normalizeMagasinId(r.magasin_destination);
+        const source = normalizeMagasinId(r.magasin_source);
         const isIncoming = destination === target && (r.type === 'distribution' || r.type === 'transfert');
         const isOutgoing = source === target && (r.type === 'vente' || r.type === 'retour' || r.type === 'transfert');
         if (!isIncoming && !isOutgoing) continue;

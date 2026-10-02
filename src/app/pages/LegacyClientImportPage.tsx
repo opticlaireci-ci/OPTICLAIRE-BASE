@@ -18,6 +18,8 @@ interface ParsedData {
   numeroFacture?: string;
   rdvRetrait?: string;
   dateRecuperation?: string;
+  acompte?: number;
+  acompteDisponible?: number;
 }
 
 function first(obj: any, keys: string[], fallback = ''): any {
@@ -122,7 +124,7 @@ function mergeLegacyPdfData(items: LegacyPdfParsed[]): LegacyPdfParsed | null {
   for (const p of ordered.slice(1)) {
     const keys: (keyof LegacyPdfParsed)[] = [
       'numeroClient','civilite','nom','telephone','email','adresse','venteDate',
-      'totalBrut','totalNet','remisePct','acompte','acompteDate','modePaiement',
+      'totalBrut','totalNet','remisePct','acompte','acompteDisponible','acompteDate','modePaiement',
       'numeroFacture','conseillere','rdvRetrait','dateRecuperation','ordonnance','notes'
     ];
     for (const k of keys) {
@@ -154,7 +156,7 @@ export function LegacyClientImportPage() {
   const [form, setForm] = useState({
     numeroClient: '', civilite: '', nom: '', telephone: '', telephone2: '', email: '', adresse: '', profession: '', dateNaissance: '',
     matriculeAssurance: '', entreprise: '', ophtalmologue: '', telOphtalmologue: '', cabinetOphtalmologue: '', telCabinet: '', solde: '',
-    venteDate: '', totalBrut: '', totalNet: '', remisePct: '', acompte: '', acompteDate: '', modePaiement: 'Espèces', compteBanque: '', detailsAcompte: '', sourceLogiciel: '',
+    venteDate: '', totalBrut: '', totalNet: '', remisePct: '', acompte: '', acompteDisponible: '', acompteDate: '', modePaiement: 'Espèces', compteBanque: '', detailsAcompte: '', sourceLogiciel: '',
     ordonnanceJson: '', articlesJson: '', verresJson: '', assuranceJson: '', reglementsJson: '', notes: '', conseillere: '', numeroFacture: '', rdvRetrait: '', dateRecuperation: '',
   });
 
@@ -168,6 +170,7 @@ export function LegacyClientImportPage() {
     const totalBrut = first(v, ['total_brut', 'totalBrut', 'total', 'montant_total', 'amount']);
     const totalNet = first(v, ['total_net', 'totalNet', 'net', 'montant_net'], totalBrut);
     const acompte = first(v, ['acompte', 'acompte_initial', 'deposit'], '');
+    const acompteDisponible = first(v, ['acompte_disponible', 'acompteDisponible', 'acompte_restant', 'credit_acompte'], '');
     const firstReg = p.reglements?.[0];
     setForm(prev => ({
       ...prev,
@@ -192,6 +195,7 @@ export function LegacyClientImportPage() {
       totalNet: String(totalNet ?? prev.totalNet),
       remisePct: String(first(v, ['remisePct', 'remise_pct', 'discount_pct'], prev.remisePct)),
       acompte: String(acompte || firstReg?.montant || prev.acompte),
+      acompteDisponible: String(acompteDisponible || acompte || firstReg?.montant || prev.acompteDisponible),
       acompteDate: normalizeDate(first(v, ['acompte_date', 'deposit_date'], firstReg?.date || prev.acompteDate)),
       modePaiement: String(first(v, ['modePaiement', 'mode_paiement', 'payment_method'], firstReg?.mode_paiement || prev.modePaiement)),
       compteBanque: String(first(v, ['compteBanque', 'compte_banque'], firstReg?.compte_banque || prev.compteBanque)),
@@ -219,6 +223,7 @@ export function LegacyClientImportPage() {
       totalNet: p.totalNet != null ? String(p.totalNet) : prev.totalNet,
       remisePct: p.remisePct != null ? String(p.remisePct) : prev.remisePct,
       acompte: p.acompte != null ? String(p.acompte) : prev.acompte,
+      acompteDisponible: p.acompteDisponible != null ? String(p.acompteDisponible) : prev.acompteDisponible,
       acompteDate: p.acompteDate || prev.acompteDate,
       modePaiement: p.modePaiement || prev.modePaiement,
       conseillere: p.conseillere || prev.conseillere,
@@ -258,7 +263,8 @@ export function LegacyClientImportPage() {
       totalBrut: best.totalBrut || best.totalNet || 0,
       totalNet: best.totalNet || 0,
       remisePct: best.remisePct || 0,
-      acompteInitial: best.acompte || 0,
+      acompteInitial: best.acompteDisponible ?? best.acompte ?? 0,
+      acompteDisponible: best.acompteDisponible ?? best.acompte ?? 0,
       acompteDate: best.acompteDate || best.venteDate || '',
       modePaiementAcompte: best.modePaiement || 'Espèces',
       articles: best.articles || [],
@@ -505,7 +511,8 @@ ${results.join('\n')}`);
         totalBrut: parseMoney(form.totalBrut),
         totalNet: parseMoney(form.totalNet),
         remisePct: Number(form.remisePct) || 0,
-        acompteInitial: parseMoney(form.acompte),
+        acompteInitial: parseMoney(form.acompteDisponible || form.acompte),
+        acompteDisponible: parseMoney(form.acompteDisponible || form.acompte),
         acompteDate: normalizeDate(form.acompteDate) || normalizeDate(form.venteDate),
         modePaiementAcompte: form.modePaiement,
         compteBanqueAcompte: form.compteBanque,
@@ -593,7 +600,7 @@ ${results.join('\n')}`);
             <label className="text-sm"><span className="block font-semibold mb-1">Remise %</span><input type="number" className="w-full border rounded-lg px-3 py-2" value={form.remisePct} onChange={e=>update('remisePct',e.target.value)} /></label>
           </div>
           <div className="grid grid-cols-2 gap-3 border-t pt-3">
-            <label className="text-sm"><span className="block font-semibold mb-1">Acompte initial</span><input type="number" className="w-full border rounded-lg px-3 py-2" value={form.acompte} onChange={e=>update('acompte',e.target.value)} /></label>
+            <label className="text-sm"><span className="block font-semibold mb-1">Acompte disponible (ancien dossier)</span><input type="number" className="w-full border rounded-lg px-3 py-2" value={form.acompteDisponible || form.acompte} onChange={e=>update('acompteDisponible',e.target.value)} /></label>
             <label className="text-sm"><span className="block font-semibold mb-1">Date acompte</span><input type="date" className="w-full border rounded-lg px-3 py-2" value={form.acompteDate} onChange={e=>update('acompteDate',e.target.value)} /></label>
             <label className="text-sm"><span className="block font-semibold mb-1">Mode paiement</span><input className="w-full border rounded-lg px-3 py-2" value={form.modePaiement} onChange={e=>update('modePaiement',e.target.value)} /></label>
             <label className="text-sm"><span className="block font-semibold mb-1">Compte banque</span><input className="w-full border rounded-lg px-3 py-2" value={form.compteBanque} onChange={e=>update('compteBanque',e.target.value)} /></label>

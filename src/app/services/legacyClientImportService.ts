@@ -49,6 +49,7 @@ export interface LegacyClientImportPayload {
   bonsAssurance?: any[];
   ordonnance?: any;
   acompteInitial?: number;
+  acompteDisponible?: number;
   acompteDate?: string;
   modePaiementAcompte?: string;
   compteBanqueAcompte?: string;
@@ -116,7 +117,9 @@ export async function importerDossierClient(payload: LegacyClientImportPayload):
     updated_at: now,
   });
 
-  const acompte = money(payload.acompteInitial);
+  // Pour un ancien dossier, l'acompte disponible indiqué par le logiciel source
+  // est prioritaire. Il ne doit jamais être remplacé par le prix de la monture.
+  const acompte = money(payload.acompteDisponible ?? payload.acompteInitial);
   const vente: any = {
     id: venteId,
     magasin_id: payload.magasinId,
@@ -143,6 +146,7 @@ export async function importerDossierClient(payload: LegacyClientImportPayload):
     recap: {
       remisePct: Number(payload.remisePct || 0),
       acompte,
+      acompteDisponible: acompte,
       modePaiement: payload.modePaiementAcompte || '',
       compteBanque: payload.compteBanqueAcompte || '',
       details: payload.detailsAcompte || '',

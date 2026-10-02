@@ -76,6 +76,8 @@ export interface LegacyPdfParsed {
   totalNet?: number;
   remisePct?: number;
   acompte?: number;
+  /** Montant d'acompte/crédit disponible indiqué explicitement dans l'ancien dossier. */
+  acompteDisponible?: number;
   acompteDate?: string;
   modePaiement?: string;
   numeroFacture?: string;
@@ -242,6 +244,13 @@ export async function parseLegacyClientPdf(file: File): Promise<LegacyPdfParsed 
     /TOTAL\s*[:\-]?\s*([\d\s.,]+)\s*(?:F\s*CFA|FCFA|CFA)?/i,
     /(?:MONTANT\s+TOTAL)\s*[:\-]?\s*([\d\s.,]+)\s*(?:F\s*CFA|FCFA|CFA)?/i,
   ]);
+  // L'ancien logiciel peut afficher soit « Acompte », soit « Acompte disponible ».
+  // Pour un import historique, cette valeur doit rester une donnée financière
+  // du dossier et ne doit jamais être recalculée à partir du prix de la monture.
+  const acompteDisponibleRaw = firstMatch(compactText, [
+    /Acompte\s+(?:disponible|restant|crédit)\s*[:\-]?\s*([\d\s.,]+)\s*(?:F\s*CFA|FCFA|CFA)?/i,
+    /(?:Cr[ée]dit|Solde\s+acompte|Avance\s+disponible)\s*[:\-]?\s*([\d\s.,]+)\s*(?:F\s*CFA|FCFA|CFA)?/i,
+  ]);
   const acompteRaw = firstMatch(compactText, [
     /(?:Acompte|Avance|Vers[ée]ment)\s*[:\-]?\s*([\d\s.,]+)\s*(?:F\s*CFA|FCFA|CFA)?/i,
   ]);
@@ -251,6 +260,7 @@ export async function parseLegacyClientPdf(file: File): Promise<LegacyPdfParsed 
   const totalNet = money(totalNetRaw);
   const totalBrut = money(totalBrutRaw) || totalNet;
   const acompte = money(acompteRaw);
+  const acompteDisponible = money(acompteDisponibleRaw) || acompte;
   const remisePct = Number(String(remiseRaw || '').replace(',', '.')) || 0;
 
   // ── Verres / ordonnance ──────────────────────────────────────────────────
@@ -335,6 +345,7 @@ export async function parseLegacyClientPdf(file: File): Promise<LegacyPdfParsed 
     totalNet,
     remisePct,
     acompte,
+    acompteDisponible,
     acompteDate: venteDate,
     modePaiement,
     numeroFacture,

@@ -4,7 +4,7 @@
  * Gestion centralisée des permissions basée sur les rôles utilisateurs
  */
 
-export type UserRole = 'super_admin' | 'admin' | 'manager' | 'employee' | 'caissier' | 'conseillere' | 'responsable_call_center' | 'guest';
+export type UserRole = 'super_admin' | 'admin' | 'manager' | 'employee' | 'caissier' | 'conseillere' | 'opticien' | 'responsable_call_center' | 'guest';
 
 export type Permission =
   // Gestion Commerciale
@@ -118,6 +118,18 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'devis.create', 'devis.read',
     'client.create', 'client.read', 'client.update',
     'reglement.create', 'reglement.read',
+    'stock.read',
+    'catalogue.read',
+    'magasin.read',
+  ],
+
+  // L'opticien peut consulter les ventes/factures et leurs détails,
+  // sans obtenir de droit de modification ou suppression.
+  opticien: [
+    'vente.read',
+    'devis.read',
+    'client.read',
+    'reglement.read',
     'stock.read',
     'catalogue.read',
     'magasin.read',

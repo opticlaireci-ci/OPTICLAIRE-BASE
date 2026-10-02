@@ -302,18 +302,23 @@ interface MenuItemType {
 }
 
 /** Filtre récursif des menus magasin selon les clés autorisées (menuAccess). */
-function filterByAccess(items: MenuItemType[], allowed: string[]): MenuItemType[] {
+function filterByAccess(
+  items: MenuItemType[],
+  allowed: string[],
+  alwaysVisiblePaths: string[] = [],
+): MenuItemType[] {
   const out: MenuItemType[] = [];
   for (const item of items) {
     if (item.children && item.children.length > 0) {
-      const kids = filterByAccess(item.children, allowed);
+      const kids = filterByAccess(item.children, allowed, alwaysVisiblePaths);
       if (kids.some(k => k.path || (k.children && k.children.length > 0))) {
         out.push({ ...item, children: kids });
       }
     } else if (item.path) {
       const key = pathToButtonKey(item.path) || '';
       const legacyKey = key.startsWith('magasin:') ? key.slice('magasin:'.length) : '';
-      if (allowed.includes(key) || (legacyKey && allowed.includes(legacyKey))) {
+      const forced = alwaysVisiblePaths.some(p => item.path?.includes(p));
+      if (forced || allowed.includes(key) || (legacyKey && allowed.includes(legacyKey))) {
         out.push(item);
       }
     }
@@ -360,8 +365,13 @@ export function MagasinLayout() {
     }
 
     const access = user.menuAccess || [];
+    const roleLectureVenteFacture = ['conseillere', 'opticien'].includes(user.role || '');
     if (isAdmin || access.length === 0) return;
     const path = location.pathname;
+    // Vente/Facture : les conseillères et opticiens doivent toujours pouvoir
+    // consulter les ventes, factures et leur détail, même si un ancien profil
+    // possède un menuAccess incomplet.
+    if (roleLectureVenteFacture && path.includes('/commercial/vente-facture')) return;
     if (path.endsWith('/accueil') || /\/magasin\/[^/]+\/?$/.test(path)) return;
     const key = pathToButtonKey(path);
     // Compatibilité avec les anciens profils : certaines anciennes versions
@@ -459,9 +469,14 @@ export function MagasinLayout() {
 
   const isAdminRole = user?.role === 'super_admin' || user?.role === 'admin' || user?.role === 'administrateur';
   const menuAccess = user?.menuAccess || [];
+  const roleLectureVenteFacture = ['conseillere', 'opticien'].includes(user?.role || '');
   const visibleMenuItems = (isAdminRole || menuAccess.length === 0)
     ? menuItems
-    : filterByAccess(menuItems, menuAccess);
+    : filterByAccess(
+        menuItems,
+        menuAccess,
+        roleLectureVenteFacture ? ['/commercial/vente-facture'] : [],
+      );
 
   const handleExpand = (title: string) => {
     // Accordéon : une seule rubrique ouverte à la fois. Ouvrir une rubrique
