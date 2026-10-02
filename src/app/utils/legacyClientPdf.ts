@@ -41,6 +41,13 @@ function firstMatch(text: string, patterns: RegExp[]): string {
   return '';
 }
 
+/** Premier groupe de la DERNIÈRE correspondance d'un motif global. */
+function lastMatch(text: string, pattern: RegExp): string {
+  let last = '';
+  for (const m of text.matchAll(pattern)) if (m[1]) last = normalizeSpace(m[1]);
+  return last;
+}
+
 function firstGroups(text: string, pattern: RegExp): string[] {
   const m = text.match(pattern);
   return m ? m.slice(1).map(normalizeSpace) : [];
@@ -91,7 +98,7 @@ export interface LegacyPdfParsed {
   notes?: string;
 }
 
-type PdfItem = { str: string; x: number; y: number };
+type PdfItem = { str: string; x: number; y: number; w?: number };
 
 async function extractContent(file: File): Promise<{ text: string; pageItems: PdfItem[][] }> {
   const pdfjsLib = await getPdfjs();
@@ -103,8 +110,8 @@ async function extractContent(file: File): Promise<{ text: string; pageItems: Pd
     const content = await page.getTextContent();
     const items = content.items
       .filter((it: any) => typeof it.str === 'string')
-      .map((it: any) => ({ str: it.str as string, x: it.transform?.[4] || 0, y: it.transform?.[5] || 0 }));
-    pageItems.push(items.map((i: any) => ({ str: i.str, x: i.x, y: i.y })));
+      .map((it: any) => ({ str: it.str as string, x: it.transform?.[4] || 0, y: it.transform?.[5] || 0, w: it.width || 0 }));
+    pageItems.push(items.map((i: any) => ({ str: i.str, x: i.x, y: i.y, w: i.w })));
     items.sort((a: any, b: any) => b.y - a.y || a.x - b.x);
     const lines: string[] = [];
     let current: any[] = [];
@@ -132,20 +139,29 @@ const hasEye = (e?: Partial<EyeValues> | null) => !!e && EYE_FIELDS.some(k => !!
 function parseEyesByColumns(pageItems: PdfItem[][]): { droit: EyeValues; gauche: EyeValues } | null {
   const NUM = /^[+\-−]?\d+(?:[.,]\d+)?$/;
   for (const items of pageItems) {
-    const sph = items.find(i => /^Sph[èeé]re$/i.test(i.str.trim()));
+    // L'en-tête peut être découpé (un mot par élément) OU fusionné en un seul
+    // élément « Sphère Cylindre Axe Dec Addition Hauteur E V Loin E V Près ».
+    const sph = items.find(i => /^Sph[èeé]re\b/i.test(i.str.trim()));
     if (!sph) continue;
-    const hdr = (re: RegExp) => items.find(i => Math.abs(i.y - sph.y) <= 3 && re.test(i.str.trim()));
+    const hdr = (re: RegExp) => items.find(i => i !== sph && Math.abs(i.y - sph.y) <= 3 && re.test(i.str.trim()));
     const x0 = sph.x;
+    // En-tête fusionné : position d'une colonne estimée au prorata des caractères.
+    const fusionne = /Cylindre/i.test(sph.str) && (sph.w || 0) > 0;
+    const dansEntete = (re: RegExp): number | undefined => {
+      if (!fusionne) return undefined;
+      const k = sph.str.search(re);
+      return k >= 0 ? sph.x + (sph.w as number) * k / sph.str.length : undefined;
+    };
     const loin = hdr(/^Loin$/i), pres = hdr(/^Pr[èeé]s$/i);
     const starts: Record<EyeField, number> = {
       sphere: x0,
-      cylindre: hdr(/^Cylindre$/i)?.x ?? x0 + 30.5,
-      axe: hdr(/^Axe$/i)?.x ?? x0 + 65,
-      dec: hdr(/^Dec$/i)?.x ?? x0 + 82,
-      addition: hdr(/^Addition$/i)?.x ?? x0 + 99.6,
-      hauteur: hdr(/^Hauteur$/i)?.x ?? x0 + 133.6,
-      evLoin: hdr(/E\s*V\s*Loin/i)?.x ?? (loin ? loin.x - 17 : x0 + 167.1),
-      evPres: hdr(/E\s*V\s*Pr[èeé]s/i)?.x ?? (pres ? pres.x - 17 : x0 + 202.6),
+      cylindre: hdr(/^Cylindre$/i)?.x ?? dansEntete(/Cylindre/i) ?? x0 + 30.5,
+      axe: hdr(/^Axe$/i)?.x ?? dansEntete(/\bAxe\b/i) ?? x0 + 65,
+      dec: hdr(/^Dec$/i)?.x ?? dansEntete(/\bDec\b/i) ?? x0 + 82,
+      addition: hdr(/^Addition$/i)?.x ?? dansEntete(/Addition/i) ?? x0 + 99.6,
+      hauteur: hdr(/^Hauteur$/i)?.x ?? dansEntete(/Hauteur/i) ?? x0 + 133.6,
+      evLoin: hdr(/E\s*V\s*Loin/i)?.x ?? dansEntete(/E\s*V\s*Loin/i) ?? (loin ? loin.x - 17 : x0 + 167.1),
+      evPres: hdr(/E\s*V\s*Pr[èeé]s/i)?.x ?? dansEntete(/E\s*V\s*Pr[èeé]s/i) ?? (pres ? pres.x - 17 : x0 + 202.6),
     };
     const ordered = [...EYE_FIELDS].sort((a, b) => starts[b] - starts[a]); // du plus à droite au plus à gauche
     const maxX = starts.evPres + 40;
@@ -236,14 +252,14 @@ export async function parseLegacyClientPdf(file: File): Promise<LegacyPdfParsed 
     /Date\s+R[ée]cup[ée]ration\s*[:\-]?\s*(\d{1,2}[\/-]\d{1,2}[\/-]\d{4})/i,
   ]));
 
-  const totalNetRaw = firstMatch(compactText, [
-    /TOTAL\s+NET\s*[:\-]?\s*([\d\s.,]+)\s*(?:F\s*CFA|FCFA|CFA)?/i,
-    /TOTAL\s+NET\s+([\d\s.,]+)\s*(?:F\s*CFA|FCFA|CFA)/i,
-  ]);
-  const totalBrutRaw = firstMatch(compactText, [
-    /TOTAL\s*[:\-]?\s*([\d\s.,]+)\s*(?:F\s*CFA|FCFA|CFA)?/i,
-    /(?:MONTANT\s+TOTAL)\s*[:\-]?\s*([\d\s.,]+)\s*(?:F\s*CFA|FCFA|CFA)?/i,
-  ]);
+  // TOTAL / TOTAL NET de la facture : on prend la DERNIÈRE occurrence (bloc
+  // récapitulatif en bas de facture) et UN SEUL montant. L'ancienne lecture
+  // prenait la première occurrence avec `[\d\s.,]+`, qui pouvait capturer le
+  // total de la ligne monture (colonne « TOTAL » du tableau) ou coller
+  // plusieurs montants entre eux.
+  const MONTANT = String.raw`(\d{1,3}(?:[ \u00a0]\d{3})+(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)`;
+  const totalNetRaw = lastMatch(compactText, new RegExp(String.raw`TOTAL\s+NET\s*[:\-]?\s*` + MONTANT, 'gi'));
+  const totalBrutRaw = lastMatch(compactText, new RegExp(String.raw`(?<!REMISE\s)(?<!PRIX\s)\b(?:MONTANT\s+)?TOTAL(?!\s+NET)(?:\s+BRUT)?\s*[:\-]?\s*` + MONTANT, 'gi'));
   // L'ancien logiciel peut afficher soit « Acompte », soit « Acompte disponible ».
   // Pour un import historique, cette valeur doit rester une donnée financière
   // du dossier et ne doit jamais être recalculée à partir du prix de la monture.
@@ -257,8 +273,8 @@ export async function parseLegacyClientPdf(file: File): Promise<LegacyPdfParsed 
   const remiseRaw = firstMatch(compactText, [/(?:Remise|Discount)\s*\(?%?\)?\s*[:\-]?\s*([\d.,]+)/i]);
   const modePaiement = firstMatch(compactText, [/(?:Mode\s+de\s+paiement|Paiement|R[èe]glement)\s*[:\-]?\s*([^\n|]+)/i]);
 
-  const totalNet = money(totalNetRaw);
-  const totalBrut = money(totalBrutRaw) || totalNet;
+  let totalNet = money(totalNetRaw);
+  let totalBrut = money(totalBrutRaw) || totalNet;
   const acompte = money(acompteRaw);
   const acompteDisponible = money(acompteDisponibleRaw) || acompte;
   const remisePct = Number(String(remiseRaw || '').replace(',', '.')) || 0;
@@ -322,6 +338,22 @@ export async function parseLegacyClientPdf(file: File): Promise<LegacyPdfParsed 
     });
   } else if (mountDesignation) {
     articles.push({ type: 'Monture', designation: mountDesignation.trim(), fournisseur: fournisseur || '', garantie: mountWarranty || '' });
+  }
+
+  // Les prix des verres sont aussi portés par `totalVerres`, lu par tous les
+  // calculs de l'application (sinon seuls les prix de la monture comptaient).
+  const totalVerresPdf = glassRows.reduce((s, r) => s + (r.total || r.prix || 0), 0);
+  if (verres[0] && totalVerresPdf > 0) (verres[0] as any).totalVerres = totalVerresPdf;
+
+  // Garde-fou : le TOTAL d'une facture ne peut pas être inférieur à monture +
+  // verres. Si la lecture n'a trouvé que le prix de la monture, on rétablit
+  // la somme complète (et le net correspondant, remise déduite).
+  const totalMonturePdf = articles.reduce((s, a) => s + (Number(a.total) || Number(a.prix) || 0), 0);
+  const totalLignesPdf = totalMonturePdf + totalVerresPdf;
+  if (totalVerresPdf > 0 && totalLignesPdf > 0) {
+    if (totalBrut < totalLignesPdf) totalBrut = totalLignesPdf;
+    const netAttendu = Math.round(totalBrut * (1 - remisePct / 100));
+    if (totalNet <= totalMonturePdf && totalNet < netAttendu) totalNet = netAttendu;
   }
 
   // Un PDF sans bloc « assuré » ne doit pas créer artificiellement une assurance.

@@ -35,8 +35,19 @@ export function calculerTotalLignesVente(vente: any): number {
     }
     const od = v?.oeilDroit || {};
     const og = v?.oeilGauche || {};
-    total += toNumber(od.prix) * Math.max(1, toNumber(od.quantite) || 1);
-    total += toNumber(og.prix) * Math.max(1, toNumber(og.quantite) || 1);
+    const parOeil = toNumber(od.prix) * Math.max(1, toNumber(od.quantite) || 1)
+      + toNumber(og.prix) * Math.max(1, toNumber(og.quantite) || 1);
+    if (parOeil > 0) {
+      total += parOeil;
+      continue;
+    }
+    // Verres d'un ANCIEN DOSSIER importé : les prix sont rangés dans `lignes`
+    // (une ligne par œil). Sans cette lecture, les verres valaient 0 et seul le
+    // prix de la monture était compté.
+    for (const l of Array.isArray(v?.lignes) ? v.lignes : []) {
+      const lt = toNumber(l?.total);
+      total += lt > 0 ? lt : toNumber(l?.prix) * Math.max(1, toNumber(l?.quantite) || 1);
+    }
   }
 
   for (const a of Array.isArray(vente?.articles) ? vente.articles : []) {

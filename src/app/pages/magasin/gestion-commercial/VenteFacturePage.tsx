@@ -2688,7 +2688,7 @@ function ModalSucces({ numFacture, numClient, total, onClose, onNouvelle, onImpr
 // ════════════════════════════════════════════════════════════════════════════
 
 function StepIV({
-  articles, verreTotal, data, onChange, bonsAssurance, onAddBon, onRemoveBon, onEnregistrer,
+  articles, verreTotal, data, onChange, bonsAssurance, onAddBon, onRemoveBon, onEnregistrer, totauxImportes,
 }: {
   articles: ArticleLigne[];
   verreTotal: string;
@@ -2698,6 +2698,8 @@ function StepIV({
   onAddBon: (b: BonAssurance) => void;
   onRemoveBon: (id: string) => void;
   onEnregistrer: (totalNet: number) => void;
+  /** Ancien dossier importé : TOTAL / TOTAL NET de la facture d'origine (prioritaires). */
+  totauxImportes?: { totalBrut: number; totalNet: number } | null;
 }) {
   const { user } = useAuth();
   const [showModal, setShowModal] = useState(false);
@@ -2708,10 +2710,14 @@ function StepIV({
 
   const articlesTotal = articles.reduce((sum, a) => sum + (parseFloat(a.total) || 0), 0);
   const verresTot = parseFloat(verreTotal) || 0;
-  const totalBrut = articlesTotal + verresTot;
   const remisePct = parseFloat(data.remisePct) || 0;
-  const valeurRemise = Math.round(totalBrut * remisePct / 100);
-  const totalNet = totalBrut - valeurRemise;
+  // Ancien dossier importé : on se réfère au TOTAL et au TOTAL NET de la facture
+  // d'origine, jamais à la somme des lignes (souvent la monture seule).
+  const totalBrut = totauxImportes ? totauxImportes.totalBrut : articlesTotal + verresTot;
+  const valeurRemise = totauxImportes
+    ? Math.max(0, totauxImportes.totalBrut - totauxImportes.totalNet)
+    : Math.round(totalBrut * remisePct / 100);
+  const totalNet = totauxImportes ? totauxImportes.totalNet : totalBrut - valeurRemise;
   const totalAssurance = bonsAssurance.reduce((s, b) => s + (parseFloat(b.montantPrisEnCharge) || 0), 0);
   const acompte = parseFloat(data.acompte) || 0;
   const totalReste = totalNet - totalAssurance - acompte;
@@ -4107,18 +4113,14 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
                       <div className="p-2">
                         <div className="opacity-80">Total</div>
                         <div className="text-base font-bold">{(() => {
-                          const verresTotal = detail.verres?.reduce((s: number, v: any) => s + (parseFloat(v.totalVerres) || 0), 0) || 0;
-                          const articlesTotal = detail.articles.reduce((s, a) => s + (parseFloat(a.total) || 0), 0);
-                          return (verresTotal + articlesTotal).toLocaleString('fr-FR');
+                          // Monture + verres ; pour un ancien dossier importé : TOTAL de la facture d'origine.
+                          return normaliserTotauxVente(detail).totalBrut.toLocaleString('fr-FR');
                         })()}</div>
                       </div>
                       <div className="p-2">
                         <div className="opacity-80">Remise ({detail.recap.remisePct}%)</div>
                         <div className="text-base font-bold">{(() => {
-                          const verresTotal = detail.verres?.reduce((s: number, v: any) => s + (parseFloat(v.totalVerres) || 0), 0) || 0;
-                          const articlesTotal = detail.articles.reduce((s, a) => s + (parseFloat(a.total) || 0), 0);
-                          const total = verresTotal + articlesTotal;
-                          return Math.round(total * (parseFloat(detail.recap.remisePct) || 0) / 100).toLocaleString('fr-FR');
+                          return normaliserTotauxVente(detail).valeurRemise.toLocaleString('fr-FR');
                         })()}</div>
                       </div>
                       <div className="p-2">
@@ -4452,18 +4454,14 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
                           <div className="p-3">
                             <div className="opacity-80">Total</div>
                             <div className="text-base font-bold">{(() => {
-                              const verresTotal = detail.verres?.reduce((s: number, v: any) => s + (parseFloat(v.totalVerres) || 0), 0) || 0;
-                              const articlesTotal = detail.articles.reduce((s, a) => s + (parseFloat(a.total) || 0), 0);
-                              return (verresTotal + articlesTotal).toLocaleString('fr-FR');
+                              // Monture + verres ; pour un ancien dossier importé : TOTAL de la facture d'origine.
+                              return normaliserTotauxVente(detail).totalBrut.toLocaleString('fr-FR');
                             })()}</div>
                           </div>
                           <div className="p-3">
                             <div className="opacity-80">Remise ({detail.recap.remisePct}%)</div>
                             <div className="text-base font-bold">{(() => {
-                              const verresTotal = detail.verres?.reduce((s: number, v: any) => s + (parseFloat(v.totalVerres) || 0), 0) || 0;
-                              const articlesTotal = detail.articles.reduce((s, a) => s + (parseFloat(a.total) || 0), 0);
-                              const total = verresTotal + articlesTotal;
-                              return Math.round(total * (parseFloat(detail.recap.remisePct) || 0) / 100).toLocaleString('fr-FR');
+                              return normaliserTotauxVente(detail).valeurRemise.toLocaleString('fr-FR');
                             })()}</div>
                           </div>
                           <div className="p-3">
@@ -5238,6 +5236,14 @@ function FormulaireVente({ magasinId, onRetour, onVenteEnregistree, venteInitial
   // Mode ÉDITION : quand une vente existante est fournie, on préremplit tous les
   // champs et on réutilise son id à l'enregistrement (setDoc merge = écrasement).
   const enEdition = !!venteInitiale;
+  // Ancien dossier importé en édition : ses totaux d'origine restent la référence.
+  const totauxImportes = (() => {
+    const v: any = venteInitiale;
+    const importee = !!(v?.recap?.imported || v?.source_import === 'ancien_logiciel' || v?.import_id);
+    if (!importee) return null;
+    const t = normaliserTotauxVente(v);
+    return t.totalBrut > 0 || t.totalNet > 0 ? { totalBrut: t.totalBrut, totalNet: t.totalNet } : null;
+  })();
   const [active, setActive] = useState(0);
   const [client, setClient] = useState<ClientInfo>(() => venteInitiale?.clientInfo || newClientState());
   const [verre, setVerre] = useState<VerreInfo[]>(() => venteInitiale?.verres || []);
@@ -5301,8 +5307,8 @@ function FormulaireVente({ magasinId, onRetour, onVenteEnregistree, venteInitial
         verre.reduce((s, v) => s + (parseFloat(v.totalVerres) || 0), 0),
       total_net: totalNet,
     });
-    const totalBrut = totauxEnregistrement.totalBrut;
-    const totalNetNormalise = totauxEnregistrement.totalNet;
+    const totalBrut = totauxImportes ? totauxImportes.totalBrut : totauxEnregistrement.totalBrut;
+    const totalNetNormalise = totauxImportes ? totauxImportes.totalNet : totauxEnregistrement.totalNet;
 
     // Numéro de reçu (versement) : généré UNE fois et conservé sur la vente pour
     // rester stable entre les impressions. Réutilise l'existant en mode édition.
@@ -5483,6 +5489,7 @@ function FormulaireVente({ magasinId, onRetour, onVenteEnregistree, venteInitial
       onAddBon={(b) => setBonsAssurance(prev => [...prev, b])}
       onRemoveBon={(id) => setBonsAssurance(prev => prev.filter(b => b.id !== id))}
       onEnregistrer={handleEnregistrer}
+      totauxImportes={totauxImportes}
     />,
   ];
 
