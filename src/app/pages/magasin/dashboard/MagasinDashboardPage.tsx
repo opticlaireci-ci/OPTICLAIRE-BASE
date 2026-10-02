@@ -4,6 +4,7 @@ import { chargerVentes, readVentesCache, type VenteSupabase } from '../../../ser
 import { chargerReglementsParMagasin, type ReglementSupabase } from '../../../services/reglementsService';
 import { getMagasinLabel } from '../../../constants/magasins';
 import { SgopticDashboard } from '../../../components/SgopticDashboard';
+import { setVisibleInterval, PAGE_POLL_MS } from '../../../utils/visibleInterval';
 
 const REGLEMENTS_CACHE = (m: string) => `leclaire_reglements_cache_${m}`;
 
@@ -44,13 +45,13 @@ export function MagasinDashboardPage() {
     };
     load();
     const refresh = () => load();
-    const interval = setInterval(load, 8000);
+    const stopPolling = setVisibleInterval(load, PAGE_POLL_MS);
     window.addEventListener('leclaire-sync-update', refresh);
     window.addEventListener('ventes-updated', refresh);
     window.addEventListener('storage', refresh);
     return () => {
       mounted = false;
-      clearInterval(interval);
+      stopPolling();
       window.removeEventListener('leclaire-sync-update', refresh);
       window.removeEventListener('ventes-updated', refresh);
       window.removeEventListener('storage', refresh);

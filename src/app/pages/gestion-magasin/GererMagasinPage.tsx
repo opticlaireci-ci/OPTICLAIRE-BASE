@@ -5,6 +5,7 @@ import { Store, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, X } from
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { getMagasins } from '../../constants/magasins';
 import { chargerVentes, readVentesCache, type VenteSupabase } from '../../services/ventesService';
+import { setVisibleInterval, PAGE_POLL_MS } from '../../utils/visibleInterval';
 
 /** Map snake_case Firestore → forme camelCase attendue par les graphiques. */
 const mapVenteToVente = (v: VenteSupabase) => ({
@@ -82,13 +83,13 @@ export function GererMagasinPage() {
       .then(rows => { if (mounted) setVentes(rows.map(mapVenteToVente)); })
       .catch(e => logger.error('Erreur chargement ventes:', e));
     load();
-    const interval = setInterval(load, 10000);
+    const stopPolling = setVisibleInterval(load, PAGE_POLL_MS);
     const onUpdate = () => load();
     window.addEventListener('ventes-updated', onUpdate);
     window.addEventListener('storage', onUpdate);
     return () => {
       mounted = false;
-      clearInterval(interval);
+      stopPolling();
       window.removeEventListener('ventes-updated', onUpdate);
       window.removeEventListener('storage', onUpdate);
     };

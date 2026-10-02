@@ -8,6 +8,7 @@ import { addCreateAudit, addUpdateAudit, AuditInfo } from '../../../utils/auditU
 import { TENANT } from '../../../config/tenant';
 import { chargerToutesLesVentes, type VenteSupabase } from '../../../services/ventesService';
 import { afficherPdfBlob, imprimerPageCourante } from '../../../utils/inAppViewer';
+import { setVisibleInterval, PAGE_POLL_MS } from '../../../utils/visibleInterval';
 
 // Jours de la semaine (lundi → dimanche) tels qu'affichés dans le tableau.
 const JOURS = ['LUNDI', 'MARDI', 'MERCREDI', 'JEUDI', 'VENDREDI', 'SAMEDI', 'DIMANCHE'] as const;
@@ -458,12 +459,12 @@ export function RecapHebdomadairePage() {
       if (!annule) setVentesAll(rows);
     }).catch(() => {});
     load();
-    const interval = setInterval(load, 15000);
+    const stopPolling = setVisibleInterval(load, PAGE_POLL_MS);
     const onUpdate = () => load();
     window.addEventListener('ventes-updated', onUpdate);
     return () => {
       annule = true;
-      clearInterval(interval);
+      stopPolling();
       window.removeEventListener('ventes-updated', onUpdate);
     };
   }, []);

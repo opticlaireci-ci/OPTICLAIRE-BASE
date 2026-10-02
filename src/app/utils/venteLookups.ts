@@ -6,6 +6,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { api } from '../services/api';
 import { loadStockMagasin, readStockCache, type StockMagasin } from '../services/inventaireService';
+import { setVisibleInterval, PAGE_POLL_MS } from './visibleInterval';
 
 // ── Hook générique localStorage ──────────────────────────────────────────────
 function useLS<T>(key: string): T[] {
@@ -207,14 +208,14 @@ export function useStockMagasin(magasinId: string): Map<string, number> {
     };
     load();
     // Rafraîchissement AUTOMATIQUE : périodique + événements.
-    const interval = setInterval(load, 8000);
+    const stopPolling = setVisibleInterval(load, PAGE_POLL_MS);
     const onStockUpdated = () => { if (!cancelled) setMap(rowsToStockMap(readStockCache(magasinId))); };
     window.addEventListener('leclaire-sync-update', load);
     window.addEventListener('storage', load);
     window.addEventListener('leclaire-stock-updated', onStockUpdated);
     return () => {
       cancelled = true;
-      clearInterval(interval);
+      stopPolling();
       window.removeEventListener('leclaire-sync-update', load);
       window.removeEventListener('storage', load);
       window.removeEventListener('leclaire-stock-updated', onStockUpdated);

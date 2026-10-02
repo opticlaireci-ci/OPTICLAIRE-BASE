@@ -40,6 +40,7 @@ export function subscribeBonsRealtime(magasinIds: string[]): () => void {
   });
 
   pollInterval = setInterval(() => {
+    if (typeof document !== 'undefined' && document.hidden) return; // onglet caché : pas de requête
     hydrateBons(magasinIds).catch(e => logger.error('❌ poll bons:', e));
   }, 30_000);
 

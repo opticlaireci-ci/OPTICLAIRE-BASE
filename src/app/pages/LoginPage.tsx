@@ -12,6 +12,7 @@ import { projectId, publicAnonKey } from '../../../utils/supabase/info';
 import { SeasonEffects } from '../components/SeasonEffects';
 import { TENANT } from '../config/tenant';
 import { validatePasswordStrength } from '../utils/passwordPolicy';
+import { setVisibleInterval } from '../utils/visibleInterval';
 
 const HERO_IMAGE = TENANT.visuels.accueil;
 const LOGO_IMAGE = TENANT.visuels.logo;
@@ -305,7 +306,7 @@ function LoginForm() {
     }
 
     fetchLoginSettings();
-    const timer = setInterval(fetchLoginSettings, 30_000);
+    const stopPolling = setVisibleInterval(fetchLoginSettings, 30_000);
 
     const onStorage = (e: StorageEvent) => {
       if (e.key !== LOGIN_SETTINGS_KEY || !e.newValue) return;
@@ -315,7 +316,7 @@ function LoginForm() {
       } catch {}
     };
     window.addEventListener('storage', onStorage);
-    return () => { clearInterval(timer); window.removeEventListener('storage', onStorage); };
+    return () => { stopPolling(); window.removeEventListener('storage', onStorage); };
   }, []);
 
   // ── Première installation : détecter si le propriétaire existe déjà ──────────

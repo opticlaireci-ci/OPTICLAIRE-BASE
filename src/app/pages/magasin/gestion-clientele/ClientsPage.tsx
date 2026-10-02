@@ -8,6 +8,7 @@ import { envoyerSmsBienvenue } from '../../../services/smsService';
 import { upsertClient, chargerClients, readClientsCache, type ClientRow } from '../../../services/clientsService';
 import { ImportCatalogueCsvDialog } from '../../../components/ImportCatalogueCsvDialog';
 import { MODELE_CLIENTS, genererCatalogueCsv, telechargerCsv } from '../../../utils/catalogueCsv';
+import { setVisibleInterval, PAGE_POLL_MS } from '../../../utils/visibleInterval';
 
 interface Client extends AuditInfo {
   id: string; numeroClient: string; nom: string; telephone: string; telephone2?: string;
@@ -156,13 +157,13 @@ export function ClientsPage() {
       }
     };
     // Rafraîchissement AUTOMATIQUE : périodique + événements de mise à jour.
-    const interval = setInterval(loadClients, 10000);
+    const stopPolling = setVisibleInterval(loadClients, PAGE_POLL_MS);
     const onCache = () => setClients(readClientsCache(mid).map(rowToClient));
     window.addEventListener('leclaire-clients-update', refresh);
     window.addEventListener('clients-updated', onCache);
     window.addEventListener('storage', onCache);
     return () => {
-      clearInterval(interval);
+      stopPolling();
       window.removeEventListener('leclaire-clients-update', refresh);
       window.removeEventListener('clients-updated', onCache);
       window.removeEventListener('storage', onCache);

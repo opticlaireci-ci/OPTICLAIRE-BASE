@@ -24,6 +24,7 @@ import DownloadIcon from '@mui/icons-material/Download';
 import { recalculerStockMagasin, readStockCache, type StockMagasin } from '../../../services/inventaireService';
 import { excelHeaderRows, printHeaderHTML } from '../../../utils/documentHeader';
 import { afficherHtml } from '../../../utils/inAppViewer';
+import { setVisibleInterval, PAGE_POLL_MS } from '../../../utils/visibleInterval';
 
 interface ProduitStock {
   id: string;
@@ -96,7 +97,7 @@ export function EtatStockMagasinPage() {
     loadStock();
 
     // 3) Rafraîchissement AUTOMATIQUE : périodique + sur événements.
-    const interval = setInterval(loadStock, 8000);
+    const stopPolling = setVisibleInterval(loadStock, PAGE_POLL_MS);
     const onStockUpdated = () => { if (mounted) setMontures(toProduits(readStockCache(magasinId))); };
     window.addEventListener('storage', loadStock);
     window.addEventListener('leclaire-sync-update', loadStock);
@@ -104,7 +105,7 @@ export function EtatStockMagasinPage() {
 
     return () => {
       mounted = false;
-      clearInterval(interval);
+      stopPolling();
       window.removeEventListener('storage', loadStock);
       window.removeEventListener('leclaire-sync-update', loadStock);
       window.removeEventListener('leclaire-stock-updated', onStockUpdated);

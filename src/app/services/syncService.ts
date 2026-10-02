@@ -169,7 +169,7 @@ export function startAutoSync(
     }
   });
 
-  // Pull périodique de secours. Le poller temps réel (supabaseRealtime, ~8s)
+  // Pull périodique de secours. Le poller temps réel (supabaseRealtime, ~15s)
   // couvre déjà les mises à jour ; on espace donc ce pull à 60s et on l'ignore
   // quand l'onglet est en arrière-plan pour éviter les requêtes redondantes.
   if (_pullInterval) clearInterval(_pullInterval);

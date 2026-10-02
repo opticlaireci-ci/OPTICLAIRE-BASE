@@ -19,6 +19,7 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { canEdit, canDelete } from '../../../utils/actionRights';
 import { Pencil, Trash2 } from 'lucide-react';
 import { TENANT } from '../../../config/tenant';
+import { setVisibleInterval, PAGE_POLL_MS } from '../../../utils/visibleInterval';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 const genNumClient = () => String(Math.floor(10000 + Math.random() * 90000));
@@ -1437,13 +1438,13 @@ function ListeDevis({ magasinId, onNouveau, onModifier }: { magasinId: string; o
       if (!annule) setDevis(rows.filter(v => v.type === 'devis').map(supabaseToDevis));
     }).catch(() => {});
     load();
-    const interval = setInterval(load, 10000);
+    const stopPolling = setVisibleInterval(load, PAGE_POLL_MS);
     const onUpdate = () => load();
     window.addEventListener('ventes-updated', onUpdate);
     window.addEventListener('storage', onUpdate);
     return () => {
       annule = true;
-      clearInterval(interval);
+      stopPolling();
       window.removeEventListener('ventes-updated', onUpdate);
       window.removeEventListener('storage', onUpdate);
     };

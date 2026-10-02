@@ -5,6 +5,7 @@ import { publicAnonKey } from '../../../utils/supabase/info';
 import { kvRestUrl } from '../utils/supabaseClient';
 import { SEASON_MODES } from '../config/seasonModes';
 import type { SeasonId, SeasonMode } from '../config/seasonModes';
+import { setVisibleInterval } from '../utils/visibleInterval';
 
 /**
  * Mode festif global (« moment de l'année ») partagé en temps réel avec tous les
@@ -168,10 +169,11 @@ function LocalSeason({ children }: { children: React.ReactNode }) {
     }
 
     syncFromCloud();
-    // Poll toutes les 30 s : garantit la cohérence entre appareils même si le
-    // premier fetch a échoué ou si l'admin modifie le mode après le chargement.
-    const timer = setInterval(syncFromCloud, 30_000);
-    return () => { alive = false; clearInterval(timer); };
+    // Poll toutes les 60 s (onglet visible uniquement) : garantit la cohérence
+    // entre appareils même si le premier fetch a échoué ou si l'admin modifie le
+    // mode après le chargement. Le mode saisonnier change très rarement.
+    const stopPolling = setVisibleInterval(syncFromCloud, 60_000);
+    return () => { alive = false; stopPolling(); };
   }, []);
 
   const value = useMemo(

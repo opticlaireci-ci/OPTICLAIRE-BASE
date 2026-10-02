@@ -146,6 +146,7 @@ export function subscribeResidualRealtime(magasinIds: string[]): () => void {
   if (!magasinIds.length) return () => {};
 
   pollInterval = setInterval(() => {
+    if (typeof document !== 'undefined' && document.hidden) return; // onglet caché : pas de requête
     Promise.all([
       hydrateRdvEnligne(magasinIds),
       hydrateAtelier(),

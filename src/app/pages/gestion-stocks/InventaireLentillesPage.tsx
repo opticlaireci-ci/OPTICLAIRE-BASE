@@ -11,6 +11,7 @@ import { TENANT } from '../../config/tenant';
 import { useAuth } from '../../contexts/AuthContext';
 import { getMagasins, getAllMagasinIds } from '../../constants/magasins';
 import { imprimerGestionStock, imprimerFormatGestionStock } from '../../utils/stockActions';
+import { setVisibleInterval, PAGE_POLL_MS } from '../../utils/visibleInterval';
 
 // ─── types ────────────────────────────────────────────────────────────────────
 
@@ -149,8 +150,8 @@ export function InventaireLentillesPage() {
     lastLoadRef.current = 0; // annule le throttle pour ce (re)chargement
     charger();
     window.addEventListener('inventaires-updated', charger);
-    const poll = setInterval(charger, 30_000);
-    return () => { window.removeEventListener('inventaires-updated', charger); clearInterval(poll); };
+    const stopPolling = setVisibleInterval(charger, PAGE_POLL_MS);
+    return () => { window.removeEventListener('inventaires-updated', charger); stopPolling(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [magasinKey]);
 

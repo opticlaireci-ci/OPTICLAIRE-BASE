@@ -28,6 +28,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { loadStocksParMagasin, readStockCache, type StockMagasin } from '../services/inventaireService';
 import { rowsToStockMap, type VenteProduct } from './venteLookups';
 import { getMagasins } from '../constants/magasins';
+import { setVisibleInterval, PAGE_POLL_MS } from './visibleInterval';
 
 /**
  * Forme minimale commune aux lignes d'article des deux écrans de vente. Chaque
@@ -183,13 +184,13 @@ export function useStockTousMagasins(): StockMagasinVente[] {
 
     // Même cadence et mêmes déclencheurs que `useStockMagasin`, pour que les deux
     // affichages (magasin courant / autres magasins) ne se contredisent pas.
-    const interval = setInterval(charger, 8000);
+    const stopPolling = setVisibleInterval(charger, PAGE_POLL_MS);
     window.addEventListener('leclaire-sync-update', charger);
     window.addEventListener('leclaire-stock-updated', charger);
     window.addEventListener('storage', charger);
     return () => {
       annule = true;
-      clearInterval(interval);
+      stopPolling();
       window.removeEventListener('leclaire-sync-update', charger);
       window.removeEventListener('leclaire-stock-updated', charger);
       window.removeEventListener('storage', charger);

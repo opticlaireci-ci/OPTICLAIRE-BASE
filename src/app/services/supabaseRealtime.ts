@@ -25,7 +25,7 @@ const APP_DATA = 'app_data';
 const deleteDeniedWarned = new Set<string>();
 
 /** Cadence de repli quand le canal temps réel `app_data` n'est pas connecté. */
-const FAST_POLL_MS = 8000;
+const FAST_POLL_MS = 15_000;
 
 // Clé de la liste des magasins : cas particulier. Elle est modifiable hors-ligne
 // (ajout d'un magasin) et son push cloud peut échouer/traîner. Un simple écrasement
@@ -216,7 +216,11 @@ function ensurePolling() {
     if (pollTimer && pollCadence === target) return;
     if (pollTimer) clearInterval(pollTimer);
     pollCadence = target;
-    pollTimer = setInterval(tick, target);
+    // Onglet caché : aucun tick (le handler 'visibilitychange' rattrape au retour).
+    pollTimer = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+      tick();
+    }, target);
   };
 
   // Temps réel : tout changement sur public.app_data déclenche un pull immédiat,

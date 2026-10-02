@@ -145,12 +145,31 @@ function whereScope<Q extends { eq: Function; like: Function; not: Function }>(q
 }
 
 /** Renvoie tous les documents (valeurs) d'une entité/collection. */
+// Lectures de collection EN COURS, par entité. Quand plusieurs écrans demandent
+// la même collection au même instant (ex. un événement 'ventes-updated' réveille
+// 5 pages à la fois, ou le Call Center global charge les ventes de 9 magasins),
+// ils partagent UNE seule requête HTTP au lieu d'en lancer N en parallèle : moins
+// de connexions simultanées dans le pool `authenticator` de Supabase.
+const collectionsEnCours = new Map<string, Promise<any[]>>();
+
 export async function kvGetCollection<T = any>(entity: string): Promise<T[]> {
   const target = resolveTarget(entity);
-  const query = whereScope(supabase.from(target.table).select('*') as any, target);
-  const { data, error } = await query;
-  if (error) throw new Error(`kvGetCollection ${entity}: ${error.message}`);
-  return ((data || []).map((r: any) => fromRow(target, r)).filter(Boolean)) as T[];
+  let pending = collectionsEnCours.get(entity);
+  if (!pending) {
+    pending = (async () => {
+      const query = whereScope(supabase.from(target.table).select('*') as any, target);
+      const { data, error } = await query;
+      if (error) throw new Error(`kvGetCollection ${entity}: ${error.message}`);
+      return data || [];
+    })();
+    collectionsEnCours.set(entity, pending);
+    const libere = () => { if (collectionsEnCours.get(entity) === pending) collectionsEnCours.delete(entity); };
+    pending.then(libere, libere);
+  }
+  const rows = await pending;
+  // Copie par appelant : les lignes sont partagées entre requêtes coalescées et
+  // certains services modifient les objets reçus (tri, normalisation…).
+  return (structuredClone(rows).map((r: any) => fromRow(target, r)).filter(Boolean)) as T[];
 }
 
 /**
