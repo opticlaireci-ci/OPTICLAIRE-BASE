@@ -14,6 +14,7 @@ import {
 import { db, auth } from '../utils/firebaseClient';
 import { journaliserSuppression } from './auditLogService';
 import { logNetworkAware } from '../utils/networkErrors';
+import { emettreGroupe } from '../utils/evenementsGroupes';
 
 export interface ClientRow {
   id: string;
@@ -63,11 +64,12 @@ function writeClientsCache(magasinId: string, rows: ClientRow[]) {
     const next = JSON.stringify(rows);
     if (localStorage.getItem(clientsCacheKey(magasinId)) !== next) {
       localStorage.setItem(clientsCacheKey(magasinId), next);
-      const detail = { detail: { magasinId: magasinId.toUpperCase() } };
+      const detail = { magasinId: magasinId.toUpperCase() };
       // Émettre les DEUX noms d'événement : certains écouteurs (autocomplétion
       // des ventes) n'écoutent que 'leclaire-clients-update', d'autres 'clients-updated'.
-      window.dispatchEvent(new CustomEvent('clients-updated', detail));
-      window.dispatchEvent(new CustomEvent('leclaire-clients-update', detail));
+      // Regroupés : une rafale d'écritures (import) = un seul rechargement.
+      emettreGroupe('clients-updated', detail, detail.magasinId);
+      emettreGroupe('leclaire-clients-update', detail, detail.magasinId);
     }
   } catch {}
 }

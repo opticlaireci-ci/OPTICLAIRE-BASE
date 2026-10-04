@@ -228,7 +228,9 @@ function valeurPostgrest(v: any): string {
 }
 
 function appliquerFiltres(q: any, filtres: FiltreServeur[], mode: ModeFiltre): any {
-  for (const f of filtres) {
+  // En mode « mixte », un seul filtre est envoyé au serveur (le premier) : le
+  // résultat reste un sur-ensemble, affiné ensuite côté client.
+  for (const f of mode === 'mixte' ? filtres.slice(0, 1) : filtres) {
     const vals: any[] = f.op === 'in' ? f.value : [f.value];
     if (mode === 'colonne') {
       q = f.op === 'in' ? q.in(f.field, vals) : q.eq(f.field, f.value);

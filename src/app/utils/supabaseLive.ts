@@ -124,7 +124,16 @@ export function subscribeEntityChanges(entity: string, onChange: () => void): Un
     try {
       created.channel = supabase
         .channel(`live:${table}:${++topicSeq}`)
-        .on('postgres_changes', { event: '*', schema: 'public', table }, fire)
+        .on('postgres_changes', { event: '*', schema: 'public', table }, (payload: any) => {
+          // Pièces jointes d'anciens dossiers (base64, jusqu'à 700 Ko) rangées
+          // dans app_data : elles ne concernent aucun écran. Les ignorer évite
+          // que chaque import fasse retélécharger app_data à TOUS les postes.
+          if (table === 'app_data') {
+            const k = String(payload?.new?.key || payload?.old?.key || '');
+            if (k.startsWith('documents_importes:')) return;
+          }
+          fire();
+        })
         .subscribe((status: string) => {
           // SUBSCRIBED → opérationnel. CHANNEL_ERROR / TIMED_OUT / CLOSED →
           // dégradé : on repasse en polling rapide (supabase-js retente seul).

@@ -102,12 +102,10 @@ async function parseStructuredFile(file: File): Promise<ParsedData | null> {
   return null;
 }
 
+// Seule la RÉFÉRENCE du fichier (nom, type, taille) est conservée sur la vente :
+// son contenu n'est plus lu ni envoyé à la base (gain de temps et de disque).
 async function fileToImportDocument(file: File): Promise<ImportDocumentInput> {
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  let binary = '';
-  const chunk = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunk) binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
-  return { name: file.name, type: file.type, size: file.size, relativePath: (file as any).webkitRelativePath || file.name, dataBase64: btoa(binary) };
+  return { name: file.name, type: file.type, size: file.size, relativePath: (file as any).webkitRelativePath || file.name };
 }
 
 function mergeLegacyPdfData(items: LegacyPdfParsed[]): LegacyPdfParsed | null {
@@ -235,7 +233,7 @@ export function LegacyClientImportPage() {
       ordonnanceJson: p.ordonnance ? JSON.stringify(p.ordonnance, null, 2) : prev.ordonnanceJson,
       assuranceJson: p.bonsAssurance?.length ? JSON.stringify(p.bonsAssurance, null, 2) : prev.assuranceJson,
       sourceLogiciel: prev.sourceLogiciel || `PDF ancien logiciel — ${p.sourceFile}`,
-      notes: [prev.notes, p.notes, p.rawText ? 'Contenu intégral du PDF conservé comme pièce jointe.' : ''].filter(Boolean).join('\n'),
+      notes: [prev.notes, p.notes, ''].filter(Boolean).join('\n'),
     }));
   };
 
@@ -435,9 +433,9 @@ ${results.join('\n')}`);
       const pdfBest = mergeLegacyPdfData(parsedPdfs);
       if (pdfBest) {
         applyParsedPdf(pdfBest);
-        setMessage(`${parsedPdfs.length} PDF analysé(s) automatiquement (${pdfs.length} sélectionné(s)). ${pdfBest.sourceFile}${pdfBest.conseillere ? ` · conseillère : ${pdfBest.conseillere}` : ''}. Tous les PDF seront conservés dans le dossier.`);
+        setMessage(`${parsedPdfs.length} PDF analysé(s) automatiquement (${pdfs.length} sélectionné(s)). ${pdfBest.sourceFile}${pdfBest.conseillere ? ` · conseillère : ${pdfBest.conseillere}` : ''}. Les informations sont extraites ; le fichier PDF lui-même n’est pas stocké dans la base.`);
       } else if (!best && selected.length) {
-        setMessage('Dossier chargé. Aucun fichier structuré/PDF lisible automatiquement : les PDF, images et autres pièces seront quand même conservés dans le dossier.');
+        setMessage('Dossier chargé. Aucun fichier structuré/PDF lisible automatiquement : complète les champs manuellement (les fichiers eux-mêmes ne sont pas stockés dans la base).');
       }
     } finally { setLoadingFiles(false); }
   };
@@ -461,9 +459,9 @@ ${results.join('\n')}`);
       const best = mergeLegacyPdfData(parsedPdfs);
       if (best) {
         applyParsedPdf(best);
-        setMessage(`${parsedPdfs.length} PDF analysé(s) automatiquement (${selected.length} sélectionné(s)). ${best.sourceFile}${best.conseillere ? ` · conseillère : ${best.conseillere}` : ''}. Tous les PDF seront conservés dans le dossier.`);
+        setMessage(`${parsedPdfs.length} PDF analysé(s) automatiquement (${selected.length} sélectionné(s)). ${best.sourceFile}${best.conseillere ? ` · conseillère : ${best.conseillere}` : ''}. Les informations sont extraites ; le fichier PDF lui-même n’est pas stocké dans la base.`);
       } else {
-        setMessage('PDF ajouté au dossier. Il sera conservé comme pièce jointe ; s’il s’agit d’un PDF scanné/image, les champs devront être complétés manuellement.');
+        setMessage('PDF ajouté. S’il s’agit d’un PDF scanné/image, les champs devront être complétés manuellement (le fichier lui-même n’est pas stocké dans la base).');
       }
     } finally { setLoadingFiles(false); }
   };
@@ -532,7 +530,7 @@ ${results.join('\n')}`);
         rdvRetrait: normalizeDate(form.rdvRetrait),
         dateRecuperation: normalizeDate(form.dateRecuperation),
       });
-      setMessage(`${result.dejaImporte ? 'Ce dossier était DÉJÀ importé : il a été mis à jour, aucun doublon créé. ' : ''}Import réussi. Client ${result.clientId}, vente ${result.venteId}. ${result.reglementIds.length} règlement(s) et ${result.documents} pièce(s) importé(s). La vente porte sa date d'origine ${normalizeDate(form.venteDate)} pour les tableaux de bord.`);
+      setMessage(`${result.dejaImporte ? 'Ce dossier était DÉJÀ importé : il a été mis à jour, aucun doublon créé. ' : ''}Import réussi. Client ${result.clientId}, vente ${result.venteId}. ${result.reglementIds.length} règlement(s) et ${result.documents} pièce(s) référencée(s) (noms notés, fichiers non stockés). La vente porte sa date d'origine ${normalizeDate(form.venteDate)} pour les tableaux de bord.`);
     } catch (e: any) {
       setError(e?.message || 'L’import a échoué.');
     } finally { setImporting(false); }
@@ -569,7 +567,7 @@ ${results.join('\n')}`);
           <div className="border-t pt-3">
             <label className="flex items-center gap-2 text-sm font-semibold mb-2"><FileText size={17}/> Ou importer une ou plusieurs pièces PDF du dossier client</label>
             <input type="file" accept="application/pdf,.pdf" multiple onChange={onPdfFiles} className="block w-full border rounded-lg p-3" />
-            <p className="text-xs text-gray-500 mt-2">Tu peux sélectionner plusieurs PDF en une seule fois : facture, ordonnance, assurance, justificatifs, etc. Ils sont tous conservés dans le même dossier. Les PDF lisibles sont analysés ensemble et les informations manquantes sont complétées automatiquement. Un PDF scanné reste importé comme pièce jointe.</p>
+            <p className="text-xs text-gray-500 mt-2">Tu peux sélectionner plusieurs PDF en une seule fois : facture, ordonnance, assurance, justificatifs, etc. Seules leurs informations sont enregistrées : les fichiers eux-mêmes ne sont pas stockés dans la base. Les PDF lisibles sont analysés ensemble et les informations manquantes sont complétées automatiquement. Un PDF scanné reste importé comme pièce jointe.</p>
           </div>
         </div>
         {loadingFiles && <div className="text-sm text-blue-700 flex items-center gap-2"><Loader2 className="animate-spin" size={16}/> Analyse du dossier…</div>}

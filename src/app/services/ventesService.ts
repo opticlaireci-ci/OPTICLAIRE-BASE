@@ -15,6 +15,7 @@ import { db } from '../utils/firebaseClient';
 import { journaliserSuppression } from './auditLogService';
 import { logNetworkAware, isAuthError, isNoSessionError } from '../utils/networkErrors';
 import { avecTotauxVenteNormalises } from '../utils/venteTotals';
+import { emettreGroupe } from '../utils/evenementsGroupes';
 
 export interface VenteSupabase {
   id: string;
@@ -73,7 +74,8 @@ function writeVentesCache(magasinId: string, ventes: VenteSupabase[]) {
     const next = JSON.stringify(ventes);
     if (localStorage.getItem(ventesCacheKey(magasinId)) !== next) {
       localStorage.setItem(ventesCacheKey(magasinId), next);
-      window.dispatchEvent(new CustomEvent('ventes-updated', { detail: { magasinId: magasinId.toUpperCase() } }));
+      // Regroupé : une rafale d'écritures (import de dossiers) = un seul rechargement.
+      emettreGroupe('ventes-updated', { magasinId: magasinId.toUpperCase() }, magasinId.toUpperCase());
     }
   } catch {}
 }

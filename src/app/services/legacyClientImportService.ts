@@ -1,7 +1,7 @@
-import { doc, setDoc } from '../utils/firestoreCompat';
+import { getDocs, query, where, collection } from '../utils/firestoreCompat';
 import { db } from '../utils/firebaseClient';
 import { ajouterReglement } from './reglementsService';
-import { ajouterVente, chargerVentes } from './ventesService';
+import { ajouterVente } from './ventesService';
 import { upsertClient } from './clientsService';
 import { calculerTotalLignesVente } from '../utils/venteTotals';
 
@@ -19,7 +19,8 @@ export interface ImportDocumentInput {
   type: string;
   size: number;
   relativePath?: string;
-  dataBase64: string;
+  /** Contenu du fichier : n'est plus lu ni stocké (seul le nom est conservé). */
+  dataBase64?: string;
 }
 
 export interface LegacyClientImportPayload {
@@ -120,8 +121,15 @@ export async function importerDossierClient(payload: LegacyClientImportPayload):
   const cleImport = cleDossierImporte(payload.magasinId, payload.numeroClient, payload.venteDate, numFacture);
   let existante: any = null;
   if (cleImport) {
-    const ventesMagasin = await chargerVentes(payload.magasinId).catch(() => [] as any[]);
-    existante = ventesMagasin.find((v: any) => estVenteImportee(v)
+    // Recherche CIBLÉE : seules les ventes de CE n° client sont demandées à
+    // Supabase (quelques lignes), au lieu de télécharger toutes les ventes du
+    // magasin à chaque dossier — ce qui ralentissait les imports à mesure que
+    // la base grossissait. Aucune écriture de cache, aucun événement.
+    const snap = await getDocs(query(collection(db, 'ventes'),
+      where('numero_client', '==', String(payload.numeroClient).trim())))
+      .catch(() => null);
+    const ventesClient: any[] = snap ? snap.docs.map((d: any) => ({ id: d.id, ...d.data() })) : [];
+    existante = ventesClient.find((v: any) => estVenteImportee(v)
       && cleDossierImporte(v.magasin_id, v.numero_client, v.date, v?.recap?.numFacture) === cleImport) || null;
   }
   const venteId: string = existante?.id
@@ -294,34 +302,11 @@ export async function importerDossierClient(payload: LegacyClientImportPayload):
     reglementIds.push(id);
   }
 
-  // Les pièces du dossier sont stockées séparément pour éviter la limite de
-  // taille d'un document Firestore. Chaque morceau fait moins de 700 k caractères.
-  const CHUNK = 700_000;
-  let documentCount = 0;
-  for (const file of payload.documents || []) {
-    const base = file.dataBase64 || '';
-    if (!base) continue;
-    for (let start = 0, part = 0; start < base.length; start += CHUNK, part++) {
-      const chunk = base.slice(start, start + CHUNK);
-      const id = `${importId}-${documentCount}-${part}`;
-      await setDoc(doc(db, 'documents_importes', id), {
-        id,
-        import_id: importId,
-        vente_id: venteId,
-        client_id: clientId,
-        magasin_id: payload.magasinId,
-        name: file.name,
-        type: file.type || 'application/octet-stream',
-        size: file.size,
-        relativePath: file.relativePath || '',
-        part,
-        total_parts: Math.ceil(base.length / CHUNK),
-        data_base64: chunk,
-        created_at: now,
-      }, { merge: true });
-    }
-    documentCount++;
-  }
+  // Les fichiers PDF / pièces du dossier ne sont PLUS stockés dans la base :
+  // toutes leurs informations utiles sont déjà extraites dans la vente, et leur
+  // contenu (plusieurs Mo par dossier) remplissait le disque de Supabase. Seuls
+  // leurs NOMS restent notés sur la vente (champ documents_importes).
+  const documentCount = (payload.documents || []).length;
 
   return { clientId, venteId, reglementIds, importId, documents: documentCount, dejaImporte: !!existante };
 }
