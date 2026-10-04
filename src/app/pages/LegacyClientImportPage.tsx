@@ -395,7 +395,9 @@ export function LegacyClientImportPage() {
           }
           const result = await importerDossierClient(payload as any);
           ok++;
-          results.push(`✅ ${groupName} : ${payload.nom} · vente ${result.venteId}`);
+          results.push(result.dejaImporte
+            ? `🔁 ${groupName} : ${payload.nom} · déjà importé — dossier mis à jour (pas de doublon)`
+            : `✅ ${groupName} : ${payload.nom} · vente ${result.venteId}`);
         } catch (e: any) {
           failed++; results.push(`❌ ${groupName} : ${e?.message || 'échec de l’import'}`);
         }
@@ -530,7 +532,7 @@ ${results.join('\n')}`);
         rdvRetrait: normalizeDate(form.rdvRetrait),
         dateRecuperation: normalizeDate(form.dateRecuperation),
       });
-      setMessage(`Import réussi. Client ${result.clientId}, vente ${result.venteId}. ${result.reglementIds.length} règlement(s) et ${result.documents} pièce(s) importé(s). La vente porte sa date d'origine ${normalizeDate(form.venteDate)} pour les tableaux de bord.`);
+      setMessage(`${result.dejaImporte ? 'Ce dossier était DÉJÀ importé : il a été mis à jour, aucun doublon créé. ' : ''}Import réussi. Client ${result.clientId}, vente ${result.venteId}. ${result.reglementIds.length} règlement(s) et ${result.documents} pièce(s) importé(s). La vente porte sa date d'origine ${normalizeDate(form.venteDate)} pour les tableaux de bord.`);
     } catch (e: any) {
       setError(e?.message || 'L’import a échoué.');
     } finally { setImporting(false); }

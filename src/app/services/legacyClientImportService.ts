@@ -1,7 +1,7 @@
 import { doc, setDoc } from '../utils/firestoreCompat';
 import { db } from '../utils/firebaseClient';
 import { ajouterReglement } from './reglementsService';
-import { ajouterVente } from './ventesService';
+import { ajouterVente, chargerVentes } from './ventesService';
 import { upsertClient } from './clientsService';
 import { calculerTotalLignesVente } from '../utils/venteTotals';
 
@@ -86,13 +86,49 @@ function normalizeImportDate(value: any): string {
   return s.slice(0, 10);
 }
 
-export async function importerDossierClient(payload: LegacyClientImportPayload): Promise<{ clientId: string; venteId: string; reglementIds: string[]; importId: string; documents: number }> {
+function estVenteImportee(v: any): boolean {
+  return !!(v?.recap?.imported || v?.source_import === 'ancien_logiciel' || v?.import_id);
+}
+
+/**
+ * Identité d'un ancien dossier : magasin + n° client + date + n° facture.
+ * Vide si le n° client manque (pas d'identité fiable → pas de rapprochement).
+ * Un n° facture GÉNÉRÉ (IMP-<horodatage>) n'identifie rien : il est ignoré.
+ */
+function cleDossierImporte(magasinId: any, numeroClient: any, date: any, numFacture: any): string {
+  const client = String(numeroClient || '').trim().toUpperCase();
+  if (!client || /^IMP-\d{8,}$/.test(client)) return '';
+  const facture = String(numFacture || '').trim().toUpperCase();
+  return [
+    String(magasinId || '').trim().toUpperCase(),
+    client,
+    normalizeImportDate(date),
+    /^IMP-\d{10,}$/.test(facture) ? '' : facture,
+  ].join('|');
+}
+
+export async function importerDossierClient(payload: LegacyClientImportPayload): Promise<{ clientId: string; venteId: string; reglementIds: string[]; importId: string; documents: number; dejaImporte: boolean }> {
   const now = new Date().toISOString();
   const numeroClient = payload.numeroClient?.trim() || `IMP-${Date.now().toString().slice(-8)}`;
   const clientId = `client-${safeId(payload.magasinId)}-${safeId(numeroClient)}`;
   const unique = (globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2)).replace(/[^a-zA-Z0-9-]/g, '').slice(0, 12);
-  const venteId = `vente-import-${safeId(payload.magasinId)}-${Date.now()}-${unique}-${safeId(numeroClient)}`;
-  const importId = `import-${venteId}`;
+  // ── Anti-doublon ──────────────────────────────────────────────────────────
+  // Un même ancien dossier (magasin + n° client + date + n° facture) ne doit
+  // exister qu'UNE fois. S'il a déjà été importé, on met à jour la vente
+  // existante au lieu d'en créer une nouvelle (réimport sans risque).
+  const numFacture = payload.numeroFacture || (payload.numeroClient ? `IMP-${numeroClient}` : `IMP-${Date.now()}`);
+  const cleImport = cleDossierImporte(payload.magasinId, payload.numeroClient, payload.venteDate, numFacture);
+  let existante: any = null;
+  if (cleImport) {
+    const ventesMagasin = await chargerVentes(payload.magasinId).catch(() => [] as any[]);
+    existante = ventesMagasin.find((v: any) => estVenteImportee(v)
+      && cleDossierImporte(v.magasin_id, v.numero_client, v.date, v?.recap?.numFacture) === cleImport) || null;
+  }
+  const venteId: string = existante?.id
+    || (cleImport
+      ? `vente-import-${safeId(payload.magasinId)}-${safeId(cleImport.replace(/\|/g, '-'))}`.slice(0, 180)
+      : `vente-import-${safeId(payload.magasinId)}-${Date.now()}-${unique}-${safeId(numeroClient)}`);
+  const importId: string = existante?.import_id || existante?.recap?.importId || `import-${venteId}`;
 
   const clientName = `${payload.civilite ? payload.civilite.trim() + ' ' : ''}${payload.nom.trim()}`.trim();
 
@@ -186,7 +222,7 @@ export async function importerDossierClient(payload: LegacyClientImportPayload):
       details: payload.detailsAcompte || '',
       rdvRetrait: payload.rdvRetrait || '',
       dateRecuperation: payload.dateRecuperation || '',
-      numFacture: payload.numeroFacture || (payload.numeroClient ? `IMP-${numeroClient}` : `IMP-${Date.now()}`),
+      numFacture,
       numRecu: '',
       imported: true,
       importId,
@@ -287,7 +323,7 @@ export async function importerDossierClient(payload: LegacyClientImportPayload):
     documentCount++;
   }
 
-  return { clientId, venteId, reglementIds, importId, documents: documentCount };
+  return { clientId, venteId, reglementIds, importId, documents: documentCount, dejaImporte: !!existante };
 }
 
 export function parseMoney(value: any): number { return money(value); }
