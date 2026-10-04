@@ -14,6 +14,7 @@
 
 import {
   kvGetCollection, kvGetCollectionDelta, kvGetDoc, kvSetDoc, kvCreateDoc, kvDeleteDoc,
+  kvGetCollectionWhere, kvGetCollectionIds, type FiltreServeur,
   resolveTarget,
 } from './supabaseDirect';
 import { subscribeEntityChanges, onLiveStatusChange, isLive, SLOW_POLL_MS } from './supabaseLive';
@@ -188,7 +189,17 @@ export async function getDoc<T = DocumentData>(ref: DocRef): Promise<DocSnap<T>>
 export async function getDocs<T = DocumentData>(
   ref: CollectionRef | QueryRef,
 ): Promise<QuerySnap<T & { id: string }>> {
-  const items = await kvGetCollection<T & { id: string }>(ref.entity);
+  // Les égalités (`==`, `in`) sont aussi envoyées à Supabase : seules les lignes
+  // concernées (ex. le magasin demandé) sont téléchargées. Le filtrage exact
+  // ci-dessous reste appliqué, le résultat est donc strictement identique.
+  const filtresServeur: FiltreServeur[] = ref.__type === 'query'
+    ? (ref as QueryRef).constraints
+        .filter(c => c.kind === 'where' && (c.op === '==' || c.op === 'in'))
+        .map(c => ({ field: c.field, op: c.op, value: c.value }))
+    : [];
+  const items = filtresServeur.length
+    ? await kvGetCollectionWhere<T & { id: string }>(ref.entity, filtresServeur)
+    : await kvGetCollection<T & { id: string }>(ref.entity);
   const filtered = ref.__type === 'query'
     ? applyConstraints(items, (ref as QueryRef).constraints)
     : items;
@@ -278,6 +289,33 @@ async function pollEntity(entity: string) {
 
   let items: any[];
   try {
+    // Resynchronisation périodique ALLÉGÉE : au lieu de retélécharger toute la
+    // table pour repérer les suppressions, on ne lit que la liste des `id`
+    // (quelques Ko) + les lignes modifiées depuis le dernier passage.
+    if (needsFullPull && poller.hadBaseline && poller.since) {
+      const ids = await kvGetCollectionIds(entity);
+      if (ids) {
+        if (ids.length === 0 && poller.itemsById.size > 0) {
+          poller.cycleCount = 0; // hoquet transitoire probable : on retentera
+          return;
+        }
+        const { items: modifies, serverTime } = await kvGetCollectionDelta(entity, poller.since);
+        for (const it of modifies) poller.itemsById.set(it.id, it);
+        const presents = new Set(ids);
+        for (const id of Array.from(poller.itemsById.keys())) {
+          if (!presents.has(String(id))) poller.itemsById.delete(id);
+        }
+        // Une ligne existe en base mais manque localement (événement perdu) :
+        // seul ce cas rare déclenche un pull complet au cycle suivant.
+        const manquante = ids.some(id => !poller.itemsById.has(id));
+        poller.hadBaseline = !manquante;
+        poller.cycleCount = 0;
+        if (serverTime) poller.since = serverTime;
+        items = Array.from(poller.itemsById.values());
+        notifierAbonnes(poller, entity, items);
+        return;
+      }
+    }
     const { items: fetched, serverTime } = await kvGetCollectionDelta(
       entity,
       needsFullPull ? null : poller.since,
@@ -308,6 +346,10 @@ async function pollEntity(entity: string) {
   } finally {
     poller.inFlight = false;
   }
+  notifierAbonnes(poller, entity, items);
+}
+
+function notifierAbonnes(poller: EntityPoller, entity: string, items: any[]) {
   poller.subscribers.forEach(sub => {
     try {
       if (sub.kind === 'doc') {

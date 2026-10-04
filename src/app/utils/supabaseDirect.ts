@@ -160,20 +160,25 @@ async function selectToutesLesLignes(
   target: Target,
   entity: string,
   filtre?: (q: any) => any,
+  colonnes = '*',
 ): Promise<any[]> {
   const cle = isAppData(target) ? 'key' : 'id';
+  // Erreur « colonne de tri absente » (et non une colonne de filtre).
+  const triAbsent = new RegExp(String.raw`(\.|')` + cle + String.raw`('|\s|$)`);
   const lignes: any[] = [];
   let trie = true;
   for (let page = 0; page < PAGES_MAX; page++) {
-    let q: any = whereScope(supabase.from(target.table).select('*') as any, target);
+    let q: any = whereScope(supabase.from(target.table).select(colonnes) as any, target);
     if (filtre) q = filtre(q);
     if (trie) q = q.order(cle, { ascending: true });
     const from = lignes.length;
     const { data, error } = await q.range(from, from + PAGE_LIGNES - 1);
     if (error) {
       // Table sans colonne `id`/`key` triable : on retente une fois sans tri.
-      if (trie && page === 0 && /column|colonne/i.test(error.message || '')) { trie = false; page--; continue; }
-      throw new Error(`lecture ${entity}: ${error.message}`);
+      if (trie && page === 0 && triAbsent.test(error.message || '')) { trie = false; page--; continue; }
+      const err: any = new Error(`lecture ${entity}: ${error.message}`);
+      err.code = (error as any).code;
+      throw err;
     }
     const rows = data || [];
     lignes.push(...rows);
@@ -203,6 +208,105 @@ export async function kvGetCollection<T = any>(entity: string): Promise<T[]> {
   // Copie par appelant : les lignes sont partagées entre requêtes coalescées et
   // certains services modifient les objets reçus (tri, normalisation…).
   return (structuredClone(rows).map((r: any) => fromRow(target, r)).filter(Boolean)) as T[];
+}
+
+// ── Lecture FILTRÉE côté Supabase ─────────────────────────────────────────────
+// `where('magasin_id', '==', X)` était appliqué DANS LE NAVIGATEUR, après avoir
+// téléchargé TOUTE la table (tous magasins). On demande désormais à Supabase de
+// ne renvoyer que les lignes du magasin. Le champ peut être une vraie colonne
+// OU rangé dans la colonne JSONB `data` (selon le schéma) : on interroge les
+// deux à la fois, ce qui renvoie toujours un SUR-ENSEMBLE des bonnes lignes —
+// le filtre exact reste appliqué ensuite côté client (résultat identique).
+export interface FiltreServeur { field: string; op: '==' | 'in'; value: any }
+
+type ModeFiltre = 'mixte' | 'colonne' | 'data' | 'aucun';
+const modesFiltre = new Map<string, ModeFiltre>();
+const CHAMP_SUR = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
+
+function valeurPostgrest(v: any): string {
+  return `"${String(v).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+}
+
+function appliquerFiltres(q: any, filtres: FiltreServeur[], mode: ModeFiltre): any {
+  for (const f of filtres) {
+    const vals: any[] = f.op === 'in' ? f.value : [f.value];
+    if (mode === 'colonne') {
+      q = f.op === 'in' ? q.in(f.field, vals) : q.eq(f.field, f.value);
+    } else if (mode === 'data') {
+      q = f.op === 'in' ? q.in(`data->>${f.field}`, vals.map(String)) : q.eq(`data->>${f.field}`, String(f.value));
+    } else if (mode === 'mixte') {
+      const liste = vals.map(valeurPostgrest).join(',');
+      q = q.or(`${f.field}.in.(${liste}),data->>${f.field}.in.(${liste})`);
+    }
+  }
+  return q;
+}
+
+/** Erreur due au schéma (colonne absente, filtre invalide) — et non au réseau. */
+function erreurDeSchema(err: any): boolean {
+  const code = String(err?.code || '');
+  return code === '42703' || code.startsWith('PGRST1') || /column|colonne|does not exist|failed to parse/i.test(err?.message || '');
+}
+
+const lecturesFiltreesEnCours = new Map<string, Promise<any[]>>();
+
+/**
+ * Comme `kvGetCollection`, mais seules les lignes satisfaisant (au moins) les
+ * filtres sont téléchargées. Repli automatique sur la lecture complète si le
+ * filtrage serveur est impossible pour cette table.
+ */
+export async function kvGetCollectionWhere<T = any>(entity: string, filtres: FiltreServeur[]): Promise<T[]> {
+  const target = resolveTarget(entity);
+  const utilisables = filtres.filter(f => CHAMP_SUR.test(f.field)
+    && (f.op === '==' ? f.value != null && typeof f.value !== 'object'
+                      : Array.isArray(f.value) && f.value.length > 0 && f.value.length <= 100
+                        && f.value.every((x: any) => x != null && typeof x !== 'object')));
+  // app_data / référentiels : petites tables à structure différente → lecture complète.
+  if (!utilisables.length || isAppData(target) || isRefTable(target)) return kvGetCollection<T>(entity);
+
+  const cleMode = `${target.table}|${utilisables.map(f => f.field).join(',')}`;
+  if (modesFiltre.get(cleMode) === 'aucun') return kvGetCollection<T>(entity);
+
+  const cleLecture = `${entity}|${JSON.stringify(utilisables)}`;
+  let pending = lecturesFiltreesEnCours.get(cleLecture);
+  if (!pending) {
+    pending = (async () => {
+      // Mode déjà connu pour cette table en premier, puis les autres (au cas où
+      // le schéma aurait changé depuis).
+      const connu = modesFiltre.get(cleMode);
+      const essais: ModeFiltre[] = (['mixte', 'colonne', 'data'] as ModeFiltre[])
+        .sort((a, b) => (b === connu ? 1 : 0) - (a === connu ? 1 : 0));
+      for (const mode of essais) {
+        try {
+          const rows = await selectToutesLesLignes(target, entity, q => appliquerFiltres(q, utilisables, mode));
+          modesFiltre.set(cleMode, mode);
+          return rows;
+        } catch (err) {
+          if (!erreurDeSchema(err)) throw err;
+          if (modesFiltre.get(cleMode) === mode) modesFiltre.delete(cleMode); // schéma modifié : on redétecte
+        }
+      }
+      modesFiltre.set(cleMode, 'aucun');
+      return null as any;
+    })();
+    lecturesFiltreesEnCours.set(cleLecture, pending);
+    const libere = () => { if (lecturesFiltreesEnCours.get(cleLecture) === pending) lecturesFiltreesEnCours.delete(cleLecture); };
+    pending.then(libere, libere);
+  }
+  const rows = await pending;
+  if (rows == null) return kvGetCollection<T>(entity);
+  return (structuredClone(rows).map((r: any) => fromRow(target, r)).filter(Boolean)) as T[];
+}
+
+/**
+ * Identifiants seuls (très léger) — sert à repérer les suppressions sans
+ * retélécharger toute la table. `null` si non applicable (app_data).
+ */
+export async function kvGetCollectionIds(entity: string): Promise<string[] | null> {
+  const target = resolveTarget(entity);
+  if (isAppData(target)) return null;
+  const rows = await selectToutesLesLignes(target, entity, undefined, 'id');
+  return rows.map((r: any) => String(r.id));
 }
 
 /**
