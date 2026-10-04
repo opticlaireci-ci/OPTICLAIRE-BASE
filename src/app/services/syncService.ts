@@ -8,6 +8,7 @@ import { collection, getDocs, doc } from '../utils/firestoreCompat';
 import { db, auth } from '../utils/firebaseClient';
 import { onAuthStateChanged } from '../utils/authCompat';
 import { logNetworkAware } from '../utils/networkErrors';
+import { isStructuredKey } from './structuredKeys';
 
 export type SyncStatus = 'idle' | 'syncing' | 'synced' | 'error';
 
@@ -28,6 +29,9 @@ export async function pushAllToCloud(): Promise<{ success: boolean; count: numbe
       const key = localStorage.key(i);
       if (!key?.startsWith('leclaire_')) continue;
       if (key.includes('session') || key.includes('current_user') || key === MIGRATION_KEY) continue;
+      // Caches de données vivant dans leurs propres tables (ventes, clients…) :
+      // ne pas les recopier dans app_data (doublon inutile et volumineux).
+      if (isStructuredKey(key)) continue;
       const raw = localStorage.getItem(key);
       if (!raw) continue;
       try {
@@ -58,7 +62,6 @@ export async function pullFromCloud(): Promise<{ success: boolean; count: number
   }
   try {
     const { setItemWithoutSync } = await import('./autoSync');
-    const { isStructuredKey } = await import('./structuredKeys');
 
     const snap = await getDocs(collection(db, 'app_data'));
     const receivedKeys = new Set<string>();
@@ -130,6 +133,7 @@ export function startAutoSync(
             if (!key?.startsWith('leclaire_') || key === MIGRATION_KEY) continue;
             if (key.includes('session') || key.includes('current_user')) continue;
             if (receivedKeys.has(key)) continue;
+            if (isStructuredKey(key)) continue;
             const raw = localStorage.getItem(key);
             if (!raw) continue;
             try {

@@ -12,6 +12,7 @@
 
 import { collection, getDocs, doc, deleteDoc, query, where } from '../utils/firestoreCompat';
 import { db } from '../utils/firebaseClient';
+import { clesCacheSecours } from '../utils/cacheSecours';
 
 export type ResetCible = 'ventes' | 'reglements' | 'clients';
 
@@ -50,6 +51,8 @@ function purgerCacheLocal(prefixes: string[]) {
     const k = localStorage.key(i);
     if (k && prefixes.some(p => k === p || k.startsWith(p))) aSupprimer.push(k);
   }
+  // Copies conservées hors localStorage (localStorage plein) : purgées aussi.
+  for (const k of clesCacheSecours()) if (prefixes.some(p => k === p || k.startsWith(p))) aSupprimer.push(k);
   for (const k of aSupprimer) {
     localStorage.removeItem(k);
     window.dispatchEvent(new StorageEvent('storage', { key: k, storageArea: localStorage }));

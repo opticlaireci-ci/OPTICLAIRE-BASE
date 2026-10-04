@@ -275,7 +275,8 @@ export async function syncAllToSupabase(): Promise<{ success: number; errors: nu
     const key = localStorage.key(i);
     if (key?.startsWith('leclaire_') &&
         !key.includes('session') && !key.includes('current_user') &&
-        !key.includes('sync_registry') && !key.includes('migrated')) {
+        !key.includes('sync_registry') && !key.includes('migrated') &&
+        !isStructuredKey(key)) {
       keys.push(key);
     }
   }

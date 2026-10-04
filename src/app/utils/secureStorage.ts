@@ -1,4 +1,5 @@
 import { logger } from './logger';
+import { clesCacheSecours } from './cacheSecours';
 
 /**
  * PURGE DES DONNÉES MÉTIER DU NAVIGATEUR À LA DÉCONNEXION (audit — ÉLEVÉ 3).
@@ -21,6 +22,8 @@ export function purgeBusinessCaches(): void {
       const cle = localStorage.key(i);
       if (cle && cle.startsWith('leclaire_')) aSupprimer.push(cle);
     }
+    // Copies conservées hors localStorage (localStorage plein) : purgées aussi.
+    for (const cle of clesCacheSecours()) if (cle.startsWith('leclaire_')) aSupprimer.push(cle);
     aSupprimer.forEach((cle) => localStorage.removeItem(cle));
     logger.log(`🧹 ${aSupprimer.length} cache(s) métier purgé(s) à la déconnexion`);
   } catch (err) {
