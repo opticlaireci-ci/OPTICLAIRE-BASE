@@ -144,6 +144,44 @@ function whereScope<Q extends { eq: Function; like: Function; not: Function }>(q
   return q;
 }
 
+// ── Lecture PAGINÉE ────────────────────────────────────────────────────────────
+// Supabase (PostgREST) renvoie AU MAXIMUM 1000 lignes par requête (réglage
+// « Max rows » du projet). Une lecture `select('*')` simple tronquait donc
+// silencieusement les tables de plus de 1000 lignes : au-delà, les ventes et
+// clients les plus récents (imports d'anciens dossiers, nouvelles ventes)
+// étaient bien ENREGISTRÉS mais n'étaient plus jamais RELUS, donc invisibles.
+// On lit désormais page par page, triées sur la clé primaire (ordre stable),
+// jusqu'à la dernière page.
+const PAGE_LIGNES = 1000;
+/** Garde-fou contre une boucle infinie (1 000 pages = 1 000 000 lignes). */
+const PAGES_MAX = 1000;
+
+async function selectToutesLesLignes(
+  target: Target,
+  entity: string,
+  filtre?: (q: any) => any,
+): Promise<any[]> {
+  const cle = isAppData(target) ? 'key' : 'id';
+  const lignes: any[] = [];
+  let trie = true;
+  for (let page = 0; page < PAGES_MAX; page++) {
+    let q: any = whereScope(supabase.from(target.table).select('*') as any, target);
+    if (filtre) q = filtre(q);
+    if (trie) q = q.order(cle, { ascending: true });
+    const from = lignes.length;
+    const { data, error } = await q.range(from, from + PAGE_LIGNES - 1);
+    if (error) {
+      // Table sans colonne `id`/`key` triable : on retente une fois sans tri.
+      if (trie && page === 0 && /column|colonne/i.test(error.message || '')) { trie = false; page--; continue; }
+      throw new Error(`lecture ${entity}: ${error.message}`);
+    }
+    const rows = data || [];
+    lignes.push(...rows);
+    if (rows.length < PAGE_LIGNES) break;
+  }
+  return lignes;
+}
+
 /** Renvoie tous les documents (valeurs) d'une entité/collection. */
 // Lectures de collection EN COURS, par entité. Quand plusieurs écrans demandent
 // la même collection au même instant (ex. un événement 'ventes-updated' réveille
@@ -156,12 +194,7 @@ export async function kvGetCollection<T = any>(entity: string): Promise<T[]> {
   const target = resolveTarget(entity);
   let pending = collectionsEnCours.get(entity);
   if (!pending) {
-    pending = (async () => {
-      const query = whereScope(supabase.from(target.table).select('*') as any, target);
-      const { data, error } = await query;
-      if (error) throw new Error(`kvGetCollection ${entity}: ${error.message}`);
-      return data || [];
-    })();
+    pending = selectToutesLesLignes(target, entity);
     collectionsEnCours.set(entity, pending);
     const libere = () => { if (collectionsEnCours.get(entity) === pending) collectionsEnCours.delete(entity); };
     pending.then(libere, libere);
@@ -184,11 +217,8 @@ export async function kvGetCollectionDelta<T = any>(
 ): Promise<{ items: T[]; serverTime: string | null }> {
   const target = resolveTarget(entity);
   const requestStart = new Date().toISOString();
-  let query = whereScope(supabase.from(target.table).select('*') as any, target);
-  if (since) query = query.gte('updated_at', since);
-  const { data, error } = await query;
-  if (error) throw new Error(`kvGetCollectionDelta ${entity}: ${error.message}`);
-  const items = ((data || []).map((r: any) => fromRow(target, r)).filter(Boolean)) as T[];
+  const data = await selectToutesLesLignes(target, entity, since ? (q) => q.gte('updated_at', since) : undefined);
+  const items = (data.map((r: any) => fromRow(target, r)).filter(Boolean)) as T[];
   return { items, serverTime: requestStart };
 }
 
