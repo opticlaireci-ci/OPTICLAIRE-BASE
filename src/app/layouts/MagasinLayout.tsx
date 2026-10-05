@@ -391,7 +391,12 @@ export function MagasinLayout() {
   }, [location.pathname, location.search]);
 
   if (isLoading || !isAuthenticated) {
-    return null;
+    // Jamais d'écran blanc : un indicateur visible pendant le chargement du profil.
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#d6e4ea', color: '#1a6f8c', fontSize: 14 }}>
+        Chargement…
+      </div>
+    );
   }
 
   const magasinNom = `${TENANT.nom} ${magasinId?.toUpperCase() || 'MAGASIN'}`;

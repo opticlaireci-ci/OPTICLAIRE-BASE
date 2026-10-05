@@ -9,12 +9,13 @@ import './styles/index.css';
 import './adminStockListDesktop.css';
 import App from './app/App';
 
-// Les copies locales rangées dans IndexedDB sont rechargées AVANT l'affichage
-// (au plus ~1,5 s, en général quelques ms) : les pages s'ouvrent déjà remplies.
-void prechargerCacheSecours().finally(() => {
-  createRoot(document.getElementById('root')!).render(
-    <React.StrictMode>
-      <App />
-    </React.StrictMode>
-  );
-});
+// Les copies locales rangées dans IndexedDB sont rechargées EN PARALLÈLE de
+// l'affichage (jamais avant : l'application ne doit pas rester sur une page
+// blanche). Le rechargement prend quelques millisecondes et se termine bien
+// avant que l'utilisateur ait ouvert une page de données.
+void prechargerCacheSecours();
+createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);

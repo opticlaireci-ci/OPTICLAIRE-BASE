@@ -119,7 +119,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    */
   const profilDepuisKv = async (): Promise<ProfilBrut | null> => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      // Utilisateur de la session LOCALE (aucun appel réseau) ; getUser() en secours.
+      const { data: sess } = await supabase.auth.getSession();
+      const user = sess?.session?.user || (await supabase.auth.getUser()).data.user;
       if (!user) return null;
 
       const { data, error } = await supabase
@@ -170,9 +172,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${t}` },
         });
 
-      let profile: ProfilBrut | null = null;
+      // RAPIDITÉ : le profil (rôles, magasins) est lu DIRECTEMENT dans la base
+      // (≈ 0,2 s). La fonction serveur `/me` renvoie exactement les mêmes
+      // informations mais peut mettre plusieurs secondes à « se réveiller »
+      // (démarrage à froid, jusqu'à 12 s de délai) : elle ne sert plus qu'en
+      // secours si la lecture directe échoue.
+      let profile: ProfilBrut | null = await profilDepuisKv();
 
-      try {
+      if (!profile) try {
         let res = await call(token);
         let json = await res.json().catch(() => ({}));
 

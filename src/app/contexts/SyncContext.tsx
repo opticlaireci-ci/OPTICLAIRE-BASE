@@ -80,32 +80,13 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     setSyncVersion(v => v + 1);
   }, []);
 
-  if (!ready) {
-    return (
-      <div style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        height: '100vh',
-        backgroundColor: '#f9fafb',
-        gap: '16px',
-      }}>
-        <div style={{
-          width: '40px',
-          height: '40px',
-          border: '3px solid #e5e7eb',
-          borderTopColor: '#3b82f6',
-          borderRadius: '50%',
-          animation: 'spin 0.8s linear infinite',
-        }} />
-        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-        <p style={{ fontSize: '14px', color: '#6b7280', margin: 0 }}>
-          Synchronisation des données...
-        </p>
-      </div>
-    );
-  }
+  // L'application n'attend PLUS la première synchronisation pour s'afficher.
+  // Auparavant, TOUT (y compris la page de connexion) restait derrière l'écran
+  // « Synchronisation des données… » jusqu'à la fin du pull complet — ou 5 s
+  // quand l'utilisateur n'était pas encore connecté. Les pages affichent
+  // désormais leur copie locale puis se mettent à jour en direct (syncVersion,
+  // événements, temps réel). `ready` reste disponible pour information.
+  void ready;
 
   return (
     <SyncContext.Provider value={{ status, lastSync, syncVersion, forcerSync }}>
