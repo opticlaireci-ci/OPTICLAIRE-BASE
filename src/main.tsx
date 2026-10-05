@@ -8,6 +8,7 @@ import { createRoot } from 'react-dom/client';
 import './styles/index.css';
 import './adminStockListDesktop.css';
 import App from './app/App';
+import { ErreurGlobale } from './app/components/ErreurGlobale';
 
 // Les copies locales rangées dans IndexedDB sont rechargées EN PARALLÈLE de
 // l'affichage (jamais avant : l'application ne doit pas rester sur une page
@@ -16,6 +17,8 @@ import App from './app/App';
 void prechargerCacheSecours();
 createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <App />
+    <ErreurGlobale>
+      <App />
+    </ErreurGlobale>
   </React.StrictMode>
 );

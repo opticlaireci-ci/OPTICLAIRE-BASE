@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { normaliserTotauxVente } from '../utils/venteTotals';
+import { normaliserTotauxVente, montantAssuranceVente } from '../utils/venteTotals';
 import {
   Box,
   Paper,
@@ -72,7 +72,9 @@ export function MouvementsCaisseGlobalPage() {
             magasinId: vente.magasin_id,
             type: 'entree',
             categorie: 'Vente',
-            montant: normaliserTotauxVente(vente).totalNet,
+            // Part prise en charge par l'assurance exclue : ce n'est pas un
+            // encaissement du magasin.
+            montant: Math.max(0, normaliserTotauxVente(vente).totalNet - montantAssuranceVente(vente)),
             libelle: `Vente ${numFacture} - ${vente.numero_client || 'Client'}`,
             modePaiement: (vente.recap && vente.recap.modePaiement) || 'Espèces',
             reference: numFacture,

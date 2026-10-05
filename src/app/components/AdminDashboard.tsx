@@ -255,12 +255,28 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
     // rattachés à la facture concernée, même si le règlement est effectué un
     // autre jour/mois. Cela garantit : CA = paiements + assurance + reste.
     const venteAcompte = (v: any) => Number(v?.recap?.acompte ?? 0) || 0;
-    const paiementVente = (v: any) => venteAcompte(v) + (reglementsParVente[v.id] || 0);
+
+    // ANCIENS DOSSIERS IMPORTÉS : leur chiffre d'affaires appartient au mois
+    // d'origine (date de la vente), mais quand le client vient SOLDER, le
+    // règlement est un encaissement du JOUR où il est payé. Ces règlements sont
+    // donc comptés à la date du règlement (règlements du jour / du mois en
+    // cours), jamais rattachés à la facture d'origine — et le CA du mois en
+    // cours n'est pas touché.
+    const estImportee = (v: any) => !!(v?.recap?.imported || v?.source_import === 'ancien_logiciel' || v?.import_id);
+    const reglementsImportesDates: Array<{ date: Date | null; montant: number }> = [];
+    for (const r of reglements) {
+      const v = ventesById.get(r.vente_id);
+      if (!v || !estImportee(v)) continue;
+      if (String((r as any).details || '').trim().toLowerCase() === 'acompte importé') continue;
+      reglementsImportesDates.push({ date: dateOf(r.date), montant: Number(r.montant) || 0 });
+    }
+    const paiementVente = (v: any) => venteAcompte(v) + (estImportee(v) ? 0 : (reglementsParVente[v.id] || 0));
 
     // ── STATISTIQUES DU JOUR ──────────────────────────────────────────────────
     let caToday = 0, bonsToday = 0, payToday = 0, factToday = 0, devisToday = 0;
     for (const v of realSales) { if (isToday(dateOf(v.date))) { caToday += venteNet(v); bonsToday += bonsAmount(v); factToday++; payToday += paiementVente(v); } }
     for (const v of devisAll) { if (isToday(dateOf(v.date))) devisToday++; }
+    for (const r of reglementsImportesDates) if (isToday(r.date)) payToday += r.montant;
 
     // ── Séries mensuelles : les paiements sont rattachés à leur facture ───────
     // et non à la date du règlement. Le rapprochement financier est donc stable
@@ -279,11 +295,13 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
       }
     }
     for (const v of devisAll) { const x = dateOf(v.date); if (inYear(x, annee)) devisCntM[x!.getMonth()]++; }
+    for (const r of reglementsImportesDates) if (inYear(r.date, annee)) payM[r.date!.getMonth()] += r.montant;
 
     // ── Journalier (mois sélectionné) : factures créées ce jour ──────────────
     const nbJours = new Date(annee, mois + 1, 0).getDate();
     const dayData = Array.from({ length: nbJours }, (_, i) => ({ jour: i + 1, ca: 0, paiements: 0, bons: 0, restant: 0 }));
     for (const v of realSales) { const x = dateOf(v.date); if (inMonth(x)) { const i = x!.getDate() - 1; if (dayData[i]) { dayData[i].ca += venteNet(v); dayData[i].bons += bonsAmount(v); dayData[i].paiements += paiementVente(v); dayData[i].restant += restantVente(v); } } }
+    for (const r of reglementsImportesDates) { if (inMonth(r.date)) { const i = r.date!.getDate() - 1; if (dayData[i]) dayData[i].paiements += r.montant; } }
 
     // ── Cumuls année ──────────────────────────────────────────────────────────
     const caYear = caM.reduce((a, b) => a + b, 0);

@@ -165,8 +165,11 @@ export async function afficherPdfBlob(blob: Blob, opts: ViewerOptions = {}): Pro
 </html>`);
     doc.close();
 
-    const pdfjsLib = await import('pdfjs-dist');
-    const workerUrl = (await import('pdfjs-dist/build/pdf.worker.min.mjs?url')).default;
+    const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs') as any;
+      // Version « legacy » : inclut les compléments (polyfills) nécessaires aux
+      // navigateurs moins récents (téléphones). La version standard exige
+      // Map.getOrInsertComputed, absent de nombreux navigateurs → PDF impossibles.
+    const workerUrl = (await import('pdfjs-dist/legacy/build/pdf.worker.min.mjs?url')).default;
     pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
 
     const bytes = new Uint8Array(await safeBlob.arrayBuffer());

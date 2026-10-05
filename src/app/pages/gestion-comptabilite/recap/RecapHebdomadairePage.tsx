@@ -7,8 +7,10 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { addCreateAudit, addUpdateAudit, AuditInfo } from '../../../utils/auditUtils';
 import { TENANT } from '../../../config/tenant';
 import { chargerToutesLesVentes, type VenteSupabase } from '../../../services/ventesService';
+import { chargerTousLesReglements, type ReglementSupabase } from '../../../services/reglementsService';
 import { afficherPdfBlob, imprimerPageCourante } from '../../../utils/inAppViewer';
 import { setVisibleInterval, PAGE_POLL_MS } from '../../../utils/visibleInterval';
+import { estPaiementAssurance } from '../../../utils/venteTotals';
 
 // Jours de la semaine (lundi → dimanche) tels qu'affichés dans le tableau.
 const JOURS = ['LUNDI', 'MARDI', 'MERCREDI', 'JEUDI', 'VENDREDI', 'SAMEDI', 'DIMANCHE'] as const;
@@ -192,6 +194,39 @@ function mouvementsAdministrationParJour(
   return result;
 }
 
+/**
+ * ENCAISSEMENTS CLIENTS par jour — EXACTEMENT les entrées que la page
+ * « Mouvements entrées et sorties » du magasin affiche automatiquement :
+ *   • l'ACOMPTE de chaque vente, au jour de la vente ;
+ *   • chaque RÈGLEMENT client, au jour du règlement.
+ * Les bons d'assurance n'en font pas partie (ce ne sont pas des encaissements).
+ */
+function encaissementsClientsParJour(
+  magasinId: string,
+  semaine: string,
+  ventes: VenteSupabase[],
+  reglements: ReglementSupabase[],
+): Record<Jour, number> {
+  const result = Object.fromEntries(JOURS.map(j => [j, 0])) as Record<Jour, number>;
+  const jourDates = JOURS.map((_, i) => dateDuJour(semaine, i));
+  const mag = String(magasinId).toUpperCase();
+  const ajouter = (date: string, montant: number) => {
+    const idx = jourDates.indexOf(dateMouvementISO(date));
+    if (idx !== -1 && montant > 0) result[JOURS[idx]] += montant;
+  };
+  for (const v of ventes) {
+    if (String(v.magasin_id || '').toUpperCase() !== mag) continue;
+    if (estPaiementAssurance((v.recap as any)?.modePaiement)) continue;
+    ajouter(v.date, parseFloat(String((v.recap as any)?.acompte ?? '0')) || 0);
+  }
+  for (const r of reglements) {
+    if (String(r.magasin_id || '').toUpperCase() !== mag) continue;
+    if (estPaiementAssurance(r.mode_paiement)) continue;
+    ajouter(r.date, Number(r.montant) || 0);
+  }
+  return result;
+}
+
 /** Construit les lignes recettes/dépenses/R-D + totaux d'un magasin pour une semaine. */
 function calcRecapMagasin(
   magasinId: string,
@@ -200,23 +235,28 @@ function calcRecapMagasin(
   mouvementsCaisse: MouvementCaisseRecap[] = [],
   mouvementsAdministration: MouvementAdministrationRecap[] = [],
   ventesSource?: VenteSupabase[],
+  reglementsSource: ReglementSupabase[] = [],
 ): RecapMagasin {
-  // Le Récap Hebdomadaire est désormais alimenté directement par les
-  // Mouvements Entrées/Sorties du magasin :
-  //   - toutes les ENTRÉES = recettes
-  //   - toutes les SORTIES = dépenses
+  // Le Récap Hebdomadaire est alimenté par les Mouvements Entrées/Sorties du
+  // magasin, jour par jour :
+  //   - toutes les ENTRÉES = recettes : saisies manuelles + encaissements
+  //     clients (acomptes et règlements) ;
+  //   - toutes les SORTIES = dépenses.
   // Les ventes et anciennes saisies manuelles ne sont donc plus additionnées
   // afin d'éviter les doubles comptages.
   const recettesCaisse = mouvementsCaisseParJour(magasinId, semaine, mouvementsCaisse, 'entree');
   const depensesCaisse = mouvementsCaisseParJour(magasinId, semaine, mouvementsCaisse, 'sortie');
   const recettesAdministration = mouvementsAdministrationParJour(magasinId, semaine, mouvementsAdministration, 'entree');
   const depensesAdministration = mouvementsAdministrationParJour(magasinId, semaine, mouvementsAdministration, 'sortie');
+  // Encaissements clients (acomptes + règlements) affichés comme ENTRÉES dans
+  // les mouvements du magasin → comptés dans les RECETTES du jour.
+  const encaissements = encaissementsClientsParJour(magasinId, semaine, ventesSource || [], reglementsSource);
   let totalR = 0, totalD = 0;
   const lignes = JOURS.map(jour => {
     // Les ENTRÉES et SORTIES peuvent provenir de la caisse ou de la
     // comptabilité générale. On additionne les deux sources après normalisation
     // du type et du magasin.
-    const recettes = (recettesCaisse[jour] || 0) + (recettesAdministration[jour] || 0);
+    const recettes = (recettesCaisse[jour] || 0) + (recettesAdministration[jour] || 0) + (encaissements[jour] || 0);
     const depenses = (depensesCaisse[jour] || 0) + (depensesAdministration[jour] || 0);
     totalR += recettes; totalD += depenses;
     return { jour, recettes, depenses, rd: recettes - depenses };
@@ -449,23 +489,27 @@ export function RecapHebdomadairePage() {
   const [mouvementsCaisse] = useLiveData<MouvementCaisseRecap>('leclaire_mouvements_caisse', []);
   const [mouvementsAdministration] = useLiveData<MouvementAdministrationRecap>('leclaire_mouvements', []);
   const [ventesAll, setVentesAll] = useState<VenteSupabase[] | null>(null);
+  const [reglementsAll, setReglementsAll] = useState<ReglementSupabase[]>([]);
   const [semaine, setSemaine] = useState<string>(() => lundiDeLaSemaine(new Date()));
 
   // Les ventes sont rechargées directement pour que le récap reste exact même si
   // le cache local du magasin n'a pas encore été rafraîchi.
   useEffect(() => {
     let annule = false;
-    const load = () => chargerToutesLesVentes().then(rows => {
-      if (!annule) setVentesAll(rows);
-    }).catch(() => {});
+    const load = () => {
+      chargerToutesLesVentes().then(rows => { if (!annule) setVentesAll(rows); }).catch(() => {});
+      chargerTousLesReglements().then(rows => { if (!annule) setReglementsAll(rows); }).catch(() => {});
+    };
     load();
     const stopPolling = setVisibleInterval(load, PAGE_POLL_MS);
     const onUpdate = () => load();
     window.addEventListener('ventes-updated', onUpdate);
+    window.addEventListener('reglements-updated', onUpdate);
     return () => {
       annule = true;
       stopPolling();
       window.removeEventListener('ventes-updated', onUpdate);
+      window.removeEventListener('reglements-updated', onUpdate);
     };
   }, []);
 
@@ -494,9 +538,10 @@ export function RecapHebdomadairePage() {
         mouvementsCaisse,
         mouvementsAdministration,
         ventesAll === null ? undefined : ventesAll,
+        reglementsAll,
       ),
     }));
-  }, [magasins, semaine, recaps, mouvementsCaisse, mouvementsAdministration, ventesAll]);
+  }, [magasins, semaine, recaps, mouvementsCaisse, mouvementsAdministration, ventesAll, reglementsAll]);
 
   const handleSet = (magasinId: string) => (jour: Jour, champ: 'recettes' | 'depenses', valeur: number) => {
     const id = `${magasinId}_${semaine}_${jour}`;

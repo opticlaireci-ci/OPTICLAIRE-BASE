@@ -6,8 +6,11 @@ let pdfjsPromise: Promise<PdfjsModule> | null = null;
 async function getPdfjs(): Promise<PdfjsModule> {
   if (!pdfjsPromise) {
     pdfjsPromise = (async () => {
-      const pdfjsLib = await import('pdfjs-dist');
-      const workerUrl = (await import('pdfjs-dist/build/pdf.worker.min.mjs?url')).default;
+      const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs') as any;
+      // Version « legacy » : inclut les compléments (polyfills) nécessaires aux
+      // navigateurs moins récents (téléphones). La version standard exige
+      // Map.getOrInsertComputed, absent de nombreux navigateurs → PDF impossibles.
+      const workerUrl = (await import('pdfjs-dist/legacy/build/pdf.worker.min.mjs?url')).default;
       pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
       return pdfjsLib;
     })();

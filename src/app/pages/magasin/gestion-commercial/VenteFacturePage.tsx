@@ -740,7 +740,7 @@ async function telechargerDossierClientPDF(vente: any, magasinId?: string) {
   afficherPdfBlob(doc.output('blob'), { titre: 'Dossier', imprimerAuto: true });
 }
 
-async function telechargerReglementPDF(reglement: any, vente: any, magasinId?: string) {
+export async function telechargerReglementPDF(reglement: any, vente: any, magasinId?: string) {
   // Import paresseux : jsPDF chargé uniquement à la génération.
   const { default: jsPDF } = await import('jspdf');
   const doc = new jsPDF();
@@ -5620,7 +5620,7 @@ function FormulaireVente({ magasinId, onRetour, onVenteEnregistree, venteInitial
 // ════════════════════════════════════════════════════════════════════════════
 
 /** Convertit une vente Firestore (snake_case) en VenteSauvegardee (camelCase). */
-function venteSupabaseToSauvegardee(v: VenteSupabase): VenteSauvegardee {
+export function venteSupabaseToSauvegardee(v: VenteSupabase): VenteSauvegardee {
   const totaux = normaliserTotauxVente(v);
   return {
     id: v.id,

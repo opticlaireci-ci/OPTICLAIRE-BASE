@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { imprimerPageCourante } from '../../utils/inAppViewer';
 import { useParams } from 'react-router';
 import {
@@ -31,6 +31,7 @@ import { chargerReglementsParMagasin, readReglementsCacheMap, ReglementSupabase 
 import { useAuth } from '../../contexts/AuthContext';
 import { canAdd } from '../../utils/actionRights';
 import { setVisibleInterval, PAGE_POLL_MS } from '../../utils/visibleInterval';
+import { estPaiementAssurance } from '../../utils/venteTotals';
 const GridAny = Grid as any;
 
 interface MouvementCaisse {
@@ -48,6 +49,8 @@ interface MouvementCaisse {
   nature?: string;
   compteBanque?: string;
   commentaire?: string;
+  /** Origine d'une entrée calculée automatiquement (pour imprimer son reçu). */
+  source?: { kind: 'acompte' | 'reglement'; venteId: string; reglementId?: string };
 }
 
 function getMagasinLabel(magasinId: string): string {
@@ -75,7 +78,8 @@ export function MouvementsCaissePage() {
     const derivees: MouvementCaisse[] = [];
     ventes.forEach((vente) => {
       const montantPaye = parseFloat((vente.recap && vente.recap.acompte) || '0') || 0;
-      if (montantPaye > 0) {
+      // Acompte saisi en mode « Assurance » = prise en charge, pas un encaissement.
+      if (montantPaye > 0 && !estPaiementAssurance(vente.recap && vente.recap.modePaiement)) {
         const numFacture = (vente.recap && (vente.recap.numFacture || vente.recap.numDevis)) || vente.id;
         derivees.push({
           id: `vente-${vente.id}`,
@@ -92,6 +96,7 @@ export function MouvementsCaissePage() {
           nature: 'Vente',
           compteBanque: (vente.recap && vente.recap.compteBanque) || 'CAISSE INTERNE',
           commentaire: (vente as any).observations || `Encaissement de la vente ${numFacture || vente.id}`,
+          source: { kind: 'acompte', venteId: vente.id },
         });
       }
     });
@@ -103,6 +108,8 @@ export function MouvementsCaissePage() {
     return (reglements || [])
       .filter((r) => (r.magasin_id || '').toUpperCase() === (mag || '').toUpperCase())
       .filter((r) => (Number(r.montant) || 0) > 0)
+      // Règlement saisi en mode « Assurance » = prise en charge, pas un encaissement.
+      .filter((r) => !estPaiementAssurance(r.mode_paiement))
       .map((r) => ({
         id: `reglement-${r.id}`,
         date: r.date || new Date().toISOString(),
@@ -118,6 +125,7 @@ export function MouvementsCaissePage() {
         nature: 'Règlement',
         compteBanque: r.compte_banque || 'CAISSE INTERNE',
         commentaire: r.details || `Règlement client ${r.recu || r.id}`,
+        source: { kind: 'reglement' as const, venteId: r.vente_id, reglementId: r.id },
       }));
   };
   const readReglementsCacheMagasin = (mag: string): ReglementSupabase[] => {
@@ -131,6 +139,9 @@ export function MouvementsCaissePage() {
   const [reglementsDerives, setReglementsDerives] = useState<MouvementCaisse[]>(
     () => deriveFromReglements(readReglementsCacheMagasin(magasinId || ''), magasinId || '', readVentesCache(magasinId || '')),
   );
+  // Dernières données brutes chargées (pour imprimer le reçu d'un règlement).
+  const ventesBrutesRef = useRef<VenteSupabase[]>([]);
+  const reglementsBrutsRef = useRef<ReglementSupabase[]>([]);
   const [mouvements, setMouvements] = useState<MouvementCaisse[]>([]);
   const [filteredMouvements, setFilteredMouvements] = useState<MouvementCaisse[]>([]);
   const [filterType, setFilterType] = useState('');
@@ -154,7 +165,9 @@ export function MouvementsCaissePage() {
     setVentesDerivees(deriveFromVentes(readVentesCache(magasinId), magasinId));
     const load = () => {
       chargerVentes(magasinId).then((ventes: VenteSupabase[]) => {
-        if (!annule) setVentesDerivees(deriveFromVentes(ventes, magasinId));
+        if (annule) return;
+        ventesBrutesRef.current = ventes;
+        setVentesDerivees(deriveFromVentes(ventes, magasinId));
       }).catch(() => {});
     };
     load();
@@ -179,7 +192,9 @@ export function MouvementsCaissePage() {
     setReglementsDerives(deriveFromReglements(readReglementsCacheMagasin(magasinId), magasinId, readVentesCache(magasinId)));
     const load = () => {
       chargerReglementsParMagasin(magasinId).then((regls) => {
-        if (!annule) setReglementsDerives(deriveFromReglements(regls, magasinId, readVentesCache(magasinId)));
+        if (annule) return;
+        reglementsBrutsRef.current = regls;
+        setReglementsDerives(deriveFromReglements(regls, magasinId, readVentesCache(magasinId)));
       }).catch(() => {});
     };
     load();
@@ -309,6 +324,58 @@ export function MouvementsCaissePage() {
     imprimerPageCourante();
   };
 
+  // Bouton PDF d'une ligne : pour un acompte ou un règlement client, on ouvre
+  // le REÇU de ce règlement (même document que dans Ventes | Factures). Pour un
+  // mouvement saisi à la main, on imprime la page comme avant.
+  const imprimerMouvement = async (mouvement: MouvementCaisse) => {
+    const src = mouvement.source;
+    if (!src) { handlePrint(); return; }
+    const ventes = ventesBrutesRef.current.length ? ventesBrutesRef.current : readVentesCache(magasinId || '');
+    const venteBrute = ventes.find(v => v.id === src.venteId);
+    if (!venteBrute) { alert('Vente introuvable pour ce règlement. Rechargez la page puis réessayez.'); return; }
+    try {
+      const { telechargerReglementPDF, venteSupabaseToSauvegardee } = await import('./gestion-commercial/VenteFacturePage');
+      const vente = venteSupabaseToSauvegardee(venteBrute);
+      const acompteInitial = parseFloat(String(venteBrute.recap?.acompte ?? '0')) || 0;
+      if (src.kind === 'acompte') {
+        await telechargerReglementPDF({
+          recu: (venteBrute.recap as any)?.numRecu || '—',
+          modePaiement: (venteBrute.recap as any)?.modePaiement || 'ESPECE',
+          compteBanque: (venteBrute.recap as any)?.compteBanque || 'CAISSE INTERNE',
+          details: (venteBrute.recap as any)?.details || '',
+          montant: acompteInitial,
+          totalPaye: acompteInitial,
+          date: venteBrute.date,
+          editePar: venteBrute.edite_par || '—',
+        }, vente, magasinId);
+        return;
+      }
+      // Règlement : cumul payé À CE STADE (acompte + règlements jusqu'à celui-ci).
+      const reglementsVente = (reglementsBrutsRef.current.length ? reglementsBrutsRef.current : readReglementsCacheMagasin(magasinId || ''))
+        .filter(r => r.vente_id === src.venteId)
+        .filter(r => !((venteBrute.recap as any)?.imported && String((r as any).details || '').trim().toLowerCase() === 'acompte importé'))
+        .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
+      const idx = reglementsVente.findIndex(r => r.id === src.reglementId);
+      const reglement = reglementsVente[idx];
+      if (!reglement) { alert('Règlement introuvable. Rechargez la page puis réessayez.'); return; }
+      const totalPaye = acompteInitial + reglementsVente.slice(0, idx + 1).reduce((s, r) => s + (Number(r.montant) || 0), 0);
+      await telechargerReglementPDF({
+        id: reglement.id,
+        recu: reglement.recu,
+        modePaiement: reglement.mode_paiement,
+        compteBanque: reglement.compte_banque,
+        details: reglement.details,
+        montant: reglement.montant,
+        totalPaye,
+        date: reglement.date,
+        editePar: reglement.edite_par,
+      }, vente, magasinId);
+    } catch (e) {
+      console.error('Impression du reçu impossible :', e);
+      alert('Impossible de générer le reçu. Réessayez.');
+    }
+  };
+
   const categoriesEntree = ['Vente', 'Règlement client', 'Remboursement', 'Autre'];
   const categoriesSortie = ['Achat fournitures', 'Frais généraux', 'Salaire', 'Loyer', 'Électricité', 'Eau', 'Téléphone/Internet', 'Transport', 'Autre'];
 
@@ -433,17 +500,37 @@ export function MouvementsCaissePage() {
       {/* Tableau — même présentation que les mouvements de l'administration */}
       <div className="hidden md:block border border-gray-200 rounded overflow-x-auto">
         <TableContainer component={Paper} elevation={0}>
-          <Table sx={{ minWidth: 1250 }}>
+          {/* Largeurs FIXES : les colonnes courtes (n°, type, montant…) prennent
+              peu de place, les textes longs (bénéficiaire, nature, commentaire)
+              passent à la ligne DANS leur colonne au lieu de déborder. */}
+          <Table size="small" sx={{
+            tableLayout: 'fixed', minWidth: 1180,
+            '& th, & td': { px: 1, py: 1, fontSize: 13, verticalAlign: 'middle', whiteSpace: 'normal', overflowWrap: 'anywhere', wordBreak: 'break-word' },
+            '& th': { overflowWrap: 'normal', wordBreak: 'normal', lineHeight: 1.25 },
+          }}>
+            <colgroup>
+              <col style={{ width: 36 }} />
+              <col style={{ width: 96 }} />
+              <col style={{ width: 108 }} />
+              <col style={{ width: 160 }} />
+              <col style={{ width: 76 }} />
+              <col style={{ width: 120 }} />
+              <col style={{ width: 96 }} />
+              <col style={{ width: 96 }} />
+              <col style={{ width: 112 }} />
+              <col />
+              <col style={{ width: 150 }} />
+            </colgroup>
             <TableHead>
               <TableRow sx={{ bgcolor: '#f5f5f5' }}>
                 <TableCell padding="checkbox"><input type="checkbox" /></TableCell>
-                <TableCell sx={{ fontWeight: 'bold' }}>N° Mouvement</TableCell>
+                <TableCell sx={{ fontWeight: 'bold' }}>N° Mouv.</TableCell>
                 <TableCell sx={{ fontWeight: 'bold' }}>Emplacement</TableCell>
                 <TableCell sx={{ fontWeight: 'bold' }}>Bénéficiaire</TableCell>
                 <TableCell sx={{ fontWeight: 'bold' }}>Type</TableCell>
                 <TableCell sx={{ fontWeight: 'bold' }}>Nature</TableCell>
-                <TableCell sx={{ fontWeight: 'bold' }}>Montant</TableCell>
-                <TableCell sx={{ fontWeight: 'bold' }}>Mode de Paiement</TableCell>
+                <TableCell sx={{ fontWeight: 'bold', textAlign: 'right' }}>Montant</TableCell>
+                <TableCell sx={{ fontWeight: 'bold' }}>Mode Paiement</TableCell>
                 <TableCell sx={{ fontWeight: 'bold' }}>Compte Banque</TableCell>
                 <TableCell sx={{ fontWeight: 'bold' }}>Commentaire</TableCell>
                 <TableCell sx={{ fontWeight: 'bold', textAlign: 'center' }}>Édition</TableCell>
@@ -459,6 +546,9 @@ export function MouvementsCaissePage() {
                 const nature = mouvement.nature || mouvement.categorie || (isEntree ? 'Entrée' : 'Sortie');
                 const compte = mouvement.compteBanque || 'CAISSE INTERNE';
                 const commentaire = mouvement.commentaire || mouvement.libelle || `${nature} — ${isEntree ? 'Encaissement' : 'Dépense'}`;
+                const dt = mouvement.date ? new Date(mouvement.date) : null;
+                const dateEdition = dt && !isNaN(dt.getTime()) ? dt.toLocaleDateString('fr-FR') : '—';
+                const heureEdition = dt && !isNaN(dt.getTime()) ? dt.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : '';
                 return (
                   <TableRow key={mouvement.id} hover>
                     <TableCell padding="checkbox"><input type="checkbox" /></TableCell>
@@ -469,22 +559,28 @@ export function MouvementsCaissePage() {
                       <Chip label={isEntree ? 'Entrée' : 'Sortie'} color={isEntree ? 'success' : 'error'} size="small" />
                     </TableCell>
                     <TableCell>{nature}</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold', color: isEntree ? '#16a34a' : '#dc2626' }}>
+                    <TableCell sx={{ fontWeight: 'bold', color: isEntree ? '#16a34a' : '#dc2626', textAlign: 'right', whiteSpace: 'nowrap !important' }}>
                       {isEntree ? '+' : '-'}{(Number(mouvement.montant) || 0).toLocaleString('fr-FR')}
                     </TableCell>
                     <TableCell>{mouvement.modePaiement || 'Espèces'}</TableCell>
                     <TableCell>{compte}</TableCell>
-                    <TableCell sx={{ maxWidth: 260, whiteSpace: 'normal', overflowWrap: 'anywhere' }}>{commentaire}</TableCell>
-                    <TableCell align="center">
-                      <Button
-                        size="small"
-                        variant="contained"
-                        startIcon={<Print />}
-                        onClick={handlePrint}
-                        sx={{ bgcolor: '#0f7894', textTransform: 'none', minWidth: 82 }}
-                      >
-                        PDF
-                      </Button>
+                    <TableCell>{commentaire}</TableCell>
+                    <TableCell>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                        <div style={{ lineHeight: 1.3, minWidth: 0 }}>
+                          <div style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{dateEdition}{heureEdition ? ` ${heureEdition}` : ''}</div>
+                          <div style={{ fontSize: 11, color: '#6b7280' }}>{mouvement.responsable || '—'}</div>
+                        </div>
+                        <Button
+                          size="small"
+                          variant="contained"
+                          onClick={() => imprimerMouvement(mouvement)}
+                          title={mouvement.source ? 'Reçu du règlement (PDF)' : 'Imprimer'}
+                          sx={{ bgcolor: '#0f7894', minWidth: 0, px: 0.75, py: 0.25, flexShrink: 0 }}
+                        >
+                          <Print sx={{ fontSize: 16 }} />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 );
@@ -521,9 +617,9 @@ export function MouvementsCaissePage() {
                 <div><strong>Mode de Paiement :</strong> {mouvement.modePaiement || 'Espèces'}</div>
                 <div><strong>Compte Banque :</strong> {compte}</div>
                 <div style={{ overflowWrap: 'anywhere' }}><strong>Commentaire :</strong> {commentaire}</div>
-                <div><strong>Date :</strong> {new Date(mouvement.date).toLocaleDateString('fr-FR')}</div>
+                <div><strong>Date :</strong> {new Date(mouvement.date).toLocaleDateString('fr-FR')} {new Date(mouvement.date).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</div>
                 <div><strong>Responsable :</strong> {mouvement.responsable || 'Utilisateur'}</div>
-                <Button size="small" variant="contained" startIcon={<Print />} onClick={handlePrint} sx={{ bgcolor: '#0f7894', textTransform: 'none', width: 'fit-content', mt: 0.5 }}>PDF</Button>
+                <Button size="small" variant="contained" startIcon={<Print />} onClick={() => imprimerMouvement(mouvement)} sx={{ bgcolor: '#0f7894', textTransform: 'none', width: 'fit-content', mt: 0.5 }}>{mouvement.source ? 'Reçu PDF' : 'PDF'}</Button>
               </div>
             </div>
           );

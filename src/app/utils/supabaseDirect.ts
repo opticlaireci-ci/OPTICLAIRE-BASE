@@ -193,6 +193,13 @@ async function selectToutesLesLignes(
 // 5 pages à la fois, ou le Call Center global charge les ventes de 9 magasins),
 // ils partagent UNE seule requête HTTP au lieu d'en lancer N en parallèle : moins
 // de connexions simultanées dans le pool `authenticator` de Supabase.
+// Copie profonde compatible avec TOUS les navigateurs (structuredClone n'existe
+// pas sur Safari < 15.4 ni sur les Chrome Android antérieurs à 2022).
+function copieProfonde<T>(v: T): T {
+  try { if (typeof structuredClone === 'function') return structuredClone(v); } catch { /* repli */ }
+  return JSON.parse(JSON.stringify(v));
+}
+
 const collectionsEnCours = new Map<string, Promise<any[]>>();
 
 export async function kvGetCollection<T = any>(entity: string): Promise<T[]> {
@@ -207,7 +214,7 @@ export async function kvGetCollection<T = any>(entity: string): Promise<T[]> {
   const rows = await pending;
   // Copie par appelant : les lignes sont partagées entre requêtes coalescées et
   // certains services modifient les objets reçus (tri, normalisation…).
-  return (structuredClone(rows).map((r: any) => fromRow(target, r)).filter(Boolean)) as T[];
+  return (copieProfonde(rows).map((r: any) => fromRow(target, r)).filter(Boolean)) as T[];
 }
 
 // ── Lecture FILTRÉE côté Supabase ─────────────────────────────────────────────
@@ -297,7 +304,7 @@ export async function kvGetCollectionWhere<T = any>(entity: string, filtres: Fil
   }
   const rows = await pending;
   if (rows == null) return kvGetCollection<T>(entity);
-  return (structuredClone(rows).map((r: any) => fromRow(target, r)).filter(Boolean)) as T[];
+  return (copieProfonde(rows).map((r: any) => fromRow(target, r)).filter(Boolean)) as T[];
 }
 
 /**

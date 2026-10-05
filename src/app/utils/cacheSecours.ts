@@ -94,8 +94,15 @@ export async function prechargerCacheSecours(delaiMaxMs = 1500): Promise<void> {
 let installe = false;
 /** Enveloppe localStorage. Idempotent ; à appeler avant tout autre module. */
 export function installerCacheSecours(): void {
-  if (installe || typeof localStorage === 'undefined') return;
+  if (installe) return;
   installe = true;
+  // Sur certains téléphones / en navigation privée, le simple ACCÈS à
+  // localStorage lève une erreur : elle ne doit jamais empêcher le démarrage.
+  try { installerSansErreur(); } catch { /* stockage indisponible : on continue sans */ }
+}
+
+function installerSansErreur(): void {
+  if (typeof localStorage === 'undefined') return;
   const ls = localStorage;
   const natifSet = ls.setItem.bind(ls);
   const natifGet = ls.getItem.bind(ls);

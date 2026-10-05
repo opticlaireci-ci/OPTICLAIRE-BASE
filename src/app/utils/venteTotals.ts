@@ -140,3 +140,20 @@ export function avecTotauxVenteNormalises<T extends Record<string, any>>(vente: 
     totalNet: t.totalNet,
   } as T;
 }
+
+/**
+ * Un paiement saisi avec un mode « Assurance » / « Bon d'assurance » n'est PAS
+ * un encaissement du magasin : c'est la prise en charge de l'assurance. Il ne
+ * doit jamais apparaître comme règlement / entrée dans les mouvements de caisse.
+ */
+export function estPaiementAssurance(mode: unknown): boolean {
+  return /assurance/i.test(String(mode || ''));
+}
+
+/** Part prise en charge par les bons d'assurance d'une vente. */
+export function montantAssuranceVente(vente: any): number {
+  const bons = Array.isArray(vente?.bons_assurance) ? vente.bons_assurance
+    : (Array.isArray(vente?.bonsAssurance) ? vente.bonsAssurance : []);
+  return bons.reduce((s: number, b: any) =>
+    s + (toNumber(b?.montantPrisEnCharge ?? b?.montant ?? b?.total ?? b?.montantAssurance) || 0), 0);
+}
