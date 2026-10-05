@@ -13,19 +13,19 @@ function notify() {
   try { window.dispatchEvent(new CustomEvent('leclaire-sync-update')); } catch {}
 }
 
-async function hydrateOne(lsKey: string, catType: string) {
+async function hydrateOne(lsKey: string, catType: string): Promise<boolean> {
   const items = await chargerCatalogue(catType);
-  safeReplaceLocalArray(lsKey, items);
   logger.log(`💾 Catalogue ${catType} : ${items.length} items`);
+  return safeReplaceLocalArray(lsKey, items);
 }
 
 export async function hydrateCatalogues(): Promise<void> {
-  await Promise.all(
+  const changes = await Promise.all(
     Object.entries(CATALOGUE_KEY_TO_TYPE).map(([lsKey, catType]) =>
-      hydrateOne(lsKey, catType).catch(e => logger.error('❌ hydrate', catType, e))
+      hydrateOne(lsKey, catType).catch(e => { logger.error('❌ hydrate', catType, e); return false; })
     )
   );
-  notify();
+  if (changes.some(Boolean)) notify();
 }
 
 let unsubscribeListener: (() => void) | null = null;

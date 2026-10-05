@@ -207,7 +207,8 @@ export function ClientPage() {
   // Recharger les magasins périodiquement et au focus de la page
   useEffect(() => {
     const reloadMagasins = () => {
-      setMagasins(getAllMagasins());
+      const suivants = getAllMagasins();
+      setMagasins(prev => (JSON.stringify(prev) === JSON.stringify(suivants) ? prev : suivants));
     };
 
     // Recharger au montage

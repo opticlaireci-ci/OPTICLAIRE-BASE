@@ -156,7 +156,11 @@ function ConnectionDiagnostic() {
       update('auth', { status: 'error', durationMs: base.durationMs, detail: `Impossible de joindre Auth : ${msg}` });
     }
 
-    const db = await diagnosticFetch(`${DIAGNOSTIC_SUPABASE_URL}/rest/v1/`, {
+    // Test sur une VRAIE lecture de table (résultat éventuellement vide sans
+    // connexion, mais la base répond). L'ancienne requête visait l'index général
+    // de l'API (`/rest/v1/`), que Supabase refuse sans clé de service : elle
+    // renvoyait toujours « HTTP 401 » alors que la base fonctionnait.
+    const db = await diagnosticFetch(`${DIAGNOSTIC_SUPABASE_URL}/rest/v1/kv_store_10865fd7?select=key&key=eq.app_data:initialized`, {
       headers: { apikey: publicAnonKey, Authorization: `Bearer ${publicAnonKey}` },
     });
     if (db.response) {
@@ -186,7 +190,11 @@ function ConnectionDiagnostic() {
         detail,
       });
     } else {
-      update('edge', { status: 'error', durationMs: edge.durationMs, detail: diagnosticErrorMessage(edge.error) });
+      update('edge', {
+        status: 'error',
+        durationMs: edge.durationMs,
+        detail: `Fonction serveur injoignable (${diagnosticErrorMessage(edge.error)}). La connexion et les ventes fonctionnent ; seuls l'envoi de SMS et la gestion des utilisateurs en dépendent.`,
+      });
     }
 
     setRunning(false);

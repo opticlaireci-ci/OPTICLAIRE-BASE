@@ -13,6 +13,18 @@ import { logger } from '../utils/logger';
 
 import { setItemWithoutSync } from './autoSync';
 
+/**
+ * Écrit le cache seulement s'il change. Renvoie true si la valeur a changé.
+ * Les rafraîchissements périodiques (toutes les 30 s) renvoient presque toujours
+ * les mêmes données : sans ce contrôle, chaque cycle réécrivait le cache et
+ * forçait TOUTES les pages ouvertes à se redessiner → site qui « rame ».
+ */
+export function ecrireCacheSiChange(key: string, json: string): boolean {
+  try { if (localStorage.getItem(key) === json) return false; } catch { /* ignore */ }
+  setItemWithoutSync(key, json);
+  return true;
+}
+
 // Fenêtre de protection après une écriture locale.
 // Doit couvrir : retries RPC (~1 min max), latence mobile, mise en veille brève.
 const RECENT_WRITE_MS = 60_000;
@@ -53,18 +65,17 @@ export function safeReplaceLocalArray(
   key: string,
   remote: any[],
   opts?: { authoritative?: boolean },
-): void {
+): boolean {
   // Protection anti-course : si une écriture locale (et donc une RPC) est en vol,
   // ne pas écraser avec un remote potentiellement en mi-chemin.
   const writes = loadRecentWrites();
   const lastWrite = writes[key];
   if (lastWrite && Date.now() - lastWrite < RECENT_WRITE_MS) {
-    return;
+    return false;
   }
 
   if (remote.length > 0) {
-    setItemWithoutSync(key, JSON.stringify(remote));
-    return;
+    return ecrireCacheSiChange(key, JSON.stringify(remote));
   }
 
   // Mode "autoritaire" : la source (Convex) fait foi. Un remote vide signifie
@@ -72,8 +83,7 @@ export function safeReplaceLocalArray(
   // récente déjà gérée ci-dessus). Utilisé quand la lecture a RÉUSSI ; en cas
   // d'échec de lecture, l'appelant ne doit PAS appeler cette fonction.
   if (opts?.authoritative) {
-    setItemWithoutSync(key, JSON.stringify([]));
-    return;
+    return ecrireCacheSiChange(key, JSON.stringify([]));
   }
   // remote vide : ne pas écraser un cache local non vide
   try {
@@ -82,9 +92,9 @@ export function safeReplaceLocalArray(
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
         logger.warn(`🛡️ Hydratation ignorée pour ${key} (Supabase vide, cache local préservé : ${parsed.length} entrées)`);
-        return;
+        return false;
       }
     }
   } catch {}
-  setItemWithoutSync(key, JSON.stringify([]));
+  return ecrireCacheSiChange(key, JSON.stringify([]));
 }

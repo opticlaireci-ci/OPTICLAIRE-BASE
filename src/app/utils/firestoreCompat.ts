@@ -145,6 +145,18 @@ function makeDocSnap<T = DocumentData>(entity: string, id: string, data: T | nul
   };
 }
 
+// Sérialisation mémorisée par objet : d'un cycle de synchronisation à l'autre,
+// les documents inchangés sont les MÊMES objets (conservés dans itemsById) ; on
+// ne les re-sérialise donc pas toutes les 15 s (des milliers de ventes = gel
+// de l'écran de plusieurs centaines de ms à chaque cycle).
+const serialisations = new WeakMap<object, string>();
+function serialiser(it: any): string {
+  if (!it || typeof it !== 'object') return JSON.stringify(it ?? null);
+  let v = serialisations.get(it);
+  if (v === undefined) { v = JSON.stringify(it); serialisations.set(it, v); }
+  return v;
+}
+
 function makeQuerySnap<T extends { id: string } = DocumentData & { id: string }>(
   entity: string,
   items: T[],
@@ -152,7 +164,7 @@ function makeQuerySnap<T extends { id: string } = DocumentData & { id: string }>
 ): QuerySnap<T> {
   const docs = items.map(it => makeDocSnap<T>(entity, it.id, it));
   const current = new Map<string, string>();
-  items.forEach(it => current.set(it.id, JSON.stringify(it)));
+  items.forEach(it => current.set(it.id, serialiser(it)));
 
   const changes: DocChange<T>[] = [];
   if (prev) {
@@ -241,6 +253,7 @@ interface Subscriber {
   onNext: (snap: any) => void;
   onError?: (err: Error) => void;
   prevMap?: Map<string, string>;
+  lastDoc?: string;
 }
 
 interface EntityPoller {
@@ -354,6 +367,10 @@ function notifierAbonnes(poller: EntityPoller, entity: string, items: any[]) {
     try {
       if (sub.kind === 'doc') {
         const found = items.find(it => it.id === sub.docId);
+        // Document identique au précédent envoi : rien à redessiner.
+        const empreinte = found ? serialiser(found) : 'null';
+        if (sub.lastDoc === empreinte) return;
+        sub.lastDoc = empreinte;
         sub.onNext(makeDocSnap(entity, sub.docId!, found ?? null));
       } else {
         const filtered = sub.constraints?.length
@@ -372,6 +389,11 @@ function notifierAbonnes(poller: EntityPoller, entity: string, items: any[]) {
           return;
         }
         const snap = makeQuerySnap(entity, filtered, sub.prevMap);
+        // Aucun ajout / modification / suppression depuis le dernier envoi : on
+        // n'envoie RIEN. Avant, chaque cycle (toutes les 15 s, par table)
+        // re-dessinait les grands tableaux et réécrivait le cache local même
+        // sans aucun changement → micro-blocages pendant la navigation.
+        if (sub.prevMap && snap.docChanges().length === 0) return;
         sub.prevMap = snap.__snapshotMap;
         sub.onNext(snap);
       }

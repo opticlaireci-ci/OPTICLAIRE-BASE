@@ -18,13 +18,16 @@ export async function hydrateBons(magasinIds: string[]): Promise<void> {
   if (!magasinIds.length) return;
   const rows = await chargerBons(magasinIds);
 
-  safeReplaceLocalArray('leclaire_db_bon-distribution', rows.filter(r => r.type === 'distribution').map(rowToDistribution));
-  safeReplaceLocalArray('leclaire_db_bon-transfert', rows.filter(r => r.type === 'transfert').map(rowToTransfert));
-  safeReplaceLocalArray('leclaire_db_bon-retour', rows.filter(r => r.type === 'retour').map(rowToRetour));
-  safeReplaceLocalArray('leclaire_bons_commande', rows.filter(r => r.type === 'commande').map(rowToCommande));
-  safeReplaceLocalArray('leclaire_bons_livraison', rows.filter(r => r.type === 'livraison').map(rowToLivraison));
-  safeReplaceLocalArray('leclaire_bons_peremption', rows.filter(r => r.type === 'peremption').map(rowToPeremption));
-  notify();
+  const changes = [
+    safeReplaceLocalArray('leclaire_db_bon-distribution', rows.filter(r => r.type === 'distribution').map(rowToDistribution)),
+    safeReplaceLocalArray('leclaire_db_bon-transfert', rows.filter(r => r.type === 'transfert').map(rowToTransfert)),
+    safeReplaceLocalArray('leclaire_db_bon-retour', rows.filter(r => r.type === 'retour').map(rowToRetour)),
+    safeReplaceLocalArray('leclaire_bons_commande', rows.filter(r => r.type === 'commande').map(rowToCommande)),
+    safeReplaceLocalArray('leclaire_bons_livraison', rows.filter(r => r.type === 'livraison').map(rowToLivraison)),
+    safeReplaceLocalArray('leclaire_bons_peremption', rows.filter(r => r.type === 'peremption').map(rowToPeremption)),
+  ];
+  // Pages prévenues uniquement si un bon a réellement changé.
+  if (changes.some(Boolean)) notify();
 }
 
 let unsubscribeListener: (() => void) | null = null;

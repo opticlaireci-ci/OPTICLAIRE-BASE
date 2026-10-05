@@ -4,7 +4,7 @@ import { Printer, FileDown, FileSpreadsheet } from 'lucide-react';
 import { getMagasins, type Magasin } from '../../../constants/magasins';
 import { useLiveData } from '../../../hooks/useLiveData';
 import { useAuth } from '../../../contexts/AuthContext';
-import { addCreateAudit, addUpdateAudit, AuditInfo } from '../../../utils/auditUtils';
+import { addCreateAudit, addUpdateAudit, AuditInfo, resolveUserName } from '../../../utils/auditUtils';
 import { TENANT } from '../../../config/tenant';
 import { chargerToutesLesVentes, type VenteSupabase } from '../../../services/ventesService';
 import { chargerTousLesReglements, type ReglementSupabase } from '../../../services/reglementsService';
@@ -470,7 +470,7 @@ function TableauMouvementsSemaine({
                   <td className="px-2 py-2 text-right font-semibold">{(Number(m.montant) || 0).toLocaleString('fr-FR')}</td>
                   <td className="px-2 py-2 text-gray-600">{m.modePaiement || '—'}</td>
                   <td className="px-2 py-2 text-gray-600 text-xs">—</td>
-                  <td className="px-2 py-2 text-gray-500">{m.responsable || '—'}</td>
+                  <td className="px-2 py-2 text-gray-500">{m.responsable ? resolveUserName(m.responsable) : '—'}</td>
                   <td className="px-2 py-2 text-gray-600">{formatDateAffichage(m.date)}</td>
                 </tr>
               );
@@ -516,7 +516,12 @@ export function RecapHebdomadairePage() {
   // Liste des magasins réactive : un magasin ajouté apparaît automatiquement.
   const [magasins, setMagasins] = useState<Magasin[]>(() => getMagasins());
   useEffect(() => {
-    const refresh = () => setMagasins(getMagasins());
+    // Ne remplacer la liste que si elle a changé : sinon tout le récapitulatif
+    // (tous les magasins) était recalculé et redessiné toutes les 5 s.
+    const refresh = () => {
+      const suivants = getMagasins();
+      setMagasins(prev => (JSON.stringify(prev) === JSON.stringify(suivants) ? prev : suivants));
+    };
     window.addEventListener('storage', refresh);
     window.addEventListener('focus', refresh);
     const interval = setInterval(refresh, 5000);

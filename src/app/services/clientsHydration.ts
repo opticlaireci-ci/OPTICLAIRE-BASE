@@ -24,12 +24,12 @@ function snakeToCamel(r: ClientRow): any {
 function writeCache(magasinId: string, rows: ClientRow[], authoritative = true) {
   // authoritative=false à l'hydratation initiale : un cloud transitoirement vide
   // ne doit pas effacer un cache client peuplé (anti-clignotement à la connexion).
-  safeReplaceLocalArray(
+  const change = safeReplaceLocalArray(
     `leclaire_clients_magasin_${magasinId}`,
     rows.map(snakeToCamel),
     { authoritative },
   );
-  try { window.dispatchEvent(new CustomEvent('leclaire-clients-update', { detail: { magasinId } })); } catch {}
+  if (change) try { window.dispatchEvent(new CustomEvent('leclaire-clients-update', { detail: { magasinId } })); } catch {}
 }
 
 async function hydrateOne(magasinId: string) {

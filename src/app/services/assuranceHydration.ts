@@ -30,25 +30,27 @@ function releveToCamel(r: ReleveAssuranceRow): any {
 
 async function hydrateFacturesOne(magasinId: string) {
   const rows = await chargerFacturesAssurance(magasinId);
-  safeReplaceLocalArray(`leclaire_factures_assurance_${magasinId}`, rows.map(factureToCamel));
   logger.log(`💾 Cache factures assurance ${magasinId} : ${rows.length}`);
+  return safeReplaceLocalArray(`leclaire_factures_assurance_${magasinId}`, rows.map(factureToCamel));
 }
 async function hydrateReglements() {
   const rows = await chargerReglementsAssurance();
-  safeReplaceLocalArray('leclaire_reglements_assurance', rows.map(reglementToCamel));
+  return safeReplaceLocalArray('leclaire_reglements_assurance', rows.map(reglementToCamel));
 }
 async function hydrateReleves() {
   const rows = await chargerRelevesAssurance();
-  safeReplaceLocalArray('leclaire_releves_assurance', rows.map(releveToCamel));
+  return safeReplaceLocalArray('leclaire_releves_assurance', rows.map(releveToCamel));
 }
 
 export async function hydrateAssurance(magasinIds: string[]): Promise<void> {
-  await Promise.all([
-    ...magasinIds.map(id => hydrateFacturesOne(id).catch(e => logger.error('❌ hydrateFactures', id, e))),
-    hydrateReglements().catch(e => logger.error('❌ hydrateReglements', e)),
-    hydrateReleves().catch(e => logger.error('❌ hydrateReleves', e)),
+  const changes = await Promise.all([
+    ...magasinIds.map(id => hydrateFacturesOne(id).catch(e => { logger.error('❌ hydrateFactures', id, e); return false; })),
+    hydrateReglements().catch(e => { logger.error('❌ hydrateReglements', e); return false; }),
+    hydrateReleves().catch(e => { logger.error('❌ hydrateReleves', e); return false; }),
   ]);
-  try { window.dispatchEvent(new CustomEvent('assurance-updated')); } catch {}
+  if (changes.some(Boolean)) {
+    try { window.dispatchEvent(new CustomEvent('assurance-updated')); } catch {}
+  }
 }
 
 let unsubscribeListeners: Array<() => void> = [];
@@ -63,16 +65,16 @@ export function subscribeAssuranceRealtime(magasinIds: string[]): () => void {
     const q = query(collection(db, 'factures_assurance'), where('magasin_id', '==', magasinId));
     unsubscribeListeners.push(onSnapshot(q, () => {
       hydrateFacturesOne(magasinId)
-        .then(() => window.dispatchEvent(new CustomEvent('assurance-updated')))
+        .then(change => { if (change) window.dispatchEvent(new CustomEvent('assurance-updated')); })
         .catch(e => logger.error('❌ rehydrate factures:', e));
     }));
   });
 
   unsubscribeListeners.push(onSnapshot(collection(db, 'reglements_assurance'), () => {
-    hydrateReglements().then(() => window.dispatchEvent(new CustomEvent('assurance-updated')));
+    hydrateReglements().then(change => { if (change) window.dispatchEvent(new CustomEvent('assurance-updated')); });
   }));
   unsubscribeListeners.push(onSnapshot(collection(db, 'releves_assurance'), () => {
-    hydrateReleves().then(() => window.dispatchEvent(new CustomEvent('assurance-updated')));
+    hydrateReleves().then(change => { if (change) window.dispatchEvent(new CustomEvent('assurance-updated')); });
   }));
 
   pollInterval = setInterval(() => {

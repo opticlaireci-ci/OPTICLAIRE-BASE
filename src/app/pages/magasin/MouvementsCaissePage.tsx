@@ -1,3 +1,4 @@
+import { resolveUserName } from '../../utils/auditUtils';
 import { useState, useEffect, useRef } from 'react';
 import { imprimerPageCourante } from '../../utils/inAppViewer';
 import { useParams } from 'react-router';
@@ -33,6 +34,13 @@ import { canAdd } from '../../utils/actionRights';
 import { setVisibleInterval, PAGE_POLL_MS } from '../../utils/visibleInterval';
 import { estPaiementAssurance } from '../../utils/venteTotals';
 const GridAny = Grid as any;
+
+
+/** Nom lisible du responsable (les sorties manuelles stockaient le profil JSON complet). */
+function nomResponsable(valeur: unknown, defaut = 'Utilisateur'): string {
+  const n = resolveUserName(valeur);
+  return n && n !== '-' ? n : defaut;
+}
 
 interface MouvementCaisse {
   id: string;
@@ -266,7 +274,7 @@ export function MouvementsCaissePage() {
       libelle: formLibelle,
       modePaiement: formModePaiement,
       reference: formReference.trim() || `MVT-${Date.now().toString().slice(-6)}`,
-      responsable: localStorage.getItem('leclaire_current_user') || 'Utilisateur',
+      responsable: nomResponsable(localStorage.getItem('leclaire_current_user')),
       beneficiaire: formLibelle.trim() || 'CAISSE',
       nature: formCategorie || 'Autre',
       compteBanque: 'CAISSE INTERNE',
@@ -309,7 +317,7 @@ export function MouvementsCaissePage() {
       'Montant': m.montant,
       'Mode de Paiement': m.modePaiement,
       'Référence': m.reference || '-',
-      'Responsable': m.responsable,
+      'Responsable': nomResponsable(m.responsable),
     }));
 
     const headers = ['Date', 'Type', 'Catégorie', 'Libellé', 'Montant', 'Mode de Paiement', 'Référence', 'Responsable'];
@@ -569,7 +577,7 @@ export function MouvementsCaissePage() {
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
                         <div style={{ lineHeight: 1.3, minWidth: 0 }}>
                           <div style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{dateEdition}{heureEdition ? ` ${heureEdition}` : ''}</div>
-                          <div style={{ fontSize: 11, color: '#6b7280' }}>{mouvement.responsable || '—'}</div>
+                          <div style={{ fontSize: 11, color: '#6b7280' }}>{nomResponsable(mouvement.responsable, '—')}</div>
                         </div>
                         <Button
                           size="small"
@@ -618,7 +626,7 @@ export function MouvementsCaissePage() {
                 <div><strong>Compte Banque :</strong> {compte}</div>
                 <div style={{ overflowWrap: 'anywhere' }}><strong>Commentaire :</strong> {commentaire}</div>
                 <div><strong>Date :</strong> {new Date(mouvement.date).toLocaleDateString('fr-FR')} {new Date(mouvement.date).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</div>
-                <div><strong>Responsable :</strong> {mouvement.responsable || 'Utilisateur'}</div>
+                <div><strong>Responsable :</strong> {nomResponsable(mouvement.responsable)}</div>
                 <Button size="small" variant="contained" startIcon={<Print />} onClick={() => imprimerMouvement(mouvement)} sx={{ bgcolor: '#0f7894', textTransform: 'none', width: 'fit-content', mt: 0.5 }}>{mouvement.source ? 'Reçu PDF' : 'PDF'}</Button>
               </div>
             </div>

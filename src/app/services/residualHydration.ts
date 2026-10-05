@@ -9,6 +9,7 @@ import { chargerRdvEnligne, rowToRdv, replaceRdvEnligne } from './rdvService';
 import { chargerBonsCommandeVerres, rowToBonCommande, replaceBonsCommandeVerres } from './atelierService';
 import { chargerEmplois, rowToEmploi, replaceEmplois } from './emploisService';
 import { setItemWithoutSync } from './autoSync';
+import { ecrireCacheSiChange } from './safeHydrate';
 
 function notify(eventName: string) {
   try { window.dispatchEvent(new CustomEvent(eventName)); } catch {}
@@ -65,12 +66,14 @@ export async function hydrateRdvEnligne(magasinIds: string[]): Promise<void> {
     if (!byMagasin.has(key)) byMagasin.set(key, []);
     byMagasin.get(key)!.push(rowToRdv(r));
   }
+  let change = false;
   for (const [magId, list] of byMagasin) {
-    setItemWithoutSync(`leclaire_rdv_enligne_${magId.toLowerCase()}`, JSON.stringify(list));
-    setItemWithoutSync(`leclaire_rdv_enligne_${magId}`, JSON.stringify(list));
+    const json = JSON.stringify(list);
+    if (ecrireCacheSiChange(`leclaire_rdv_enligne_${magId.toLowerCase()}`, json)) change = true;
+    if (ecrireCacheSiChange(`leclaire_rdv_enligne_${magId}`, json)) change = true;
   }
   logger.log(`💾 Cache RDV en ligne : ${rows.length} entrées`);
-  notify('rdv-updated');
+  if (change) notify('rdv-updated');
 }
 
 export async function hydrateAtelier(): Promise<void> {
@@ -105,9 +108,9 @@ export async function hydrateAtelier(): Promise<void> {
   }
 
   const mapped = rows.map(rowToBonCommande);
-  setItemWithoutSync('leclaire_bons_commande_verres', JSON.stringify(mapped));
+  const change = ecrireCacheSiChange('leclaire_bons_commande_verres', JSON.stringify(mapped));
   logger.log(`💾 Cache atelier : ${mapped.length} entrées`);
-  notify('atelier-updated');
+  if (change) notify('atelier-updated');
 }
 
 export async function hydrateEmplois(magasinIds: string[]): Promise<void> {
@@ -131,9 +134,9 @@ export async function hydrateEmplois(magasinIds: string[]): Promise<void> {
   }
 
   const mapped = rows.map(rowToEmploi);
-  setItemWithoutSync('leclaire_emplois_du_temps', JSON.stringify(mapped));
+  const change = ecrireCacheSiChange('leclaire_emplois_du_temps', JSON.stringify(mapped));
   logger.log(`💾 Cache emplois : ${mapped.length} entrées`);
-  notify('emplois-updated');
+  if (change) notify('emplois-updated');
 }
 
 let unsubscribeListeners: Array<() => void> = [];

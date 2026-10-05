@@ -34,8 +34,8 @@ function writeCache(magasinId: string, rows: VenteSupabase[], authoritative = tr
   // (hoquet réseau / cold-start), on PRÉSERVE le cache local peuplé au lieu de le
   // vider (évite le clignotement « les infos partent puis reviennent »).
   // authoritative=true pour le temps réel : reflète les vraies suppressions.
-  safeReplaceLocalArray(`leclaire_ventes_${magasinId}`, rows.map(snakeToCamel), { authoritative });
-  try { window.dispatchEvent(new CustomEvent('ventes-updated', { detail: { magasinId } })); } catch {}
+  const change = safeReplaceLocalArray(`leclaire_ventes_${magasinId}`, rows.map(snakeToCamel), { authoritative });
+  if (change) try { window.dispatchEvent(new CustomEvent('ventes-updated', { detail: { magasinId } })); } catch {}
 }
 
 async function hydrateOne(magasinId: string) {
