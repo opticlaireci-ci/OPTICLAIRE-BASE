@@ -223,6 +223,13 @@ export function afficherHtml(html: string, opts: ViewerOptions = {}): void {
   const frame = document.createElement('iframe');
   frame.title = opts.titre || 'Document à imprimer';
   frame.setAttribute('aria-hidden', 'true');
+  // SÉCURITÉ : le document imprimé contient des données saisies ou importées
+  // (noms de clients…). Sans bac à sable, un texte piégé du type
+  // « <img onerror=…> » s'exécuterait avec les droits de l'application (accès à
+  // la session). `sandbox` SANS « allow-scripts » neutralise tout script ; la
+  // page reste imprimable (allow-same-origin + allow-modals pour la boîte
+  // d'impression).
+  frame.setAttribute('sandbox', 'allow-same-origin allow-modals');
   frame.style.cssText = [
     'position:fixed', 'left:-10000px', 'top:0',
     'width:1px', 'height:1px', 'border:0',

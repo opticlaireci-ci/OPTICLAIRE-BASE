@@ -110,10 +110,13 @@ export function SelectMagasinPage() {
                   <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                     <Store sx={{ fontSize: 40, color: 'primary.main', mr: 2 }} />
                     <Box>
-                      <Typography variant="h6">{magasin.nom}</Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        {magasin.ville}
-                      </Typography>
+                      {/* Le magasin porte son nom dans `label` (`nom`/`ville` n'existent pas). */}
+                      <Typography variant="h6">{magasin.label || magasin.id}</Typography>
+                      {magasin.telephone && (
+                        <Typography variant="body2" color="text.secondary">
+                          {magasin.telephone}
+                        </Typography>
+                      )}
                     </Box>
                   </Box>
                   <Typography variant="body2" color="text.secondary">

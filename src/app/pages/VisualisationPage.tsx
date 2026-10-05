@@ -22,6 +22,9 @@ import { normaliserTotauxVente } from '../utils/venteTotals';
 // factures réglées (partiellement ou totalement) par bon d'assurance.
 const OPTION_BON_ASSURANCE = "Assurance";
 const OPTION_TOUS_MODES = 'Tous les modes de paiement';
+// Tous les encaissements SAUF les bons d'assurance (espèces, mobile money,
+// chèque, virement…) : placé juste après « Virement » dans la liste.
+const OPTION_TOUS_SAUF_ASSURANCE = 'Tous les modes (sauf Assurance)';
 
 type ReportType =
   | 'bons-monture' | 'bons-verre' | 'stock' | 'inventaires'
@@ -187,6 +190,8 @@ export function VisualisationPage() {
     if (!n) return '';
     if (/^(wave|orange money|orange-money|mobile money|mobilemoney)$/.test(n) || n.includes('wave') || n.includes('orange money')) return 'Mobile Money';
     if (n === 'espece' || n === 'especes') return 'Espèces';
+    if (n === 'virement' || n.startsWith('virement')) return 'Virement';
+    if (n === 'cheque' || n === 'cheques') return 'Chèque';
     if (n === 'carte bancaire' || n === 'carte bancaire ') return 'Carte bancaire';
     if (n === 'carte visa' || n.includes('visa')) return 'Carte bancaire';
     if (n === 'assurance' || n.includes('bon assurance') || n.includes("bon d'assurance") || n.includes('bon d assurance')) return 'Assurance';
@@ -196,6 +201,10 @@ export function VisualisationPage() {
   const estModeMobileMoney = (mode: string): boolean => normaliserModePaiement(mode) === 'Mobile Money';
   const modePaiementCorrespond = (modeEnregistre: string, modeFiltre: string): boolean => {
     if (modeFiltre === OPTION_TOUS_MODES) return true;
+    if (modeFiltre === OPTION_TOUS_SAUF_ASSURANCE) {
+      return normaliserModePaiement(modeEnregistre) !== 'Assurance'
+        && !/bon\s*(d[’']?assurance|assurance)/i.test(String(modeEnregistre || ''));
+    }
     const filtre = normaliserModePaiement(modeFiltre);
     const enregistre = normaliserModePaiement(modeEnregistre);
     if (filtre === 'Mobile Money') return estModeMobileMoney(modeEnregistre);
@@ -421,33 +430,24 @@ export function VisualisationPage() {
             .filter(v => dansIntervalle(v.date))
             .filter(v => magasinOk(v.magasin_id))
             .filter(v => Array.isArray(v.bons_assurance) && v.bons_assurance.length > 0);
-          const assRows = filteredAss.map(v => {
-            // Nom de/des assurance(s) du/des bon(s) → affiché SOUS « Bon d'assurance »
-            // dans la case Mode de Paiement (ex. « Bon d'assurance\nASCOMA »).
-            const noms = Array.from(new Set(
-              (v.bons_assurance as any[])
-                .map(b => String(b?.assurance || '').trim())
-                .filter(Boolean)
-                .map(n => n.toUpperCase()),
-            ));
-            // Même structure d’affichage que tous les autres règlements :
-            // la colonne « Mode de Paiement » porte le mode générique
-            // « Assurance », avec le nom de l’assurance en complément pour
-            // conserver l’information du bon sans créer un format de rapport
-            // différent pour ce filtre.
-            const modeCell = noms.length ? noms.join(', ') : 'Assurance';
-            const montantAssurance = (v.bons_assurance as any[]).reduce((s, b) => s + num(
-              b?.montantPrisEnCharge ?? b?.montant ?? b?.total ?? b?.montantAssurance
-            ), 0);
-            return mkRow(`ass-${v.id}`, [
+          // UNE LIGNE PAR ASSURANCE : si un client a deux assurances (ex. NSIA
+          // + ASCOMA), chacune apparaît avec SA part, au lieu d'une seule ligne
+          // où les deux montants étaient additionnés.
+          const assRows = filteredAss.flatMap(v => (v.bons_assurance as any[]).map((b, bi) => {
+            const montantAssurance = num(b?.montantPrisEnCharge ?? b?.montant ?? b?.total ?? b?.montantAssurance);
+            const nom = String(b?.assurance || '').trim().toUpperCase() || 'ASSURANCE';
+            return mkRow(`ass-${v.id}-${bi}`, [
               `${magU(v.magasin_id)}\n${v.client || ''}`, fmtMontant(montantVente(v)), fmtMontant(montantAssurance),
-              numDoc(v), modeCell,
+              numDoc(v), nom,
             ], v.date, montantAssurance);
-          });
+          }));
+          const totalPrisEnCharge = filteredAss.reduce((s, v) => s + (v.bons_assurance as any[]).reduce((ss, b) => ss + num(
+            b?.montantPrisEnCharge ?? b?.montant ?? b?.total ?? b?.montantAssurance
+          ), 0), 0);
           const totalAss = filteredAss.reduce((s, v) => s + montantVente(v), 0);
           return build(titre, nomFichier, headersReg, assRows,
-            `Total factures avec assurance : ${fmtMontant(totalAss)}`,
-            { foot: ['T O T A L', '', fmtMontant(totalAss), '', ''] });
+            `Total pris en charge par les assurances : ${fmtMontant(totalPrisEnCharge)} · Total net des factures concernées : ${fmtMontant(totalAss)}`,
+            { foot: ['T O T A L', '', fmtMontant(totalPrisEnCharge), '', ''] });
         }
 
         const filteredR = reglements
@@ -499,7 +499,10 @@ export function VisualisationPage() {
             }))
           : [];
 
-        const totalAssurance = filteredAssVentes.reduce((s, v) => s +
+        // Les bons d'assurance ne comptent dans le total QUE si leurs lignes sont
+        // affichées (« Tous les modes ») — pas pour « Espèces », « Virement »,
+        // « Tous sauf Assurance »…
+        const totalAssurance = modePaiement !== OPTION_TOUS_MODES ? 0 : filteredAssVentes.reduce((s, v) => s +
           (v.bons_assurance as any[]).reduce((ss, b) => ss + num(
             b?.montantPrisEnCharge ?? b?.montant ?? b?.total ?? b?.montantAssurance
           ), 0), 0);
@@ -1054,10 +1057,15 @@ export function VisualisationPage() {
     // récente ne porte encore exactement ce libellé.
     set.add('Mobile Money');
     set.add('Espèces');
-    set.add('Carte bancaire');
     set.add('Assurance');
+    set.add('Virement');
+    // « Carte bancaire » retirée de la liste (les règlements déjà enregistrés
+    // ainsi restent comptés dans « Tous » et « Tous sauf Assurance »).
+    set.delete('Carte bancaire');
     const arr = Array.from(set);
     arr.sort((a, b) => a.localeCompare(b, 'fr'));
+    const iVirement = arr.findIndex(m => m.toLowerCase() === 'virement');
+    arr.splice(iVirement >= 0 ? iVirement + 1 : arr.length, 0, OPTION_TOUS_SAUF_ASSURANCE);
     return arr;
   }, [modesEnregistres, ventes, reglements]);
 

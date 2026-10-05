@@ -3470,8 +3470,20 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
   });
 
   const fmt = (d: string) => d ? new Date(d).toLocaleDateString('fr-FR') : '—';
-  const totalCA = ventes.reduce((s, v) => s + v.totalNet, 0);
-  const soldees = ventes.filter(v => {
+  // Mini-tableau (Ventes / Soldées / CA) : MOIS EN COURS uniquement. Il repart
+  // automatiquement de zéro le 1er de chaque mois (calculé à chaque affichage).
+  const maintenant = new Date();
+  const moisCourant = `${maintenant.getFullYear()}-${String(maintenant.getMonth() + 1).padStart(2, '0')}`;
+  const libelleMois = maintenant.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+  const moisDe = (d: string): string => {
+    const t = String(d || '');
+    if (/^\d{4}-\d{2}/.test(t)) return t.slice(0, 7);
+    const dt = new Date(t);
+    return isNaN(dt.getTime()) ? '' : `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`;
+  };
+  const ventesDuMois = ventes.filter(v => moisDe(v.date) === moisCourant);
+  const totalCA = ventesDuMois.reduce((s, v) => s + v.totalNet, 0);
+  const soldees = ventesDuMois.filter(v => {
     const acompte = parseFloat(v.recap.acompte) || 0;
     const totalAssurance = v.bonsAssurance.reduce((s, b) => s + (parseFloat(b.montantPrisEnCharge) || 0), 0);
     const totalReglements = (reglementsParVente[v.id] || []).reduce((s, r) => s + r.montant, 0);
@@ -3956,7 +3968,7 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
                                   const newRecap = { ...detail.recap, rdvRetrait: rdvLocal, dateRecuperation: dateRecupLocal };
                                   await mettreAJourVente(detail.id, { recap: newRecap });
                                   setDetail(prev => prev ? { ...prev, recap: newRecap } : prev);
-                                  setVentes(prev => prev.map(v => v.id === detail.id ? { ...v, recap: newRecap } : v));
+                                  // (La liste se met à jour seule : mettreAJourVente émet 'ventes-updated'.)
                                 } catch { alert('Enregistrement échoué, réessayez.'); }
                                 finally { setRdvSaving(false); }
                               }}
@@ -4429,7 +4441,7 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
                                       const newRecap = { ...detail.recap, rdvRetrait: rdvLocal, dateRecuperation: dateRecupLocal };
                                       await mettreAJourVente(detail.id, { recap: newRecap });
                                       setDetail(prev => prev ? { ...prev, recap: newRecap } : prev);
-                                      setVentes(prev => prev.map(v => v.id === detail.id ? { ...v, recap: newRecap } : v));
+                                      // (La liste se met à jour seule : mettreAJourVente émet 'ventes-updated'.)
                                     } catch { alert('Enregistrement échoué, réessayez.'); }
                                     finally { setRdvSaving(false); }
                                   }}
@@ -4914,7 +4926,7 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
                       try {
                         await mettreAJourVente(detail.id, { recap: newRecap });
                         setDetail(prev => prev ? { ...prev, recap: newRecap } : prev);
-                        setVentes(prev => prev.map(v => v.id === detail.id ? { ...v, recap: newRecap } : v));
+                        // (La liste se met à jour seule : mettreAJourVente émet 'ventes-updated'.)
                       } catch { /* SAV enregistré localement, synchro Firestore échouée */ }
                     }
                   }}
@@ -4973,16 +4985,16 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <div className="rounded-lg px-3 py-1.5 text-center" style={{ backgroundColor: '#e3f2fd' }}>
-              <div className="text-base font-bold text-blue-700">{ventes.length}</div>
-              <div className="text-xs text-blue-500">Ventes</div>
+              <div className="text-base font-bold text-blue-700">{ventesDuMois.length}</div>
+              <div className="text-xs text-blue-500">Ventes · {libelleMois}</div>
             </div>
             <div className="rounded-lg px-3 py-1.5 text-center" style={{ backgroundColor: '#e8f5e9' }}>
               <div className="text-base font-bold text-green-700">{soldees}</div>
-              <div className="text-xs text-green-500">Soldées</div>
+              <div className="text-xs text-green-500">Soldées · {libelleMois}</div>
             </div>
             <div className="rounded-lg px-3 py-1.5 text-center" style={{ backgroundColor: '#fff3e0' }}>
               <div className="text-sm font-bold text-orange-700">{totalCA.toLocaleString('fr-FR')}</div>
-              <div className="text-xs text-orange-500">CA (FCFA)</div>
+              <div className="text-xs text-orange-500">CA {libelleMois} (FCFA)</div>
             </div>
             <AddButton
               onClick={onNouvelle}
