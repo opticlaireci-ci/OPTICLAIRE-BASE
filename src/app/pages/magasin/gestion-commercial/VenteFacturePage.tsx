@@ -3265,6 +3265,15 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
     detail?.recap?.imported &&
     String((r as any).details || '').trim().toLowerCase() === 'acompte importé'
   ));
+  // Total RÉELLEMENT payé (acompte initial + tous les règlements enregistrés
+  // ensuite) : c'est ce montant que la facture doit afficher en « ACOMPTE ».
+  // Auparavant la facture ne reprenait que l'acompte initial : un client soldé
+  // par un règlement ultérieur apparaissait encore débiteur (reçu « SOLDÉE »
+  // mais facture « TOTAL RESTE 10 000 »).
+  const acomptePourFacture = (d: VenteSauvegardee): string => String(
+    (parseFloat(d.recap.acompte) || 0)
+    + reglementsEffectifs.reduce((s, r) => s + (Number(r.montant) || 0), 0)
+  );
   // Bons de commande de verres (atelier) — partagés avec la page Atelier et le
   // Règlement verrier. La clé et le hook sont identiques pour rester cohérents.
   const [bonsVerres, setBonsVerres] = useLiveData<any>('leclaire_bons_commande_verres', []);
@@ -4245,7 +4254,7 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
                       bonsAssurance: detail.bonsAssurance,
                       totalNet: detail.totalNet,
                       remisePct: detail.recap.remisePct,
-                      acompte: detail.recap.acompte,
+                      acompte: acomptePourFacture(detail),
                       editePar: (detail as any).createdBy || (detail as any).updatedBy || '—',
                       dateEdition: (detail as any).createdAt || detail.date,
                     }, magasinId)}
@@ -4266,7 +4275,7 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
                       bonsAssurance: detail.bonsAssurance,
                       totalNet: detail.totalNet,
                       remisePct: detail.recap.remisePct,
-                      acompte: detail.recap.acompte,
+                      acompte: acomptePourFacture(detail),
                       editePar: (detail as any).createdBy || (detail as any).updatedBy || '—',
                       dateEdition: (detail as any).createdAt || detail.date,
                     }, magasinId)}
@@ -4290,7 +4299,7 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
                       bonsAssurance: detail.bonsAssurance,
                       totalNet: detail.totalNet,
                       remisePct: detail.recap.remisePct,
-                      acompte: detail.recap.acompte,
+                      acompte: acomptePourFacture(detail),
                       editePar: (detail as any).createdBy || (detail as any).updatedBy || '—',
                       dateEdition: (detail as any).createdAt || detail.date,
                     }, magasinId)}
