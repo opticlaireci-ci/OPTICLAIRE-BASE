@@ -15,15 +15,24 @@ import { clesCacheSecours } from './cacheSecours';
  * locale d'une source de vérité distante (Supabase) : elles sont ré-hydratées à
  * la prochaine connexion, aucune perte définitive.
  */
+/**
+ * Jamais purgé à la déconnexion : les écritures pas encore envoyées au serveur
+ * (une vente saisie hors ligne serait perdue si la session expire) et les
+ * compteurs de numérotation (n° de reçu).
+ */
+function aConserver(cle: string): boolean {
+  return cle === 'leclaire_pending_cloud_writes_v2' || cle.startsWith('leclaire_counter_');
+}
+
 export function purgeBusinessCaches(): void {
   try {
     const aSupprimer: string[] = [];
     for (let i = 0; i < localStorage.length; i++) {
       const cle = localStorage.key(i);
-      if (cle && cle.startsWith('leclaire_')) aSupprimer.push(cle);
+      if (cle && cle.startsWith('leclaire_') && !aConserver(cle)) aSupprimer.push(cle);
     }
     // Copies conservées hors localStorage (localStorage plein) : purgées aussi.
-    for (const cle of clesCacheSecours()) if (cle.startsWith('leclaire_')) aSupprimer.push(cle);
+    for (const cle of clesCacheSecours()) if (cle.startsWith('leclaire_') && !aConserver(cle)) aSupprimer.push(cle);
     aSupprimer.forEach((cle) => localStorage.removeItem(cle));
     logger.log(`🧹 ${aSupprimer.length} cache(s) métier purgé(s) à la déconnexion`);
   } catch (err) {

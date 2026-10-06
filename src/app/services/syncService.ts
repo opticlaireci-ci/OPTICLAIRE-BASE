@@ -150,7 +150,11 @@ export function startAutoSync(
           });
         })
         .then(() => {
-          Storage.prototype.setItem.call(localStorage, MIGRATION_KEY, '1');
+          // Stockage plein : l'écriture native échouerait et la migration
+          // (lourde) serait rejouée à CHAQUE démarrage. On passe par
+          // localStorage.setItem, qui bascule sur la copie de secours.
+          try { Storage.prototype.setItem.call(localStorage, MIGRATION_KEY, '1'); }
+          catch { try { localStorage.setItem(MIGRATION_KEY, '1'); } catch { /* ignore */ } }
           _initialPullDone = true;
           _onStatus?.('synced');
         })
@@ -184,9 +188,17 @@ export function startAutoSync(
 
   // Handlers NOMMÉS afin de pouvoir les retirer dans le cleanup (sinon fuite :
   // ils s'accumulent à chaque re-login / HMR et multiplient les pulls complets).
-  const refresh = () => { pullFromCloud(); };
+  // Au plus un pull complet toutes les 30 s sur retour d'onglet / focus :
+  // chaque passage d'une fenêtre à l'autre retéléchargeait tous les réglages.
+  let dernierPullFocus = 0;
+  const refresh = () => {
+    const maintenant = Date.now();
+    if (maintenant - dernierPullFocus < 30_000) return;
+    dernierPullFocus = maintenant;
+    pullFromCloud();
+  };
   const onVisibility = () => {
-    if (document.visibilityState === 'visible') pullFromCloud();
+    if (document.visibilityState === 'visible') refresh();
   };
   window.addEventListener('focus', refresh);
   window.addEventListener('online', refresh);

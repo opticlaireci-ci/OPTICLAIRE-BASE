@@ -8,6 +8,7 @@ import type { VenteSupabase } from '../services/ventesService';
 import type { ReglementSupabase } from '../services/reglementsService';
 import { TENANT } from '../config/tenant';
 import { normaliserTotauxVente } from '../utils/venteTotals';
+import { encaissementsDuJour } from '../utils/encaissements';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 export interface MagasinRef { id: string; label: string }
@@ -274,9 +275,12 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
 
     // ── STATISTIQUES DU JOUR ──────────────────────────────────────────────────
     let caToday = 0, bonsToday = 0, payToday = 0, factToday = 0, devisToday = 0;
-    for (const v of realSales) { if (isToday(dateOf(v.date))) { caToday += venteNet(v); bonsToday += bonsAmount(v); factToday++; payToday += paiementVente(v); } }
+    for (const v of realSales) { if (isToday(dateOf(v.date))) { caToday += venteNet(v); bonsToday += bonsAmount(v); factToday++; } }
     for (const v of devisAll) { if (isToday(dateOf(v.date))) devisToday++; }
-    for (const r of reglementsImportesDates) if (isToday(r.date)) payToday += r.montant;
+    // Règlements du jour = argent réellement encaissé aujourd'hui (même règle que
+    // la caisse) : acomptes des ventes du jour + règlements payés aujourd'hui,
+    // quelle que soit la date de la facture, hors assurance.
+    payToday = encaissementsDuJour(realSales, reglementsA, today);
 
     // ── Séries mensuelles : les paiements sont rattachés à leur facture ───────
     // et non à la date du règlement. Le rapprochement financier est donc stable

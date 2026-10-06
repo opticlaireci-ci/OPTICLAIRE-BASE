@@ -11,7 +11,8 @@
 -- recevoir le même numéro (incrément atomique).
 --
 -- Le compteur démarre APRÈS le plus grand numéro déjà utilisé (FA-xxxx pour
--- les factures, VF-xxxx pour les ventes flash) : aucun doublon avec l'existant.
+-- les factures, VF-xxxx pour les ventes flash, n° de reçu, référence de bon de
+-- commande verre) : aucun doublon avec l'existant.
 -- ============================================================================
 
 CREATE TABLE IF NOT EXISTS public.compteurs (
@@ -22,34 +23,31 @@ ALTER TABLE public.compteurs ENABLE ROW LEVEL SECURITY;
 -- Aucun accès direct : on passe uniquement par la fonction ci-dessous.
 REVOKE ALL ON public.compteurs FROM anon, authenticated;
 
--- Point de départ = plus grand numéro existant (factures et ventes flash).
-DO $$
-DECLARE
-  max_fa bigint := 0;
-  max_vf bigint := 0;
+-- Point de départ = plus grand numéro existant (factures, ventes flash, reçus,
+-- bons de commande verre).
+CREATE OR REPLACE FUNCTION pg_temp.max_numero(p_table text, p_chemin text[], p_motif text)
+RETURNS bigint LANGUAGE plpgsql AS $f$
+DECLARE r bigint := 0;
 BEGIN
-  IF to_regclass('public.ventes') IS NOT NULL THEN
-    WITH v AS (
-      SELECT upper(trim(coalesce(
-        CASE WHEN jsonb_typeof(to_jsonb(t.*)->'data') = 'object'
-             THEN (to_jsonb(t.*)->'data') || (to_jsonb(t.*) - 'data')
-             ELSE to_jsonb(t.*) END -> 'recap' ->> 'numFacture', ''))) AS num
-      FROM public.ventes t
-    )
-    SELECT
-      coalesce(max(substring(num FROM '^FA-0*([0-9]{1,12})$')::bigint), 0),
-      coalesce(max(substring(num FROM '^VF-0*([0-9]{1,12})$')::bigint), 0)
-    INTO max_fa, max_vf
-    FROM v;
-  END IF;
+  IF to_regclass('public.' || p_table) IS NULL THEN RETURN 0; END IF;
+  EXECUTE format($q$
+    SELECT coalesce(max(substring(upper(trim(v #>> %L)) FROM %L)::bigint), 0)
+    FROM (SELECT CASE WHEN jsonb_typeof(to_jsonb(t.*)->'data') = 'object'
+                      -- colonnes vides ignorées : elles masqueraient la valeur rangée dans data
+                      THEN (to_jsonb(t.*)->'data') || jsonb_strip_nulls(to_jsonb(t.*) - 'data')
+                      ELSE to_jsonb(t.*) END AS v
+          FROM public.%I t) s$q$, p_chemin, p_motif, p_table)
+  INTO r;
+  RETURN coalesce(r, 0);
+END $f$;
 
-  INSERT INTO public.compteurs (nom, valeur) VALUES ('facture', max_fa), ('vente_flash', max_vf)
-  ON CONFLICT (nom) DO UPDATE SET valeur = GREATEST(public.compteurs.valeur, EXCLUDED.valeur);
-
-  RAISE NOTICE 'Prochaine facture : FA-%  |  prochaine vente flash : VF-%',
-    lpad((GREATEST(max_fa, (SELECT valeur FROM public.compteurs WHERE nom = 'facture')) + 1)::text, 4, '0'),
-    lpad((GREATEST(max_vf, (SELECT valeur FROM public.compteurs WHERE nom = 'vente_flash')) + 1)::text, 4, '0');
-END $$;
+INSERT INTO public.compteurs (nom, valeur) VALUES
+  ('facture',            pg_temp.max_numero('ventes', '{recap,numFacture}', '^FA-0*([0-9]{1,12})$')),
+  ('vente_flash',        pg_temp.max_numero('ventes', '{recap,numFacture}', '^VF-0*([0-9]{1,12})$')),
+  ('recu',               GREATEST(pg_temp.max_numero('ventes', '{recap,numRecu}', '^0*([0-9]{1,12})$'),
+                                  pg_temp.max_numero('reglements', '{recu}', '^0*([0-9]{1,12})$'))),
+  ('bon_commande_verre', pg_temp.max_numero('bons_commande_verres', '{num_ref}', '^0*([0-9]{1,12})$'))
+ON CONFLICT (nom) DO UPDATE SET valeur = GREATEST(public.compteurs.valeur, EXCLUDED.valeur);
 
 -- Renvoie le PROCHAIN numéro (1, 2, 3…) et l'enregistre en une seule opération.
 CREATE OR REPLACE FUNCTION public.prochain_numero(p_nom text)

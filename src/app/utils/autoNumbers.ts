@@ -22,7 +22,8 @@ export function genNumFacture(): string {
 }
 
 /**
- * Numéro de facture / vente flash COMMUN À TOUS LES MAGASINS.
+ * Numéro de facture / vente flash / reçu / bon de commande verre COMMUN À TOUS
+ * LES MAGASINS.
  *
  * Le numéro est attribué par la base (fonction `prochain_numero`, script
  * supabase/NUMEROTATION_FACTURES.sql) au moment de l'ENREGISTREMENT : PALMERAIE
@@ -30,9 +31,16 @@ export function genNumFacture(): string {
  * différents et même pour deux ventes simultanées.
  * Repli (script pas encore installé / hors ligne) : ancien compteur local.
  */
-export async function attribuerNumero(type: 'facture' | 'vente_flash'): Promise<string> {
-  const prefixe = type === 'facture' ? 'FA' : 'VF';
-  const cleLocale = type === 'facture' ? 'leclaire_counter_facture' : 'leclaire_counter_vente_flash';
+const FORMATS_NUMERO = {
+  facture:            { prefixe: 'FA-', chiffres: 4, cleLocale: 'leclaire_counter_facture' },
+  vente_flash:        { prefixe: 'VF-', chiffres: 4, cleLocale: 'leclaire_counter_vente_flash' },
+  recu:               { prefixe: '',    chiffres: 5, cleLocale: 'leclaire_counter_recu' },
+  bon_commande_verre: { prefixe: '',    chiffres: 5, cleLocale: 'leclaire_counter_bcv' },
+} as const;
+export type TypeNumero = keyof typeof FORMATS_NUMERO;
+
+export async function attribuerNumero(type: TypeNumero): Promise<string> {
+  const { prefixe, chiffres, cleLocale } = FORMATS_NUMERO[type];
   try {
     const { supabase } = await import('./supabaseClient');
     const { data, error } = await supabase.rpc('prochain_numero', { p_nom: type });
@@ -42,13 +50,13 @@ export async function attribuerNumero(type: 'facture' | 'vente_flash'): Promise<
       try {
         if (n > parseInt(localStorage.getItem(cleLocale) || '0', 10)) localStorage.setItem(cleLocale, String(n));
       } catch { /* ignore */ }
-      return `${prefixe}-${pad(n)}`;
+      return `${prefixe}${pad(n, chiffres)}`;
     }
     console.warn('Numérotation commune indisponible (exécutez NUMEROTATION_FACTURES.sql) :', error?.message);
   } catch (err) {
     console.warn('Numérotation commune indisponible :', err);
   }
-  return `${prefixe}-${pad(getNextCounter(cleLocale))}`;
+  return `${prefixe}${pad(getNextCounter(cleLocale), chiffres)}`;
 }
 
 /** Numéro de devis/proforma : DV-0001, DV-0002… */

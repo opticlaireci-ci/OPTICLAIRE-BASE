@@ -15,6 +15,26 @@ import { projectId, publicAnonKey } from '../../../utils/supabase/info';
 
 const supabaseUrl = `https://${projectId}.supabase.co`;
 
+/**
+ * Aucune requête Supabase ne peut rester bloquée indéfiniment : sur un réseau
+ * qui « décroche » (4G instable, Wi-Fi saturé), une requête sans réponse
+ * gardait l'écran en attente pour toujours — y compris le renouvellement de
+ * session au démarrage, d'où des pages qui ne s'affichaient plus. Au-delà du
+ * délai, la requête échoue proprement et les mécanismes de reprise prennent
+ * le relais.
+ */
+const DELAI_REQUETE_MS = 30_000;
+function fetchAvecDelai(input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
+  const controleur = new AbortController();
+  const minuteur = setTimeout(() => controleur.abort(new DOMException('Délai réseau dépassé', 'TimeoutError')), DELAI_REQUETE_MS);
+  const signalAppelant = init.signal;
+  if (signalAppelant) {
+    if (signalAppelant.aborted) controleur.abort(signalAppelant.reason);
+    else signalAppelant.addEventListener('abort', () => controleur.abort(signalAppelant.reason), { once: true });
+  }
+  return fetch(input, { ...init, signal: controleur.signal }).finally(() => clearTimeout(minuteur));
+}
+
 export const supabase = createClient(supabaseUrl, publicAnonKey, {
   auth: {
     persistSession: true,
@@ -22,6 +42,7 @@ export const supabase = createClient(supabaseUrl, publicAnonKey, {
     detectSessionInUrl: false,
     storageKey: 'opticlaire_supabase_auth',
   },
+  global: { fetch: fetchAvecDelai },
 });
 
 // ── Nom de l'edge function serveur ───────────────────────────────────────────

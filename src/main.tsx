@@ -1,5 +1,6 @@
 // EN PREMIER : localStorage plein → copie locale conservée en mémoire + IndexedDB
-// (voir cacheSecours.ts). Doit être installé avant le chargement des autres modules.
+// (voir cacheSecours.ts). Ce module s'installe de lui-même DÈS son chargement,
+// avant tous les autres imports ci-dessous (l'appel suivant est sans effet).
 import { installerCacheSecours, prechargerCacheSecours } from './app/utils/cacheSecours';
 installerCacheSecours();
 

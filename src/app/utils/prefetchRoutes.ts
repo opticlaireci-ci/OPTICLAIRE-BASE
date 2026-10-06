@@ -33,6 +33,10 @@ let started = false;
 export function prefetchRoutes(): void {
   if (started || typeof window === 'undefined') return;
   started = true;
+  // Connexion lente ou mode « économie de données » : pas de préchargement
+  // (il concurrencerait les données de la page affichée).
+  const connexion = (navigator as any).connection;
+  if (connexion && (connexion.saveData || /(^|-)2g$/.test(String(connexion.effectiveType || '')))) return;
 
   const ric: (cb: () => void) => void =
     (window as any).requestIdleCallback

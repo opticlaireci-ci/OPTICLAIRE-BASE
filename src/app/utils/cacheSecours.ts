@@ -10,10 +10,20 @@
  *
  * Ce module enveloppe localStorage (une seule fois, au démarrage) :
  *   • écriture : localStorage d'abord ; s'il est PLEIN, la valeur va en mémoire
- *     + IndexedDB (plusieurs centaines de Mo disponibles) ;
+ *     + IndexedDB ;
  *   • lecture : mémoire d'abord, puis localStorage ;
- *   • au démarrage, `prechargerCacheSecours()` recharge IndexedDB en mémoire
- *     AVANT l'affichage de l'application → affichage immédiat même après F5.
+ *   • au démarrage, `prechargerCacheSecours()` recharge IndexedDB en mémoire.
+ *
+ * LIMITES (stabilité) : une copie locale n'est qu'un confort d'affichage, la
+ * vraie donnée est sur le serveur. Sans limite, des copies de dizaines de Mo
+ * étaient relues à chaque démarrage et faisaient planter le navigateur (surtout
+ * sur téléphone) — à chaque actualisation, jusqu'à effacement manuel des
+ * données. Désormais :
+ *   • une valeur de plus de TAILLE_MAX_PERSISTEE n'est JAMAIS écrite sur le
+ *     disque : elle reste en mémoire le temps de la session, puis sera
+ *     retéléchargée ;
+ *   • le total conservé sur le disque (IndexedDB) et en mémoire est plafonné ;
+ *     au-delà, les copies les plus anciennes sont abandonnées.
  *
  * Les appelants n'ont rien à changer : ils continuent d'utiliser localStorage.
  */
@@ -21,21 +31,35 @@
 const DB_NOM = 'opticlaire-cache-secours';
 const DB_TABLE = 'cles';
 
+/** Au-delà (en caractères), une valeur n'est conservée qu'en mémoire. */
+const TAILLE_MAX_PERSISTEE = 3_000_000;
+/** Plafond de ce qui est rangé dans IndexedDB (et rechargé au démarrage). */
+const TOTAL_MAX_PERSISTE = 20_000_000;
+/** Plafond de la mémoire occupée par les copies (session en cours). */
+const TOTAL_MAX_MEMOIRE = 60_000_000;
+
 const memoire = new Map<string, string>();
+/** Clés dont la valeur en mémoire est aussi recopiée dans IndexedDB. */
+const persistees = new Set<string>();
 let dbPromise: Promise<IDBDatabase | null> | null = null;
 
 function ouvrirDb(): Promise<IDBDatabase | null> {
   if (dbPromise) return dbPromise;
-  dbPromise = new Promise(resolve => {
-    try {
-      if (typeof indexedDB === 'undefined') return resolve(null);
-      const req = indexedDB.open(DB_NOM, 1);
-      req.onupgradeneeded = () => { req.result.createObjectStore(DB_TABLE); };
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => resolve(null);
-      req.onblocked = () => resolve(null);
-    } catch { resolve(null); }
-  });
+  dbPromise = (async () => {
+    // Le gardien de démarrage (public/boot-guard.js) peut être en train
+    // d'effacer cette base après un démarrage raté : on l'attend.
+    try { await (window as any).__opticlaireReparationEnCours; } catch { /* ignore */ }
+    return new Promise<IDBDatabase | null>(resolve => {
+      try {
+        if (typeof indexedDB === 'undefined') return resolve(null);
+        const req = indexedDB.open(DB_NOM, 1);
+        req.onupgradeneeded = () => { req.result.createObjectStore(DB_TABLE); };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => resolve(null);
+        req.onblocked = () => resolve(null);
+      } catch { resolve(null); }
+    });
+  })();
   return dbPromise;
 }
 
@@ -46,6 +70,12 @@ function idb(mode: IDBTransactionMode, action: (t: IDBObjectStore) => void): voi
   });
 }
 
+function taille(map: Map<string, string>, filtre?: Set<string>): number {
+  let t = 0;
+  map.forEach((v, k) => { if (!filtre || filtre.has(k)) t += v.length; });
+  return t;
+}
+
 // Écritures IndexedDB regroupées par clé (une rafale d'écritures = une seule).
 const ecrituresEnAttente = new Map<string, ReturnType<typeof setTimeout>>();
 function persister(cle: string) {
@@ -54,9 +84,29 @@ function persister(cle: string) {
   ecrituresEnAttente.set(cle, setTimeout(() => {
     ecrituresEnAttente.delete(cle);
     const v = memoire.get(cle);
-    if (v === undefined) idb('readwrite', s => s.delete(cle));
+    if (v === undefined || !persistees.has(cle)) idb('readwrite', s => s.delete(cle));
     else idb('readwrite', s => s.put(v, cle));
   }, 400));
+}
+
+/** Range une valeur dans la mémoire de secours, en respectant les plafonds. */
+function garderEnSecours(cle: string, valeur: string) {
+  memoire.delete(cle); // réinsertion en fin = la plus récente
+  memoire.set(cle, valeur);
+  persistees.delete(cle);
+  const surDisque = valeur.length <= TAILLE_MAX_PERSISTEE
+    && taille(memoire, persistees) + valeur.length <= TOTAL_MAX_PERSISTE;
+  if (surDisque) persistees.add(cle);
+  persister(cle);
+  // Mémoire trop chargée : on abandonne les copies les plus anciennes.
+  let total = taille(memoire);
+  for (const ancienne of Array.from(memoire.keys())) {
+    if (total <= TOTAL_MAX_MEMOIRE || ancienne === cle) break;
+    total -= memoire.get(ancienne)!.length;
+    memoire.delete(ancienne);
+    persistees.delete(ancienne);
+    persister(ancienne);
+  }
 }
 
 function estQuotaDepasse(err: any): boolean {
@@ -69,19 +119,29 @@ export function clesCacheSecours(): string[] {
   return Array.from(memoire.keys());
 }
 
-/** Recharge IndexedDB en mémoire. À attendre AVANT d'afficher l'application. */
+/** Recharge IndexedDB en mémoire (dans la limite du plafond). */
 export async function prechargerCacheSecours(delaiMaxMs = 1500): Promise<void> {
   const chargement = (async () => {
     const db = await ouvrirDb();
     if (!db) return;
     await new Promise<void>(resolve => {
       try {
-        const store = db.transaction(DB_TABLE, 'readonly').objectStore(DB_TABLE);
+        let total = 0;
+        const store = db.transaction(DB_TABLE, 'readwrite').objectStore(DB_TABLE);
         const req = store.openCursor();
         req.onsuccess = () => {
           const c = req.result;
           if (!c) return resolve();
-          if (typeof c.value === 'string' && !memoire.has(String(c.key))) memoire.set(String(c.key), c.value);
+          const cle = String(c.key);
+          const v = c.value;
+          if (typeof v !== 'string' || v.length > TAILLE_MAX_PERSISTEE || total + v.length > TOTAL_MAX_PERSISTE) {
+            // Copie trop grosse (ancienne version sans limite) : supprimée.
+            try { c.delete(); } catch { /* ignore */ }
+          } else if (!memoire.has(cle)) {
+            memoire.set(cle, v);
+            persistees.add(cle);
+            total += v.length;
+          }
           c.continue();
         };
         req.onerror = () => resolve();
@@ -110,17 +170,23 @@ function installerSansErreur(): void {
   const natifClear = ls.clear.bind(ls);
 
   ls.setItem = function (cle: string, valeur: string) {
+    const texte = String(valeur);
+    // Très grosse valeur : jamais sur le disque (voir LIMITES ci-dessus).
+    if (texte.length > TAILLE_MAX_PERSISTEE) {
+      try { natifRemove(cle); } catch { /* ignore */ }
+      garderEnSecours(cle, texte);
+      return;
+    }
     try {
-      natifSet(cle, valeur);
+      natifSet(cle, texte);
       // La valeur tient de nouveau dans localStorage : le secours n'est plus utile.
-      if (memoire.delete(cle)) persister(cle);
+      if (memoire.delete(cle)) { persistees.delete(cle); persister(cle); }
     } catch (err) {
       if (!estQuotaDepasse(err)) throw err;
       // localStorage plein : on retire l'ancienne copie (périmée) et on garde la
       // nouvelle en mémoire + IndexedDB. Aucune erreur remontée à l'appelant.
       try { natifRemove(cle); } catch { /* ignore */ }
-      memoire.set(cle, String(valeur));
-      persister(cle);
+      garderEnSecours(cle, texte);
     }
   };
 
@@ -130,13 +196,23 @@ function installerSansErreur(): void {
   };
 
   ls.removeItem = function (cle: string) {
-    if (memoire.delete(cle)) persister(cle);
+    if (memoire.delete(cle)) { persistees.delete(cle); persister(cle); }
     natifRemove(cle);
   };
 
   ls.clear = function () {
     memoire.clear();
+    persistees.clear();
     idb('readwrite', s => s.clear());
     natifClear();
   };
 }
+
+// Installation DÈS le chargement de ce module (premier import de main.tsx).
+// Indispensable : d'autres modules (autoSync) mémorisent `localStorage.setItem`
+// au moment où ils sont chargés. Installée plus tard, la protection était
+// contournée — un stockage plein faisait alors échouer les écritures et
+// planter l'application à chaque actualisation.
+installerCacheSecours();
+// Signale au gardien de démarrage que le code de l'application est arrivé.
+try { (window as any).__opticlaireCodeCharge = true; } catch { /* ignore */ }

@@ -21,12 +21,15 @@ export class ErreurGlobale extends Component<{ children: ReactNode }, { erreur: 
   componentDidCatch(erreur: Error) {
     console.error('Erreur d’affichage :', erreur);
     try {
-      const derniere = Number(sessionStorage.getItem(CLE_RECHARGEMENT) || 0);
+      const derniere = Number(localStorage.getItem(CLE_RECHARGEMENT) || 0);
       if (Date.now() - derniere > 60_000) {
-        sessionStorage.setItem(CLE_RECHARGEMENT, String(Date.now()));
-        setTimeout(() => window.location.reload(), 1500);
+        localStorage.setItem(CLE_RECHARGEMENT, String(Date.now()));
+        // Une copie locale abîmée est une cause fréquente : on la nettoie
+        // avant de recharger (session et ventes non envoyées conservées).
+        const reparation: Promise<void> = (window as any).__opticlaireReparer?.('caches') || Promise.resolve();
+        reparation.finally(() => setTimeout(() => window.location.reload(), 500));
       }
-    } catch { /* sessionStorage indisponible : l'utilisateur rechargera via le bouton */ }
+    } catch { /* stockage indisponible : l'utilisateur rechargera via le bouton */ }
   }
 
   render() {
@@ -36,7 +39,10 @@ export class ErreurGlobale extends Component<{ children: ReactNode }, { erreur: 
         <div style={{ fontSize: 18, fontWeight: 700 }}>Un problème d’affichage est survenu</div>
         <div style={{ fontSize: 14, maxWidth: 420 }}>Vos données ne sont pas perdues. Rechargez la page pour continuer.</div>
         <button
-          onClick={() => window.location.reload()}
+          onClick={() => {
+            const reparation: Promise<void> = (window as any).__opticlaireReparer?.('caches') || Promise.resolve();
+            reparation.finally(() => window.location.reload());
+          }}
           style={{ padding: '10px 24px', borderRadius: 8, border: 0, background: '#1a7a96', color: '#fff', fontSize: 15, fontWeight: 600, cursor: 'pointer' }}
         >
           Recharger

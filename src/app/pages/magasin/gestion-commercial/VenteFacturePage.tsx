@@ -6,7 +6,7 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { useParams, useSearchParams } from 'react-router';
 import { Calendar, Trash2, X, Download, Plus, Eye, FileText, ArrowLeft, Printer, MoreHorizontal, Pencil } from 'lucide-react';
 import { addCreateAudit, addUpdateAudit, formatDate, resolveUserName, AuditInfo } from '../../../utils/auditUtils';
-import { attribuerNumero, genCodeBarre, genRefBonCommandeVerre, genNumRecu } from '../../../utils/autoNumbers';
+import { attribuerNumero, genCodeBarre } from '../../../utils/autoNumbers';
 import { autoSaveOphtalmologue, autoSaveCabinet } from '../../../utils/autoActeur';
 import { autoSaveClient } from '../../../utils/autoClient';
 import { afficherPdfBlob, afficherHtml } from '../../../utils/inAppViewer';
@@ -2688,7 +2688,7 @@ function ModalSucces({ numFacture, numClient, total, onClose, onNouvelle, onImpr
 // ════════════════════════════════════════════════════════════════════════════
 
 function StepIV({
-  articles, verreTotal, data, onChange, bonsAssurance, onAddBon, onRemoveBon, onEnregistrer, totauxImportes,
+  articles, verreTotal, data, onChange, bonsAssurance, onAddBon, onRemoveBon, onEnregistrer, totauxImportes, enregistrementEnCours = false,
 }: {
   articles: ArticleLigne[];
   verreTotal: string;
@@ -2698,6 +2698,7 @@ function StepIV({
   onAddBon: (b: BonAssurance) => void;
   onRemoveBon: (id: string) => void;
   onEnregistrer: (totalNet: number) => void;
+  enregistrementEnCours?: boolean;
   /** Ancien dossier importé : TOTAL / TOTAL NET de la facture d'origine (prioritaires). */
   totauxImportes?: { totalBrut: number; totalNet: number } | null;
 }) {
@@ -2845,15 +2846,16 @@ function StepIV({
           </div>
           <div style={{ minWidth: 160 }}>
             <Lbl>N° Facture</Lbl>
-            <input className={roCls + ' font-mono font-semibold text-blue-700'} readOnly value={data.numFacture} />
+            <input className={roCls + ' font-mono font-semibold text-blue-700'} readOnly value={data.numFacture} placeholder="Attribué à l'enregistrement" />
           </div>
           <div className="flex-1" />
           <button
             onClick={() => onEnregistrer(totalNet)}
-            className="px-8 py-2 rounded text-white text-sm font-semibold transition-opacity hover:opacity-90 active:scale-95"
+            disabled={enregistrementEnCours}
+            className="px-8 py-2 rounded text-white text-sm font-semibold transition-opacity hover:opacity-90 active:scale-95 disabled:opacity-60 disabled:cursor-wait"
             style={{ backgroundColor: '#1a7a96' }}
           >
-            Enregistrer
+            {enregistrementEnCours ? 'Enregistrement…' : 'Enregistrer'}
           </button>
         </div>
       </div>
@@ -2970,9 +2972,10 @@ function CommandeVerreModal({
   const fournisseurs = useFournisseurs();
   const [showFournSug, setShowFournSug] = useState(false);
 
-  // Référence attribuée automatiquement à l'ouverture (00296, 00297…).
+  // Référence attribuée automatiquement (00296, 00297…) par la base : commune
+  // à tous les magasins, elle arrive juste après l'ouverture du formulaire.
   const [form, setForm] = useState(() => ({
-    reference: genRefBonCommandeVerre(),
+    reference: '',
     fournisseur: '',
     numBC: '',
     numBL: '',
@@ -2990,6 +2993,14 @@ function CommandeVerreModal({
   const setOeil = (oeil: 'od' | 'og', k: keyof OeilVals, v: string) =>
     setForm(prev => ({ ...prev, [oeil]: { ...prev[oeil], [k]: v } }));
 
+  useEffect(() => {
+    let annule = false;
+    attribuerNumero('bon_commande_verre').then(ref => {
+      if (!annule) setForm(prev => (prev.reference ? prev : { ...prev, reference: ref }));
+    });
+    return () => { annule = true; };
+  }, []);
+
   // Change de verre : recharge les champs verre depuis la vente.
   const choisirVerre = (idx: number) => {
     setVerreIdx(idx);
@@ -3006,12 +3017,13 @@ function CommandeVerreModal({
   const totalNet = totalApresRemise + valeurTaxe;
   const totalReste = totalNet - acompteVente;
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!form.fournisseur.trim()) { alert('Veuillez renseigner le fournisseur.'); return; }
+    const reference = form.reference.trim() || await attribuerNumero('bon_commande_verre');
     const bon = {
       id: `bcv_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
       numFacture: vente.recap?.numFacture || '',
-      numRef: form.reference.trim(),
+      numRef: reference,
       numBC: form.numBC.trim(),
       numBL: form.numBL.trim(),
       fournisseur: form.fournisseur.trim(),
@@ -3518,7 +3530,8 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
       id: Date.now().toString(),
       vente_id: detail.id,
       magasin_id: magasinId,
-      recu: genNumRecu(),
+      // N° de reçu commun à tous les magasins (attribué par la base).
+      recu: await attribuerNumero('recu'),
       mode_paiement: nouveauReglement.modePaiement,
       compte_banque: nouveauReglement.compteBanque || '',
       details: nouveauReglement.details || '',
@@ -5279,6 +5292,14 @@ function FormulaireVente({ magasinId, onRetour, onVenteEnregistree, venteInitial
   // Numéro déjà obtenu pour CETTE vente : réutilisé si l'enregistrement doit
   // être relancé (coupure réseau), pour ne pas sauter de numéro.
   const numeroAttribueRef = useRef<string>('');
+  // Identifiant et n° de reçu de CETTE vente, conservés entre deux tentatives :
+  // si l'enregistrement échoue puis que le vendeur clique de nouveau sur
+  // « Enregistrer », c'est la MÊME vente qui est reprise (aucun doublon, même
+  // si la première tentative avait en réalité atteint la base).
+  const venteIdRef = useRef<string>('');
+  const numRecuRef = useRef<string>('');
+  const [enregistrementEnCours, setEnregistrementEnCours] = useState(false);
+  const finTentative = () => { savingRef.current = false; setEnregistrementEnCours(false); };
   const [succes, setSucces] = useState<{ total: string } | null>(null);
   const [derniereVente, setDerniereVente] = useState<any>(null);
   const savingRef = useRef(false);
@@ -5317,6 +5338,7 @@ function FormulaireVente({ magasinId, onRetour, onVenteEnregistree, venteInitial
     // Garde anti-double : empêche un double enregistrement (double-clic / re-render).
     if (savingRef.current) return;
     savingRef.current = true;
+    setEnregistrementEnCours(true);
 
     const userName = user?.nom || user?.prenom || user?.email || 'Utilisateur';
 
@@ -5342,10 +5364,14 @@ function FormulaireVente({ magasinId, onRetour, onVenteEnregistree, venteInitial
       if (!numeroAttribueRef.current) numeroAttribueRef.current = await attribuerNumero('facture');
       numFactureFinal = numeroAttribueRef.current;
     }
-    const recapAvecRecu = { ...recap, numFacture: numFactureFinal, numRecu: (venteInitiale?.recap as any)?.numRecu || recap.numRecu || genNumRecu() };
+    if (!numRecuRef.current) numRecuRef.current = (venteInitiale?.recap as any)?.numRecu || recap.numRecu || await attribuerNumero('recu');
+    const recapAvecRecu = { ...recap, numFacture: numFactureFinal, numRecu: numRecuRef.current };
+    if (!venteIdRef.current) {
+      venteIdRef.current = venteInitiale?.id || (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    }
 
     const vente = {
-      id: venteInitiale?.id || (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`),
+      id: venteIdRef.current,
       date: venteInitiale?.date || new Date().toISOString(),
       numeroClient: client.numeroClient,
       client: `${client.civilite} ${client.nom}`.trim(),
@@ -5417,8 +5443,8 @@ function FormulaireVente({ magasinId, onRetour, onVenteEnregistree, venteInitial
         const message = error instanceof Error ? error.message : String(error);
         logger.error('❌ Échec définitif enregistrement cloud:', error);
         reportFirebaseError('Enregistrement vente', error);
-        alert(`❌ LA VENTE N'A PAS ÉTÉ CONFIRMÉE DANS LA BASE.\n\nCause :\n${message}\n\nAucune confirmation de vente ne sera affichée. Vérifiez la connexion puis réessayez.`);
-        savingRef.current = false;
+        alert(`❌ LA VENTE N'A PAS ÉTÉ CONFIRMÉE DANS LA BASE.\n\nCause :\n${message}\n\nNE RESSAISISSEZ PAS LA VENTE : tout ce que vous avez saisi est conservé à l'écran.\nVérifiez la connexion puis cliquez de nouveau sur « Enregistrer » : la même vente (${recapAvecRecu.numFacture}) sera reprise, sans doublon.`);
+        finTentative();
         return;
       }
 
@@ -5440,11 +5466,11 @@ function FormulaireVente({ magasinId, onRetour, onVenteEnregistree, venteInitial
         if (!stockOk) {
           // La vente est bien dans la base, mais sa sortie de stock n'est pas
           // confirmée : on ne masque pas ce problème derrière l'écran succès.
-          const message = "La vente est enregistrée, mais la sortie de stock n'a pas été confirmée. Réessayez la vente / vérifiez les mouvements avant de continuer.";
+          const message = `La vente ${recapAvecRecu.numFacture} est enregistrée, mais la sortie de stock n'a pas été confirmée.\n\nVérifiez la connexion puis cliquez de nouveau sur « Enregistrer » : la même vente sera reprise (aucun doublon) et seule la sortie de stock sera refaite.`;
           logger.error('❌ Décrément stock vente non confirmé:', venteSupabase.id);
           reportFirebaseError('Mouvement de stock vente', new Error(message));
           alert(`⚠️ ${message}`);
-          savingRef.current = false;
+          finTentative();
           return;
         }
       }
@@ -5459,13 +5485,15 @@ function FormulaireVente({ magasinId, onRetour, onVenteEnregistree, venteInitial
       const message = error instanceof Error ? error.message : String(error);
       logger.error('❌ Échec enregistrement Firebase:', error);
       reportFirebaseError('Enregistrement vente', error);
-      alert(`❌ La vente n'a PAS pu être enregistrée sur Firebase.\n\nCause exacte :\n${message}\n\n(Envoyez ce message à votre développeur.)`);
-      savingRef.current = false;
+      alert(`❌ La vente n'a PAS pu être enregistrée.\n\nCause exacte :\n${message}\n\nVos saisies sont conservées : cliquez de nouveau sur « Enregistrer » (même vente, sans doublon). Si l'erreur persiste, envoyez ce message à votre développeur.`);
+      finTentative();
       return; // On n'affiche pas la vente comme enregistrée si elle a échoué
     }
 
-    savingRef.current = false;
+    finTentative();
     numeroAttribueRef.current = '';
+    venteIdRef.current = '';
+    numRecuRef.current = '';
     setRecap(recapAvecRecu);
     setDerniereVente(venteWithAudit);
     setSucces({ total: totalNetNormalise.toLocaleString('fr-FR') });
@@ -5505,6 +5533,8 @@ function FormulaireVente({ magasinId, onRetour, onVenteEnregistree, venteInitial
     setVerre([]);
     setArticles([]); setObservation(''); setBonsAssurance([]);
     numeroAttribueRef.current = '';
+    venteIdRef.current = '';
+    numRecuRef.current = '';
     setRecap({ remisePct: '0', acompte: '0', modePaiement: '', compteBanque: '', details: '', rdvRetrait: '', numFacture: '' });
     setActive(0); setSucces(null);
   };
@@ -5522,6 +5552,7 @@ function FormulaireVente({ magasinId, onRetour, onVenteEnregistree, venteInitial
       onAddBon={(b) => setBonsAssurance(prev => [...prev, b])}
       onRemoveBon={(id) => setBonsAssurance(prev => prev.filter(b => b.id !== id))}
       onEnregistrer={handleEnregistrer}
+      enregistrementEnCours={enregistrementEnCours}
       totauxImportes={totauxImportes}
     />,
   ];

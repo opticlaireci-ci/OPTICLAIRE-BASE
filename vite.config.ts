@@ -41,10 +41,20 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
-        manualChunks: {
-          'vendor-mui': ['@mui/material', '@mui/icons-material', '@emotion/react', '@emotion/styled'],
-          'vendor-charts': ['recharts'],
-          'vendor-export': ['xlsx', 'jspdf', 'jspdf-autotable'],
+        // Forme « fonction » : seuls les fichiers de ces bibliothèques vont dans
+        // leur paquet. La forme « liste » y entraînait aussi de petits modules
+        // partagés (aides de compilation) dont le démarrage dépend : le paquet
+        // Excel/PDF (≈ 850 Ko) était alors téléchargé à CHAQUE ouverture du site.
+        manualChunks(id) {
+          // Petites aides internes de Vite (chargement à la demande) : sans ce
+          // rangement, elles atterrissaient dans le paquet Excel/PDF et le
+          // démarrage téléchargeait alors tout ce paquet.
+          if (id.includes('vite/preload-helper') || id.includes('commonjsHelpers') || id.includes('modulepreload-polyfill')) return 'runtime';
+          if (!id.includes('node_modules')) return undefined;
+          if (/node_modules\/(@mui|@emotion)\//.test(id)) return 'vendor-mui';
+          if (/node_modules\/recharts\//.test(id)) return 'vendor-charts';
+          if (/node_modules\/(xlsx|jspdf|jspdf-autotable)\//.test(id)) return 'vendor-export';
+          return undefined;
         },
       },
     },

@@ -136,6 +136,9 @@ function FormulaireVenteFlash({ magasinId, onRetour, onSaved }: { magasinId: str
   const [numFactureEtat, setNumFacture] = useState('');
   const [succes, setSucces] = useState(false);
   const savingRef = useRef(false);
+  // Même vente reprise si l'enregistrement est relancé après un échec (pas de doublon).
+  const venteIdRef = useRef<string>('');
+  const [enCours, setEnCours] = useState(false);
   const products = useVenteProducts(magasinId);
   // On ne propose que ce qui est réellement disponible dans le magasin, comme la
   // Vente/Facture : un article géré en stock et épuisé (`stock <= 0`) est retiré
@@ -206,11 +209,14 @@ function FormulaireVenteFlash({ magasinId, onRetour, onSaved }: { magasinId: str
     // Garde anti-double : empêche un double enregistrement (double-clic / re-render).
     if (savingRef.current) return;
     savingRef.current = true;
+    setEnCours(true);
+    const finTentative = () => { savingRef.current = false; setEnCours(false); };
+    if (!venteIdRef.current) venteIdRef.current = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     // Conservé dans l'état : une nouvelle tentative réutilise le même numéro.
     const numFacture = numFactureCourant || await attribuerNumero('vente_flash');
     setNumFacture(numFacture);
     const vente: VenteFlash = {
-      id: (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`), date: new Date().toISOString(),
+      id: venteIdRef.current, date: new Date().toISOString(),
       numeroClient, client: `${civilite} ${client}`.trim(), civilite, telephone, soldeClient,
       profession, jourNaissance, moisNaissance, anneeNaissance,
       articles, bonsAssurance, total, remisePct, valeurRemise, totalNet,
@@ -242,8 +248,8 @@ function FormulaireVenteFlash({ magasinId, onRetour, onSaved }: { magasinId: str
       } as any);
     } catch (err) {
       logger.error('❌ Vente flash non confirmée dans la base:', err);
-      alert(`❌ LA VENTE N'A PAS ÉTÉ ENREGISTRÉE.\n\nLa base de données n'a pas confirmé l'enregistrement.\nVérifiez la connexion puis réessayez.\n\n${err instanceof Error ? err.message : String(err)}`);
-      savingRef.current = false;
+      alert(`❌ LA VENTE N'A PAS ÉTÉ CONFIRMÉE.\n\nNE RESSAISISSEZ PAS LA VENTE : vos saisies sont conservées.\nVérifiez la connexion puis cliquez de nouveau sur « Enregistrer » : la même vente (${numFacture}) sera reprise, sans doublon.\n\n${err instanceof Error ? err.message : String(err)}`);
+      finTentative();
       return;
     }
 
@@ -263,8 +269,8 @@ function FormulaireVenteFlash({ magasinId, onRetour, onSaved }: { magasinId: str
       if (items.length > 0) {
         const stockOk = await enregistrerVente({ magasinId: magasinId.toUpperCase(), bonReference: numFacture, items });
         if (!stockOk) {
-          alert("⚠️ LA VENTE EST ENREGISTRÉE, MAIS LA SORTIE DE STOCK N'A PAS ÉTÉ CONFIRMÉE.\n\nNe continuez pas avec une autre vente identique. Vérifiez la connexion puis contrôlez le stock.");
-          savingRef.current = false;
+          alert(`⚠️ LA VENTE ${numFacture} EST ENREGISTRÉE, MAIS LA SORTIE DE STOCK N'A PAS ÉTÉ CONFIRMÉE.\n\nVérifiez la connexion puis cliquez de nouveau sur « Enregistrer » : la même vente sera reprise (aucun doublon) et seule la sortie de stock sera refaite.`);
+          finTentative();
           return;
         }
         window.dispatchEvent(new CustomEvent('leclaire-sync-update'));
@@ -284,7 +290,8 @@ function FormulaireVenteFlash({ magasinId, onRetour, onSaved }: { magasinId: str
       anneeNaissance,
     }, magasinId);
 
-    savingRef.current = false;
+    finTentative();
+    venteIdRef.current = '';
     setSucces(true);
     setTimeout(() => { setSucces(false); onSaved(); onRetour(); }, 1200);
   };
@@ -591,10 +598,11 @@ function FormulaireVenteFlash({ magasinId, onRetour, onSaved }: { magasinId: str
       <div className="flex justify-end px-5 py-4">
         <button
           onClick={handleEnregistrer}
-          className="px-5 py-2 rounded text-white font-semibold text-sm"
+          disabled={enCours}
+          className="px-5 py-2 rounded text-white font-semibold text-sm disabled:opacity-60 disabled:cursor-wait"
           style={{ backgroundColor: succes ? '#38a169' : '#1a7a96' }}
         >
-          {succes ? '✓ Enregistré !' : 'Enregistrer'}
+          {succes ? '✓ Enregistré !' : enCours ? 'Enregistrement…' : 'Enregistrer'}
         </button>
       </div>
 

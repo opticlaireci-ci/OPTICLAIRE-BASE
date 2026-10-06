@@ -7,6 +7,7 @@ import { logger } from '../utils/logger';
 import { saveToSupabase, loadAllFromSupabase, subscribeToChanges } from './supabaseRealtime';
 import { markLocalWrite, clearLocalWrite } from './safeHydrate';
 import { isCatalogueKey } from './catalogueService';
+import { estCleLocaleAppareil, isStructuredKey } from './structuredKeys';
 import { auth, FIREBASE_DATA_ENABLED } from '../utils/firebaseClient';
 import { onAuthStateChanged } from '../utils/authCompat';
 import { isAuthError, isNoSessionError, isPermissionError } from '../utils/networkErrors';
@@ -115,8 +116,11 @@ function isLeclaireBusinessKey(key: string): boolean {
     !key.includes('recent_writes');
 }
 
-function rememberInMemory(key: string, value: string) {
-  if (isLeclaireBusinessKey(key)) cloudMemoryCache.set(key, value);
+function rememberInMemory(_key: string, _value: string) {
+  // Ne conserve plus de copie en mémoire : cette table n'était jamais relue et
+  // doublait la mémoire occupée par toutes les données (ventes, clients…), ce
+  // qui contribuait aux plantages du navigateur.
+  void isLeclaireBusinessKey;
 }
 
 let syncEnabled = false;
@@ -215,6 +219,9 @@ function pushLeclaireKeyToCloud(key: string, value: string) {
   }
 
   if (key.startsWith('leclaire_') &&
+      !estCleLocaleAppareil(key) &&
+      // Copies de tables (règlements, ventes…) : jamais recopiées dans app_data.
+      !isStructuredKey(key) &&
       !key.includes('session') &&
       !key.includes('current_user') &&
       !key.includes('sync_registry') &&

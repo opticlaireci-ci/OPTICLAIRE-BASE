@@ -1,5 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { normaliserTotauxVente } from '../utils/venteTotals';
+import { encaissementsDuJour } from '../utils/encaissements';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell, AreaChart, Area, LineChart, Line,
@@ -10,7 +11,7 @@ export interface SgopticVente {
   type?: string; date?: string; total_net?: number; totalNet?: number;
   total_brut?: number; total?: number; recap?: any; bons_assurance?: any[]; statut?: string; id?: string; magasin_id?: string;
 }
-export interface SgopticReglement { montant?: number; date?: string }
+export interface SgopticReglement { montant?: number; date?: string; mode_paiement?: string; details?: string; vente_id?: string }
 
 const MONTHS_FR = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sept', 'Oct', 'Nov', 'Déc'];
 const MONTHS_FR_LONG = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
@@ -119,8 +120,12 @@ export function SgopticDashboard({ title, ventes, reglements, objectif = 0, taux
     let caToday = 0, bonsToday = 0, payToday = 0, factToday = 0, devisToday = 0;
     for (const v of realSales) {
       if (!isToday(dateOf(v.date))) continue;
-      caToday += venteAmount(v); bonsToday += bonsAmount(v); payToday += paiementVente(v); factToday += 1;
+      caToday += venteAmount(v); bonsToday += bonsAmount(v); factToday += 1;
     }
+    // Règlements du jour = argent réellement encaissé aujourd'hui (même règle que
+    // la caisse) : acomptes des ventes du jour + règlements payés aujourd'hui,
+    // quelle que soit la date de la facture, hors assurance.
+    payToday = encaissementsDuJour(realSales, reglements, today);
     for (const v of devis) { if (isToday(dateOf(v.date))) devisToday += 1; }
     const pctRealiseToday = objectif > 0 ? (caToday / objectif) * 100 : 0;
 

@@ -84,6 +84,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // puis le profil est revalidé en arrière-plan via l'edge function `/me`.
   const [user, setUser] = useState<User | null>(() => readCachedUser());
   const [isLoading, setIsLoading] = useState(() => !readCachedUser());
+
+  // Confirme au gardien de démarrage (public/boot-guard.js) que l'application
+  // s'est affichée et tient quelques secondes. Sans cette confirmation (plantage,
+  // blocage), le prochain chargement nettoie lui-même les copies locales.
+  useEffect(() => {
+    if (isLoading) return;
+    (window as any).__opticlaireAffichee = true;
+    const t = setTimeout(() => { try { (window as any).__opticlaireDemarrageReussi?.(); } catch { /* ignore */ } }, 4000);
+    return () => clearTimeout(t);
+  }, [isLoading]);
   // useRef (et non un objet recréé à chaque rendu) : sinon le garde anti-duplication
   // ne persiste pas et l'hydratation Firebase (nombreux onSnapshot) se relance en
   // boucle, empilant les écouteurs et saturant l'app de re-rendus.
@@ -332,7 +342,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (cached) startBusinessHydration(cached);
 
     // 1) Restauration de session au démarrage (revalidation en arrière-plan).
-    supabase.auth.getSession().then(async ({ data }) => {
+    // Délai maximum : une session périmée dont le renouvellement ne répond pas
+    // laissait l'application sur « Chargement… » indéfiniment (seul l'effacement
+    // des données du navigateur débloquait). Au-delà, on passe à l'écran de
+    // connexion — ou on garde le profil en cache s'il existe.
+    withTimeout(supabase.auth.getSession(), 12000, 'Vérification de session trop longue.').then(async ({ data }) => {
       if (!mounted) return;
       if (!data.session) {
         // Pas de session valide : purger le profil en cache pour ne pas afficher
@@ -376,7 +390,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // l'écran de connexion au lieu du vide.
       logger.error('❌ getSession() injoignable — bascule en état déconnecté:', err);
       if (mounted) {
-        setUser(null);
+        // Profil en cache : on reste dans l'application (les données se
+        // rechargeront dès que le réseau répond) ; sinon écran de connexion.
+        if (!readCachedUser()) setUser(null);
         setIsLoading(false);
       }
     });
