@@ -21,6 +21,36 @@ export function genNumFacture(): string {
   return `FA-${pad(getNextCounter('leclaire_counter_facture'))}`;
 }
 
+/**
+ * Numéro de facture / vente flash COMMUN À TOUS LES MAGASINS.
+ *
+ * Le numéro est attribué par la base (fonction `prochain_numero`, script
+ * supabase/NUMEROTATION_FACTURES.sql) au moment de l'ENREGISTREMENT : PALMERAIE
+ * fait FA-0001, YOPOUGON enchaîne FA-0002, FA-0003… même depuis des appareils
+ * différents et même pour deux ventes simultanées.
+ * Repli (script pas encore installé / hors ligne) : ancien compteur local.
+ */
+export async function attribuerNumero(type: 'facture' | 'vente_flash'): Promise<string> {
+  const prefixe = type === 'facture' ? 'FA' : 'VF';
+  const cleLocale = type === 'facture' ? 'leclaire_counter_facture' : 'leclaire_counter_vente_flash';
+  try {
+    const { supabase } = await import('./supabaseClient');
+    const { data, error } = await supabase.rpc('prochain_numero', { p_nom: type });
+    const n = Number(data);
+    if (!error && Number.isFinite(n) && n > 0) {
+      // Garde le compteur local aligné (utile si la base devient injoignable).
+      try {
+        if (n > parseInt(localStorage.getItem(cleLocale) || '0', 10)) localStorage.setItem(cleLocale, String(n));
+      } catch { /* ignore */ }
+      return `${prefixe}-${pad(n)}`;
+    }
+    console.warn('Numérotation commune indisponible (exécutez NUMEROTATION_FACTURES.sql) :', error?.message);
+  } catch (err) {
+    console.warn('Numérotation commune indisponible :', err);
+  }
+  return `${prefixe}-${pad(getNextCounter(cleLocale))}`;
+}
+
 /** Numéro de devis/proforma : DV-0001, DV-0002… */
 export function genNumDevis(): string {
   return `DV-${pad(getNextCounter('leclaire_counter_devis'))}`;

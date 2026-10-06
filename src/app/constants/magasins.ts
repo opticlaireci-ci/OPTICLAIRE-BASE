@@ -129,14 +129,17 @@ export function initMagasins(): void {
  */
 export function getMagasinById(id: string): Magasin | undefined {
   const magasins = getMagasins();
-  return magasins.find(magasin => magasin.id === id);
+  const cle = String(id || '').trim().toLowerCase();
+  // Insensible à la casse : selon les écrans, l'identifiant arrive en
+  // « bouake » ou « BOUAKE ».
+  return magasins.find(magasin => magasin.id === id) || magasins.find(magasin => magasin.id.toLowerCase() === cle);
 }
 
 /**
  * Récupère le label d'un magasin
  */
 export function getMagasinLabel(id: string): string {
-  return getMagasinById(id)?.label || id.toUpperCase();
+  return getMagasinById(id)?.label || String(id || '').toUpperCase();
 }
 
 /**

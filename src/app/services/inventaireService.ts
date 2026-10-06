@@ -5,7 +5,7 @@ import { logger } from '../utils/logger';
  */
 
 import {
-  collection, doc, getDocs, setDoc, getDoc,
+  collection, doc, getDocs, setDoc, getDoc, query, where,
 } from '../utils/firestoreCompat';
 import { db, auth } from '../utils/firebaseClient';
 import { logNetworkAware, isAuthError, isNoSessionError } from '../utils/networkErrors';
@@ -36,6 +36,43 @@ function normalizeMagasinId(value: any): string {
     .toUpperCase()
     .replace(/^LECLAIRE\s+/, '')
     .replace(/\s+MAGASIN$/, '');
+}
+
+/**
+ * Mouvements qui AJOUTENT au stock du magasin de destination. `annulation_vente`
+ * remet en stock les articles d'une facture supprimée.
+ */
+const TYPES_ENTREE = new Set(['distribution', 'transfert', 'annulation_vente']);
+
+/**
+ * Clé d'article commune à tous les mouvements.
+ *
+ * Les anciens bons n'avaient pas d'identifiant catalogue : leurs mouvements
+ * sont rangés sous la DÉSIGNATION, alors que les ventes récentes utilisent
+ * l'identifiant catalogue. Résultat : l'entrée (ancien bon) et la sortie
+ * (vente) tombaient sur deux lignes différentes et la vente ne diminuait pas
+ * le stock. Ici, une désignation déjà associée à un identifiant dans un autre
+ * mouvement est rattachée à cet identifiant : entrées et sorties se rejoignent.
+ */
+function resolveurArticles(docs: Array<{ data: any }>) {
+  const norm = (v: any) => String(v ?? '').trim().toUpperCase().replace(/\s+/g, ' ');
+  const alias = new Map<string, string>();
+  for (const { data: r } of docs) {
+    if (!r?.article_id || !r?.designation) continue;
+    const id = String(r.article_id).trim();
+    const des = norm(r.designation);
+    if (norm(id) !== des && !alias.has(des)) alias.set(des, id);
+  }
+  const produitIdDe = (r: any): string => {
+    const brut = String(r?.article_id || r?.designation || '').trim();
+    if (!brut) return '';
+    if (!r.article_id || norm(r.article_id) === norm(r.designation)) {
+      const a = alias.get(norm(r.designation || r.article_id));
+      if (a) return a;
+    }
+    return brut;
+  };
+  return { produitIdDe, articleKey: (r: any) => norm(produitIdDe(r)) };
 }
 
 /** Clé de cache localStorage du stock calculé d'un magasin (affichage instantané). */
@@ -132,7 +169,7 @@ export async function loadStockMagasin(magasinId: string): Promise<StockMagasin[
     // documents sans article_id utilisent la désignation comme repli.
     const seen = new Set<string>();
     const norm = (v: any) => String(v ?? '').trim().toUpperCase();
-    const articleKey = (r: any) => norm(r.article_id || r.designation);
+    const { articleKey, produitIdDe } = resolveurArticles(docs);
     const logicalKey = (r: any, docId: string) =>
       `${norm(r.type)}|${norm(r.bon_id || r.reference || docId)}|${articleKey(r)}`;
 
@@ -140,7 +177,7 @@ export async function loadStockMagasin(magasinId: string): Promise<StockMagasin[
       const r = d.data || {};
       const destination = normalizeMagasinId(r.magasin_destination);
       const source = normalizeMagasinId(r.magasin_source);
-      const isIncoming = destination === target && (r.type === 'distribution' || r.type === 'transfert');
+      const isIncoming = destination === target && TYPES_ENTREE.has(r.type);
       const isOutgoing = source === target && (r.type === 'vente' || r.type === 'retour' || r.type === 'transfert');
       if (!isIncoming && !isOutgoing) return;
 
@@ -152,7 +189,7 @@ export async function loadStockMagasin(magasinId: string): Promise<StockMagasin[
       if (!key) return;
       const existing = stockMap.get(key) || {
         magasinId: target,
-        produitId: r.article_id || r.designation || key,
+        produitId: produitIdDe(r) || key,
         produitType: r.produit_type === 'accessoire' ? 'accessoire' : 'monture',
         designation: r.designation || r.article_id || key,
         quantiteDisponible: 0,
@@ -201,7 +238,7 @@ export async function loadStocksParMagasin(
     const ids = magasinIds.map(id => String(id || '').trim().toUpperCase()).filter(Boolean);
     const docs = await chargerMouvementsAvecBonsAcceptes(ids);
     const norm = (v: any) => String(v ?? '').trim().toUpperCase();
-    const articleKey = (r: any) => norm(r.article_id || r.designation);
+    const { articleKey, produitIdDe } = resolveurArticles(docs);
     const logicalKey = (r: any, docId: string) =>
       `${norm(r.type)}|${norm(r.bon_id || r.reference || docId)}|${articleKey(r)}`;
 
@@ -211,7 +248,7 @@ export async function loadStocksParMagasin(
       for (const { id, data: r } of docs) {
         const destination = normalizeMagasinId(r.magasin_destination);
         const source = normalizeMagasinId(r.magasin_source);
-        const isIncoming = destination === target && (r.type === 'distribution' || r.type === 'transfert');
+        const isIncoming = destination === target && TYPES_ENTREE.has(r.type);
         const isOutgoing = source === target && (r.type === 'vente' || r.type === 'retour' || r.type === 'transfert');
         if (!isIncoming && !isOutgoing) continue;
         const lk = logicalKey(r, id);
@@ -220,7 +257,7 @@ export async function loadStocksParMagasin(
         const key = articleKey(r);
         if (!key) continue;
         const existing = stockMap.get(key) || {
-          magasinId: target, produitId: r.article_id || r.designation || key,
+          magasinId: target, produitId: produitIdDe(r) || key,
           produitType: r.produit_type === 'accessoire' ? 'accessoire' : 'monture',
           designation: r.designation || r.article_id || key, quantiteDisponible: 0,
           prixVente: Number(r.prix_vente) || 0, derniereMiseAJour: r.created_at || '',
@@ -505,6 +542,42 @@ export async function enregistrerVente(params: {
     magasin_id: params.magasinId, magasin_source: params.magasinId, bon_id: params.bonReference,
     designation: item.designation, produit_type: item.type, prix_vente: item.prixVente,
   })));
+}
+
+/**
+ * Facture supprimée : les montures / accessoires vendus REVIENNENT en stock.
+ *
+ * On ne supprime pas la sortie d'origine (traçabilité) : on ajoute une entrée
+ * « annulation_vente » de même quantité, pour chaque article réellement sorti
+ * par cette facture. Identifiant déterministe : un double-clic ou une nouvelle
+ * tentative ne remet jamais deux fois le même article en stock.
+ */
+export async function annulerSortiesVente(magasinId: string, numFacture: string): Promise<boolean> {
+  const mag = normalizeMagasinId(magasinId);
+  const num = String(numFacture || '').trim();
+  if (!mag || !num) return true;
+  try {
+    const snap = await getDocs(query(collection(db, 'mouvements_stock'), where('bon_id', '==', num)));
+    const sorties = snap.docs
+      .map((d: any) => d.data() || {})
+      .filter((r: any) => r.type === 'vente' && normalizeMagasinId(r.magasin_source) === mag
+        && (Number(r.quantite) || 0) > 0);
+    if (sorties.length === 0) return true;
+    const ok = await insertMouvements(sorties.map((r: any) => {
+      const article = r.article_id || r.designation;
+      return {
+        _docId: stableUuid(`annulation_vente|${num}|${mag}|${article}`),
+        type: 'annulation_vente', article_id: article, quantite: Number(r.quantite) || 0,
+        magasin_id: mag, magasin_destination: mag, bon_id: num,
+        designation: r.designation || article, produit_type: r.produit_type, prix_vente: r.prix_vente,
+      };
+    }));
+    if (ok) await loadStockMagasin(mag);
+    return ok;
+  } catch (err) {
+    logger.error('❌ annulerSortiesVente:', err);
+    return false;
+  }
 }
 
 export async function enregistrerRetour(params: {

@@ -4,7 +4,7 @@ import { useState , useEffect, useRef} from 'react';
 import { useParams } from 'react-router';
 import { Plus, Trash2, Eye, X, FileText, Search, Download } from 'lucide-react';
 import { addCreateAudit, addUpdateAudit, formatDate, AuditInfo } from '../../../utils/auditUtils';
-import { genNumVenteFlash, genCodeBarre as genCB } from '../../../utils/autoNumbers';
+import { attribuerNumero, genCodeBarre as genCB } from '../../../utils/autoNumbers';
 import { useVenteProducts, findVenteProduct, useComptesBanque, useModesPaiement, useProfessions, useClientsMagasin, useAssurances } from '../../../utils/venteLookups';
 import { autoSaveClient } from '../../../utils/autoClient';
 import { useSupabaseSync } from '../../../hooks/useSupabaseSync';
@@ -132,7 +132,8 @@ function FormulaireVenteFlash({ magasinId, onRetour, onSaved }: { magasinId: str
   const [modePaiement, setModePaiement] = useState('');
   const [compteBanque, setCompteBanque] = useState('');
   const [details, setDetails] = useState('');
-  const [numFacture] = useState(() => genNumVenteFlash());
+  // Numéro attribué par la base à l'enregistrement (commun à tous les magasins).
+  const [numFactureEtat, setNumFacture] = useState('');
   const [succes, setSucces] = useState(false);
   const savingRef = useRef(false);
   const products = useVenteProducts(magasinId);
@@ -181,6 +182,7 @@ function FormulaireVenteFlash({ magasinId, onRetour, onSaved }: { magasinId: str
   const totalReste = totalNet - totalAssurance - acompteN;
 
   const handleEnregistrer = async () => {
+    const numFactureCourant = numFactureEtat;
     if (!client) { alert('Veuillez renseigner le client.'); return; }
 
     // Contrôle du STOCK, identique à la Vente/Facture : une monture ou un
@@ -204,6 +206,9 @@ function FormulaireVenteFlash({ magasinId, onRetour, onSaved }: { magasinId: str
     // Garde anti-double : empêche un double enregistrement (double-clic / re-render).
     if (savingRef.current) return;
     savingRef.current = true;
+    // Conservé dans l'état : une nouvelle tentative réutilise le même numéro.
+    const numFacture = numFactureCourant || await attribuerNumero('vente_flash');
+    setNumFacture(numFacture);
     const vente: VenteFlash = {
       id: (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`), date: new Date().toISOString(),
       numeroClient, client: `${civilite} ${client}`.trim(), civilite, telephone, soldeClient,
@@ -577,7 +582,7 @@ function FormulaireVenteFlash({ magasinId, onRetour, onSaved }: { magasinId: str
           </div>
           <div style={{ width: 200 }}>
             <Lbl>N° Vente</Lbl>
-            <input className={roCls + ' font-mono font-semibold text-blue-700'} readOnly value={numFacture} />
+            <input className={roCls + ' font-mono font-semibold text-blue-700'} readOnly value={numFactureEtat} placeholder="Attribué à l'enregistrement" />
           </div>
         </div>
       </div>

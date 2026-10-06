@@ -1,3 +1,4 @@
+import { getMagasinLabel as libelleMagasin } from '../constants/magasins';
 import { useState, useEffect } from 'react';
 import { normaliserTotauxVente, montantAssuranceVente } from '../utils/venteTotals';
 import {
@@ -39,10 +40,9 @@ interface MouvementCaisse {
   responsable: string;
 }
 
-function getMagasinLabel(magasinId: string): string {
-  const magasins = getMagasins();
-  return magasins.find(m => m.id === magasinId.toUpperCase())?.label || magasinId;
-}
+// Nom officiel depuis la liste des magasins (tous les magasins, y compris
+// BOUAKÉ et YOPOUGON GANDI — l'ancienne liste écrite ici les oubliait).
+const getMagasinLabel = (magasinId: string): string => libelleMagasin(magasinId || '');
 
 export function MouvementsCaisseGlobalPage() {
   // Mouvements personnalisés : lecture DIRECTE Firestore (partagé entre navigateurs)

@@ -1,3 +1,4 @@
+import { getMagasinLabel as libelleMagasin } from '../../constants/magasins';
 import { resolveUserName } from '../../utils/auditUtils';
 import { useState, useEffect, useRef } from 'react';
 import { imprimerPageCourante } from '../../utils/inAppViewer';
@@ -61,18 +62,9 @@ interface MouvementCaisse {
   source?: { kind: 'acompte' | 'reglement'; venteId: string; reglementId?: string };
 }
 
-function getMagasinLabel(magasinId: string): string {
-  const labels: Record<string, string> = {
-    'ABOBO': 'Abobo',
-    'FAYA': 'Faya',
-    'KOUMASSI': 'Koumassi',
-    'PALMERAIE': 'Palmeraie',
-    'YOPOUGON': 'Yopougon',
-    'BINGERVILLE': 'Bingerville',
-    'MAN': 'Man',
-  };
-  return labels[magasinId.toUpperCase()] || magasinId;
-}
+// Nom officiel depuis la liste des magasins (tous les magasins, y compris
+// BOUAKÉ et YOPOUGON GANDI — l'ancienne liste écrite ici les oubliait).
+const getMagasinLabel = (magasinId: string): string => libelleMagasin(magasinId || '');
 
 export function MouvementsCaissePage() {
   const { user } = useAuth();

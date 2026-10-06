@@ -10,7 +10,7 @@ import { autoSaveOphtalmologue, autoSaveCabinet } from '../../../utils/autoActeu
 import { autoSaveClient } from '../../../utils/autoClient';
 import { afficherPdfBlob } from '../../../utils/inAppViewer';
 import { useTypesVerre, useVerresList, useTraitementOptions, findVerreByName, VerreRecord, useOphtalmologues, useCabinets, useProfessions, useClientRecordsMagasin, ClientRecord, useVenteProducts, findVenteProduct, VenteProduct, useModesPaiement, autoSaveModePaiement } from '../../../utils/venteLookups';
-import { genCodeBarre, genNumFacture } from '../../../utils/autoNumbers';
+import { genCodeBarre, attribuerNumero } from '../../../utils/autoNumbers';
 import { printHeaderHTML, formatNomClient } from '../../../utils/documentHeader';
 import { useSupabaseSync } from '../../../hooks/useSupabaseSync';
 import { ajouterVente, chargerVentes, readVentesCache, supprimerVente, mettreAJourVente, VenteSupabase } from '../../../services/ventesService';
@@ -1476,7 +1476,8 @@ function ListeDevis({ magasinId, onNouveau, onModifier }: { magasinId: string; o
 
     const total = (prop.totalVerres || 0) + (prop.totalArticles || 0);
     const totalNet = prop.totalNet || total;
-    const numFacture = genNumFacture();
+    // Numéro commun à tous les magasins, attribué par la base.
+    const numFacture = await attribuerNumero('facture');
     const raw = d._raw;
     try {
       await ajouterVente({

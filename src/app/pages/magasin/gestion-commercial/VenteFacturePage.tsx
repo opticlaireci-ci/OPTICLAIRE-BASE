@@ -6,7 +6,7 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { useParams, useSearchParams } from 'react-router';
 import { Calendar, Trash2, X, Download, Plus, Eye, FileText, ArrowLeft, Printer, MoreHorizontal, Pencil } from 'lucide-react';
 import { addCreateAudit, addUpdateAudit, formatDate, resolveUserName, AuditInfo } from '../../../utils/auditUtils';
-import { genNumFacture, genCodeBarre, genRefBonCommandeVerre, genNumRecu } from '../../../utils/autoNumbers';
+import { attribuerNumero, genCodeBarre, genRefBonCommandeVerre, genNumRecu } from '../../../utils/autoNumbers';
 import { autoSaveOphtalmologue, autoSaveCabinet } from '../../../utils/autoActeur';
 import { autoSaveClient } from '../../../utils/autoClient';
 import { afficherPdfBlob, afficherHtml } from '../../../utils/inAppViewer';
@@ -21,7 +21,7 @@ import {
 } from '../../../utils/venteLookups';
 import { ajouterReglement, chargerReglements, chargerTousLesReglements, readReglementsCacheMap, subscriberReglementsVente, ReglementSupabase } from '../../../services/reglementsService';
 import { ajouterVente, chargerVentes as chargerVentesSupabase, subscriberVentesMagasin, readVentesCache, supprimerVente, mettreAJourVente, VenteSupabase } from '../../../services/ventesService';
-import { enregistrerVente } from '../../../services/inventaireService';
+import { enregistrerVente, annulerSortiesVente } from '../../../services/inventaireService';
 import { verifierStockVente, messageRuptures } from '../../../utils/stockVente';
 import { useLentillesOpticStock } from '../../../hooks/useLentillesOpticStock';
 import { collection, onSnapshot } from '../../../utils/firestoreCompat';
@@ -5273,8 +5273,12 @@ function FormulaireVente({ magasinId, onRetour, onVenteEnregistree, venteInitial
   const [bonsAssurance, setBonsAssurance] = useState<BonAssurance[]>(() => venteInitiale?.bonsAssurance || []);
   const [recap, setRecap] = useState<RecapInfo>(() => venteInitiale?.recap || {
     remisePct: '0', acompte: '0', modePaiement: '', compteBanque: '',
-    details: '', rdvRetrait: '', numFacture: genNumFacture(),
+    // Numéro attribué par la base à l'enregistrement (commun à tous les magasins).
+    details: '', rdvRetrait: '', numFacture: '',
   });
+  // Numéro déjà obtenu pour CETTE vente : réutilisé si l'enregistrement doit
+  // être relancé (coupure réseau), pour ne pas sauter de numéro.
+  const numeroAttribueRef = useRef<string>('');
   const [succes, setSucces] = useState<{ total: string } | null>(null);
   const [derniereVente, setDerniereVente] = useState<any>(null);
   const savingRef = useRef(false);
@@ -5333,7 +5337,12 @@ function FormulaireVente({ magasinId, onRetour, onVenteEnregistree, venteInitial
 
     // Numéro de reçu (versement) : généré UNE fois et conservé sur la vente pour
     // rester stable entre les impressions. Réutilise l'existant en mode édition.
-    const recapAvecRecu = { ...recap, numRecu: (venteInitiale?.recap as any)?.numRecu || recap.numRecu || genNumRecu() };
+    let numFactureFinal = recap.numFacture;
+    if (!enEdition) {
+      if (!numeroAttribueRef.current) numeroAttribueRef.current = await attribuerNumero('facture');
+      numFactureFinal = numeroAttribueRef.current;
+    }
+    const recapAvecRecu = { ...recap, numFacture: numFactureFinal, numRecu: (venteInitiale?.recap as any)?.numRecu || recap.numRecu || genNumRecu() };
 
     const vente = {
       id: venteInitiale?.id || (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`),
@@ -5386,7 +5395,7 @@ function FormulaireVente({ magasinId, onRetour, onVenteEnregistree, venteInitial
         verres: verre,
         articles: articles,
         bons_assurance: bonsAssurance,
-        recap: recap,
+        recap: recapAvecRecu,
 
         // Totaux
         total_brut: totalBrut,
@@ -5456,6 +5465,8 @@ function FormulaireVente({ magasinId, onRetour, onVenteEnregistree, venteInitial
     }
 
     savingRef.current = false;
+    numeroAttribueRef.current = '';
+    setRecap(recapAvecRecu);
     setDerniereVente(venteWithAudit);
     setSucces({ total: totalNetNormalise.toLocaleString('fr-FR') });
 
@@ -5493,7 +5504,8 @@ function FormulaireVente({ magasinId, onRetour, onVenteEnregistree, venteInitial
     setClient(newClientState());
     setVerre([]);
     setArticles([]); setObservation(''); setBonsAssurance([]);
-    setRecap({ remisePct: '0', acompte: '0', modePaiement: '', compteBanque: '', details: '', rdvRetrait: '', numFacture: genNumFacture() });
+    numeroAttribueRef.current = '';
+    setRecap({ remisePct: '0', acompte: '0', modePaiement: '', compteBanque: '', details: '', rdvRetrait: '', numFacture: '' });
     setActive(0); setSucces(null);
   };
 
@@ -5768,6 +5780,15 @@ export function VenteFacturePage() {
     const ok = await supprimerVente(vente.id);
     if (ok) {
       setVentes(prev => prev.filter(v => v.id !== vente.id));
+      // Les montures / accessoires de cette facture reviennent en stock.
+      const numFacture = vente.recap?.numFacture;
+      if (numFacture && !(vente.recap as any)?.imported) {
+        const stockOk = await annulerSortiesVente(magasinId, numFacture);
+        if (!stockOk) {
+          alert(`⚠️ La facture ${numFacture} est supprimée, mais la remise en stock de ses articles n'a pas été confirmée.\n\nVérifiez la connexion puis l'état du stock.`);
+        }
+        window.dispatchEvent(new CustomEvent('leclaire-stock-updated', { detail: { magasinId: magasinId.toUpperCase() } }));
+      }
     } else {
       alert('❌ La suppression a échoué. Réessayez.');
     }

@@ -1,3 +1,4 @@
+import { getMagasinLabel as libelleMagasin } from '../../../constants/magasins';
 import { logger } from '../../../utils/logger';
 import { useState } from 'react';
 import { useParams } from 'react-router';
@@ -52,18 +53,9 @@ interface BonTransfert {
   dateValidation?: string;
 }
 
-function getMagasinLabel(magasinId: string): string {
-  const labels: Record<string, string> = {
-    'ABOBO': 'Abobo',
-    'FAYA': 'Faya',
-    'KOUMASSI': 'Koumassi',
-    'PALMERAIE': 'Palmeraie',
-    'YOPOUGON': 'Yopougon',
-    'BINGERVILLE': 'Bingerville',
-    'MAN': 'Man',
-  };
-  return labels[magasinId.toUpperCase()] || magasinId;
-}
+// Nom officiel depuis la liste des magasins (tous les magasins, y compris
+// BOUAKÉ et YOPOUGON GANDI — l'ancienne liste écrite ici les oubliait).
+const getMagasinLabel = (magasinId: string): string => libelleMagasin(magasinId || '');
 
 interface ProduitStock {
   id: string;
@@ -107,6 +99,68 @@ export function BonTransfertMagasinPage() {
   const handleValider = async (action: 'accepter' | 'refuser') => {
     if (!selectedBon) return;
 
+    // Si le bon est accepté : contrôle du stock du magasin qui envoie, puis
+    // enregistrement du mouvement. Le bon ne passe à « Validé » qu'APRÈS
+    // confirmation du mouvement par le serveur (comme les distributions) :
+    // une coupure réseau laisse le bon « En attente », à réessayer.
+    if (action === 'accepter' && selectedBon.items && selectedBon.magasinSource && selectedBon.magasinDest) {
+      const source = selectedBon.magasinSource.toUpperCase();
+      const stockSource = await loadStockMagasin(source);
+      const normaliser = (v: unknown) => String(v ?? '')
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .trim().toLowerCase().replace(/\s+/g, ' ');
+
+      const lignes = selectedBon.items.map(item => {
+        const stock = stockSource.find(s =>
+          (item.id && String(s.produitId) === String(item.id)) ||
+          normaliser(s.designation) === normaliser(item.designation)
+        );
+        return { item, stock };
+      });
+
+      // Quantité demandée cumulée par article (un même article sur 2 lignes).
+      const demandes = new Map<string, { designation: string; demande: number; disponible: number }>();
+      for (const { item, stock } of lignes) {
+        const quantite = Number(item.quantite) || 0;
+        if (quantite <= 0) continue;
+        const cle = stock ? String(stock.produitId) : normaliser(item.designation);
+        const d = demandes.get(cle) || { designation: item.designation, demande: 0, disponible: stock?.quantiteDisponible ?? 0 };
+        d.demande += quantite;
+        demandes.set(cle, d);
+      }
+      const manques = [...demandes.values()].filter(d => d.demande > d.disponible);
+      if (manques.length > 0) {
+        alert(
+          `❌ Transfert impossible — stock insuffisant à ${selectedBon.magasinSource} :\n\n` +
+          manques.map(m => `• ${m.designation} : ${m.disponible} en stock, ${m.demande} demandé(s)`).join('\n') +
+          `\n\nLe bon reste « En attente ».`
+        );
+        return;
+      }
+
+      const items = lignes.map(({ item, stock }) => ({
+        // Les anciens bons n'avaient pas d'id catalogue : on le résout
+        // depuis le stock réel du magasin source.
+        id: String(item.id || stock?.produitId || item.designation).trim(),
+        type: item.type === 'accessoire' ? 'accessoire' as const : 'monture' as const,
+        designation: item.designation,
+        quantite: item.quantite,
+        prixVente: item.prixUnit || stock?.prixVente || 0,
+      })).filter(item => item.quantite > 0);
+
+      const mouvementOk = await enregistrerTransfert({
+        magasinSource: source,
+        magasinDestination: selectedBon.magasinDest.toUpperCase(),
+        bonReference: selectedBon.numero,
+        items,
+      });
+      if (!mouvementOk) {
+        alert("La validation du transfert n'a pas pu être confirmée sur le serveur.\n\nLe bon reste « En attente » : réessayez quand la connexion est rétablie.");
+        return;
+      }
+      logger.log(`✅ Transfert enregistré: ${items.length} produits de ${selectedBon.magasinSource} vers ${selectedBon.magasinDest}`);
+    }
+
     const updatedBons = allBons.map((bon) => {
       if (bon.id === selectedBon.id) {
         return {
@@ -123,40 +177,6 @@ export function BonTransfertMagasinPage() {
     setAllBons(updatedBons);
     const changed = updatedBons.find((b) => b.id === selectedBon.id);
     if (changed) upsertBon(transfertToRow(changed)).catch(e => logger.error('❌ upsertBon transfert:', e));
-
-    // Si le bon est accepté, enregistrer le transfert dans l'inventaire
-    if (action === 'accepter' && selectedBon.items && selectedBon.magasinSource && selectedBon.magasinDest) {
-      const source = selectedBon.magasinSource.toUpperCase();
-      const stockSource = await loadStockMagasin(source);
-      const normaliser = (v: unknown) => String(v ?? '')
-        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-        .trim().toLowerCase().replace(/\s+/g, ' ');
-
-      const items = selectedBon.items.map(item => {
-        const stock = stockSource.find(s =>
-          (item.id && String(s.produitId) === String(item.id)) ||
-          normaliser(s.designation) === normaliser(item.designation)
-        );
-        return {
-          // Les anciens bons n'avaient pas d'id catalogue : on le résout
-          // depuis le stock réel du magasin source.
-          id: String(item.id || stock?.produitId || item.designation).trim(),
-          type: item.type === 'accessoire' ? 'accessoire' as const : 'monture' as const,
-          designation: item.designation,
-          quantite: item.quantite,
-          prixVente: item.prixUnit || stock?.prixVente || 0,
-        };
-      }).filter(item => item.quantite > 0);
-
-      await enregistrerTransfert({
-        magasinSource: source,
-        magasinDestination: selectedBon.magasinDest.toUpperCase(),
-        bonReference: selectedBon.numero,
-        items,
-      });
-
-      logger.log(`✅ Transfert enregistré: ${items.length} produits de ${selectedBon.magasinSource} vers ${selectedBon.magasinDest}`);
-    }
 
     window.dispatchEvent(new CustomEvent('leclaire-sync-update'));
 

@@ -23,6 +23,8 @@ const COORDS_GPS: Record<string, { lat: number; lng: number; ville: string }> = 
   yopougon: { lat: 5.3364, lng: -4.0821, ville: 'Abidjan' },
   bingerville: { lat: 5.3575, lng: -3.9100, ville: 'Bingerville' },
   man: { lat: 7.4042, lng: -7.5544, ville: 'Man' },
+  bouake: { lat: 7.6906, lng: -5.0303, ville: 'Bouaké' },
+  'yopougon-gandi': { lat: 5.3450, lng: -4.0700, ville: 'Abidjan' },
 };
 
 // Créer la liste des magasins avec coordonnées

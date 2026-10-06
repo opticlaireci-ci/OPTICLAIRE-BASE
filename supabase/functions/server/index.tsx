@@ -582,7 +582,7 @@ app.get(`/${ROUTE_PREFIX}/me`, async (c) => {
 //                    minuscules, ex. « cocody,marcory » — ils doivent être
 //                    identiques aux `id` de src/app/config/tenant.ts.
 const OWNER_EMAIL = (Deno.env.get('OWNER_EMAIL') ?? 'admin@leclaire.ci').toLowerCase();
-const OWNER_MAGASINS = (Deno.env.get('OWNER_MAGASINS') ?? 'abobo,faya,koumassi,palmeraie,yopougon,bingerville,man,cocody,marcory')
+const OWNER_MAGASINS = (Deno.env.get('OWNER_MAGASINS') ?? 'abobo,faya,koumassi,palmeraie,yopougon,bingerville,man,bouake,yopougon-gandi')
   .split(',')
   .map((m) => m.trim().toLowerCase())
   .filter(Boolean);
