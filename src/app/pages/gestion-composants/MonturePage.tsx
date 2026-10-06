@@ -718,7 +718,7 @@ export function MonturePage() {
         <Table size="small" sx={{ width: 1362, tableLayout: 'fixed' }}>
           <TableHead>
             <TableRow sx={{ bgcolor: '#fafafa', '& th': { fontWeight: 700, fontSize: '0.78rem', borderBottom: '2px solid #e0e0e0', py: 1.2, px: 1 } }}>
-              <TableCell padding="checkbox" sx={{ width: 36 }}><Checkbox size="small" /></TableCell>
+              <TableCell padding="checkbox" sx={{ width: 44 }}><Checkbox size="small" /></TableCell>
               <TableCell sx={{ width: 46, textAlign: 'center' }}>
                 <IconButton size="small" sx={{ bgcolor: '#f44336', borderRadius: 0.5, p: 0.4 }}>
                   <DeleteIcon sx={{ fontSize: 13, color: 'white' }} />
@@ -759,7 +759,7 @@ export function MonturePage() {
                   <React.Fragment key={m.id}>
                     {/* ── Ligne principale ── */}
                     <TableRow sx={{ '&:hover': { bgcolor: '#f5f5f5' }, borderBottom: 'none' }}>
-                      <TableCell padding="checkbox" sx={{ width: 36 }}><Checkbox size="small" /></TableCell>
+                      <TableCell padding="checkbox" sx={{ width: 44 }}><Checkbox size="small" /></TableCell>
                       <TableCell sx={{ ...cellSx, width: 46, textAlign: 'center', color: '#9e9e9e' }}>{idx + 1}</TableCell>
                       <TableCell sx={{ ...cellSx, width: 100, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.codeBarre}</TableCell>
                       <TableCell sx={{ ...cellSx, width: 110, fontWeight: 600, overflowWrap: 'break-word' }}>{m.marque}</TableCell>

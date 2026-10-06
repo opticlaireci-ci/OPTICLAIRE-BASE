@@ -59,7 +59,7 @@ const iCls = 'w-full border border-gray-300 rounded px-2 py-1.5 text-sm outline-
 const roCls = 'w-full border border-gray-300 rounded px-2 py-1.5 text-sm bg-gray-50 text-gray-500';
 const selCls = 'w-full border border-gray-300 rounded px-2 py-1.5 text-sm outline-none bg-white';
 const Lbl = ({req,children}:{req?:boolean;children:React.ReactNode}) => <div className="text-xs text-gray-600 mb-1">{children}{req&&<span className="text-red-500 ml-0.5">*</span>}</div>;
-const fmtDate = (iso: string) => { try { const d=new Date(iso); const p=(n:number)=>String(n).padStart(2,'0'); return `${p(d.getDate())}-${p(d.getMonth()+1)}-${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`; } catch { return iso; } };
+const fmtDate = (iso: string) => { try { const d=new Date(iso); if (!iso || isNaN(d.getTime())) return "—"; const p=(n:number)=>String(n).padStart(2,'0'); return `${p(d.getDate())}-${p(d.getMonth()+1)}-${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`; } catch { return iso; } };
 const fmtN = (c: Client) => c.jourNaissance&&c.moisNaissance&&c.anneeNaissance ? `${c.jourNaissance} - ${c.moisNaissance} - ${c.anneeNaissance}` : '—';
 const PAGE_SIZE = 20;
 

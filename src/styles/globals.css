@@ -168,23 +168,30 @@ main, main > *, .page-transition, .page-transition > *,
 /* Desktop : les tableaux s'adaptent à la largeur disponible et le texte
    revient à la ligne au lieu de provoquer un défilement horizontal. */
 @media (min-width: 900px) {
+  /* Chaque texte RESTE DANS SA CASE.
+     Avant : colonnes de largeur imposée (table-layout: fixed) + texte interdit
+     de revenir à la ligne → les écritures débordaient sur les colonnes
+     voisines (ex. Devis | Proforma). Désormais chaque colonne prend la largeur
+     de son contenu, le texte revient à la ligne si nécessaire, et un tableau
+     vraiment trop large défile au lieu de se chevaucher. */
   .overflow-x-auto {
-    overflow-x: hidden !important;
+    overflow-x: auto !important;
     max-width: 100%;
   }
   .overflow-x-auto table,
   table {
-    width: 100% !important;
-    max-width: 100% !important;
-    min-width: 0 !important;
-    table-layout: fixed;
+    width: 100%;
+    max-width: 100%;
+    table-layout: auto;
   }
+  .overflow-x-auto table { white-space: normal; }
+  /* Colonne de cases à cocher : assez large pour la case (pas de débordement). */
+  .MuiTableCell-paddingCheckbox { min-width: 48px !important; padding-left: 4px !important; padding-right: 4px !important; }
   th, td,
   .MuiTableCell-root {
-    min-width: 0 !important;
     max-width: 100%;
-    overflow-wrap: anywhere;
-    word-break: break-word;
+    overflow-wrap: break-word;
+    word-break: normal;
   }
 }
 

@@ -1898,7 +1898,7 @@ function ListeDevis({ magasinId, onNouveau, onModifier }: { magasinId: string; o
                   return (
                   <tr key={d.id} className="border-b border-gray-100 hover:bg-gray-50 align-top">
                     <td className="px-3 py-3 text-center text-gray-500">{idx + 1}</td>
-                    <td className="px-4 py-3 font-mono text-blue-700">{d.numDevis}</td>
+                    <td className="px-4 py-3 font-mono text-blue-700 whitespace-nowrap">{d.numDevis}</td>
                     <td className="px-4 py-3">
                       <div className="text-sm"><span className="font-mono text-gray-500">N°({d.numeroClient})</span>{' '}<span className="font-semibold text-gray-800">{d.client}</span></div>
                       {d.telephone && <div className="text-xs text-gray-500 mt-0.5">Téléphone: {d.telephone}</div>}

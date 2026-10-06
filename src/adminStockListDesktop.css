@@ -245,7 +245,7 @@
     width: 100% !important;
     min-width: 1100px !important;
     border-collapse: collapse !important;
-    table-layout: fixed !important;
+    table-layout: auto !important; /* colonnes à la largeur du contenu : plus de texte qui déborde */
   }
   .admin-stock-table-wrap th {
     height: 72px !important;
@@ -420,7 +420,7 @@
     display: table !important;
     width: max-content !important;
     min-width: 920px !important;
-    table-layout: fixed !important;
+    table-layout: auto !important; /* colonnes à la largeur du contenu : plus de texte qui déborde */
     border-collapse: collapse !important;
   }
 
@@ -666,4 +666,12 @@
   .admin-stock-table-wrap { overflow-x: auto !important; -webkit-overflow-scrolling: touch !important; }
   .admin-stock-table-wrap .MuiTable-root { min-width: 900px !important; width: max-content !important; }
   .admin-stock-table-wrap .MuiTableCell-root { white-space: nowrap !important; font-size: 14px !important; padding: 9px 10px !important; }
+}
+
+/* Colonne des cases à cocher : marge réduite pour que la case tienne dans sa
+   colonne de 48 px (elle débordait sur la colonne voisine). */
+.admin-stock-list-page .admin-stock-table-wrap th.MuiTableCell-paddingCheckbox,
+.admin-stock-list-page .admin-stock-table-wrap td.MuiTableCell-paddingCheckbox {
+  padding-left: 4px !important;
+  padding-right: 4px !important;
 }

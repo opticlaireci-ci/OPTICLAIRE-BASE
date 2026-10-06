@@ -415,7 +415,7 @@ export function ActeursListPage({
                 <Table size="small">
                   <TableHead>
                     <TableRow sx={{ bgcolor: '#f5f5f5' }}>
-                      <TableCell padding="checkbox" sx={{ width: 36 }}>
+                      <TableCell padding="checkbox" sx={{ width: 44 }}>
                         <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
                           <Checkbox
                             size="small"
