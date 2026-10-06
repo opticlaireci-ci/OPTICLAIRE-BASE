@@ -283,6 +283,32 @@ function subscribeVentesDiff(
   );
 }
 
+/**
+ * Abonnement temps réel qui livre la LISTE COMPLÈTE à jour, en un seul appel
+ * par mise à jour. À préférer aux variantes « une vente à la fois » : au
+ * premier chargement, celles-ci appelaient l'écran une fois PAR VENTE (des
+ * milliers d'appels, chacun recopiant toute la liste) — d'où une page figée
+ * 10 à 15 s au démarrage.
+ */
+function abonnerListeVentes(buildQuery: () => any, onListe: (ventes: VenteSupabase[]) => void): () => void {
+  return onSnapshot(
+    buildQuery(),
+    (snap: any) => {
+      onListe(sortByDateDesc(snap.docs.map((d: any) =>
+        avecTotauxVenteNormalises({ id: d.id, ...d.data() }) as VenteSupabase)));
+    },
+    (err: any) => logNetworkAware('⚠️ abonnement ventes (Firestore)', err),
+  );
+}
+
+export function abonnerVentesMagasin(magasinId: string, onListe: (ventes: VenteSupabase[]) => void): () => void {
+  return abonnerListeVentes(() => query(collection(db, COLLECTION), where('magasin_id', '==', magasinId)), onListe);
+}
+
+export function abonnerToutesLesVentes(onListe: (ventes: VenteSupabase[]) => void): () => void {
+  return abonnerListeVentes(() => collection(db, COLLECTION), onListe);
+}
+
 export function subscriberVentesMagasin(
   magasinId: string,
   onInsert: (v: VenteSupabase) => void,

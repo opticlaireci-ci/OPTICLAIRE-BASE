@@ -4,7 +4,7 @@ import { addCreateAudit, addUpdateAudit, formatAuditInfo, formatDate, AuditInfo 
 import { getMagasins } from '../../constants/magasins';
 import { AddButton } from '../../components/AddButton';
 import { chargerClients, upsertClient, subscribeClientsMagasin, readClientsCache, type ClientRow } from '../../services/clientsService';
-import { chargerToutesLesVentes, subscriberToutesLesVentes, readVentesCache, type VenteSupabase } from '../../services/ventesService';
+import { chargerToutesLesVentes, abonnerToutesLesVentes, readVentesCache, type VenteSupabase } from '../../services/ventesService';
 import { TENANT } from '../../config/tenant';
 import { MODELE_CLIENTS, genererCatalogueCsv, telechargerCsv } from '../../utils/catalogueCsv';
 
@@ -252,13 +252,7 @@ export function ClientPage() {
   // ── Chargement DIRECT des ventes depuis Firestore (pour clients dérivés) ──────
   useEffect(() => {
     chargerToutesLesVentes().then(setVentesRows);
-    const map = new Map<string, VenteSupabase>();
-    const apply = () => setVentesRows(Array.from(map.values()));
-    const unsub = subscriberToutesLesVentes(
-      v => { map.set(v.id, v); apply(); },
-      v => { map.set(v.id, v); apply(); },
-      id => { map.delete(id); apply(); },
-    );
+    const unsub = abonnerToutesLesVentes(setVentesRows);
     return () => unsub();
   }, []);
 

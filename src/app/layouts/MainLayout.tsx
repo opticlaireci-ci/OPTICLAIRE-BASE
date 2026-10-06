@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router';
 import {
   Drawer,
@@ -106,7 +106,7 @@ const drawerWidth = 280;
 const readLS = <T,>(key: string): T[] => { try { return JSON.parse(localStorage.getItem(key) || '[]'); } catch { return []; } };
 
 function useLiveShortcuts() {
-  const [, setTick] = useState(0);
+  const [tick, setTick] = useState(0);
   useEffect(() => {
     // Les badges de raccourcis (anniversaires, distributions en attente…) sont
     // recalculés en relisant tout le localStorage : inutile de le refaire toutes
@@ -114,10 +114,21 @@ function useLiveShortcuts() {
     // (autres onglets) suffit largement et allège fortement le fil principal.
     const maj = () => setTick(x => x + 1);
     const t = setInterval(maj, 30000);
-    window.addEventListener('storage', maj);
-    return () => { clearInterval(t); window.removeEventListener('storage', maj); };
+    // Les écritures de cache arrivent en rafale (démarrage, synchronisation) :
+    // un seul recalcul 3 s après la dernière, au lieu d'un par écriture.
+    let attente: ReturnType<typeof setTimeout> | null = null;
+    const onStorage = () => { if (attente) clearTimeout(attente); attente = setTimeout(maj, 3000); };
+    window.addEventListener('storage', onStorage);
+    return () => { clearInterval(t); if (attente) clearTimeout(attente); window.removeEventListener('storage', onStorage); };
   }, []);
 
+  // Calcul (lecture des ventes et clients de TOUS les magasins) seulement au
+  // tick — pas à chaque affichage de la mise en page.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  return useMemo(() => calculerRaccourcis(), [tick]);
+}
+
+function calculerRaccourcis() {
   const MAGASIN_IDS = getMagasins().map(m => m.id); // Charger dynamiquement
   const todayMD = `${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}`;
 

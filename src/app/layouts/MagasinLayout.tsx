@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Outlet, useNavigate, useLocation, useParams } from 'react-router';
 import {
   Box,
@@ -59,7 +59,7 @@ const drawerWidth = 280;
 const readLS = <T,>(key: string): T[] => { try { return JSON.parse(localStorage.getItem(key) || '[]'); } catch { return []; } };
 
 function useLiveShortcutsMagasin(magasinId: string | undefined) {
-  const [, setTick] = useState(0);
+  const [tick, setTick] = useState(0);
   useEffect(() => {
     const timer = setInterval(() => setTick(x => x + 1), 30000);
     // Rafraîchissement IMMÉDIAT quand l'opticien consulte la liste des montages
@@ -69,6 +69,13 @@ function useLiveShortcutsMagasin(magasinId: string | undefined) {
     return () => { clearInterval(timer); window.removeEventListener('montage-vus-update', onVus); };
   }, []);
 
+  // Calcul (lecture de toutes les ventes / clients du magasin) seulement au
+  // tick ou au changement de magasin — pas à chaque affichage de la barre.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  return useMemo(() => calculerRaccourcisMagasin(magasinId), [tick, magasinId]);
+}
+
+function calculerRaccourcisMagasin(magasinId: string | undefined) {
   if (!magasinId) return { demandesAttente: 0, venteFlash: 0, distrib: 0, transfert: 0, retour: 0, annivClient: 0, rdvRetrait: 0, rdvEnLigne: 0, montageValide: 0, montagesValidesIds: [] as string[] };
 
   const todayMD = `${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}`;

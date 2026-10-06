@@ -290,10 +290,25 @@ export async function syncAllToSupabase(): Promise<{ success: number; errors: nu
   return { success, errors };
 }
 
+/**
+ * Dernier téléchargement COMPLET des réglages (app_data). Au démarrage, trois
+ * mécanismes téléchargeaient chacun la totalité, coup sur coup : on n'en fait
+ * plus qu'un, les autres repartent de ce point (téléchargement des seules
+ * modifications).
+ */
+let dernierPullCompletA = 0;
+export function pullCompletRecent(ms = 30_000): boolean {
+  return Date.now() - dernierPullCompletA < ms;
+}
+
 export async function loadAllFromSupabase(): Promise<number> {
   if (!FIREBASE_DATA_ENABLED) return 0;
   try {
+    const debut = new Date().toISOString();
     const docs = await kvGetCollection<{ id: string; value: any }>(APP_DATA);
+    dernierPullCompletA = Date.now();
+    // Le prochain cycle du poller ne demandera que ce qui a changé depuis.
+    if (!appDataSince) appDataSince = debut;
     const { setItemWithoutSync } = await import('./autoSync').catch(() => ({
       setItemWithoutSync: (k: string, v: string) => localStorage.setItem(k, v),
     }));

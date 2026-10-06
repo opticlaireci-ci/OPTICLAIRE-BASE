@@ -35,6 +35,7 @@ BEGIN
       ('emplois_du_temps', 'magasin_id'),
       ('mouvements_stock', 'magasin_id'),
       ('mouvements_stock', 'updated_at'),
+      ('mouvements_stock', 'bon_id'),        -- remise en stock à la suppression d'une facture
       ('bons', 'magasin_source'),
       ('bons', 'magasin_destination')
     ) AS t(tbl, col)

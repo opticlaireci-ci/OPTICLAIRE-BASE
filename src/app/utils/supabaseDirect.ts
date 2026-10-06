@@ -200,6 +200,19 @@ function copieProfonde<T>(v: T): T {
   return JSON.parse(JSON.stringify(v));
 }
 
+/**
+ * Lignes pour un appelant : le PREMIER appelant reçoit les lignes telles quelles
+ * (elles viennent d'être reçues du réseau, personne d'autre ne les a) ; seuls
+ * les appelants SUIVANTS d'une même requête partagée reçoivent une copie. La
+ * copie systématique coûtait plusieurs secondes au démarrage avec des milliers
+ * de ventes.
+ */
+const lignesDejaServies = new WeakSet<object>();
+function lignesPourAppelant<T>(rows: T[]): T[] {
+  if (!lignesDejaServies.has(rows)) { lignesDejaServies.add(rows); return rows; }
+  return copieProfonde(rows);
+}
+
 const collectionsEnCours = new Map<string, Promise<any[]>>();
 
 export async function kvGetCollection<T = any>(entity: string): Promise<T[]> {
@@ -214,7 +227,7 @@ export async function kvGetCollection<T = any>(entity: string): Promise<T[]> {
   const rows = await pending;
   // Copie par appelant : les lignes sont partagées entre requêtes coalescées et
   // certains services modifient les objets reçus (tri, normalisation…).
-  return (copieProfonde(rows).map((r: any) => fromRow(target, r)).filter(Boolean)) as T[];
+  return (lignesPourAppelant(rows).map((r: any) => fromRow(target, r)).filter(Boolean)) as T[];
 }
 
 // ── Lecture FILTRÉE côté Supabase ─────────────────────────────────────────────
@@ -304,7 +317,7 @@ export async function kvGetCollectionWhere<T = any>(entity: string, filtres: Fil
   }
   const rows = await pending;
   if (rows == null) return kvGetCollection<T>(entity);
-  return (copieProfonde(rows).map((r: any) => fromRow(target, r)).filter(Boolean)) as T[];
+  return (lignesPourAppelant(rows).map((r: any) => fromRow(target, r)).filter(Boolean)) as T[];
 }
 
 /**

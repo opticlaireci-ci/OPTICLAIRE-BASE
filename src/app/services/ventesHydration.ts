@@ -7,7 +7,7 @@ import { logger } from '../utils/logger';
  * Temps réel via `onSnapshot` Firestore : cohérent sur tous les navigateurs.
  */
 
-import { type VenteSupabase, chargerVentes, subscriberVentesMagasin } from './ventesService';
+import { type VenteSupabase, chargerVentes, abonnerVentesMagasin } from './ventesService';
 import { safeReplaceLocalArray } from './safeHydrate';
 import { avecTotauxVenteNormalises } from '../utils/venteTotals';
 
@@ -59,15 +59,10 @@ let unsubscribers: Array<() => void> = [];
 export function subscribeVentesRealtime(magasinIds: string[]): () => void {
   unsubscribers.forEach(u => u());
 
-  unsubscribers = magasinIds.map(magasinId => {
-    const map = new Map<string, VenteSupabase>();
-    return subscriberVentesMagasin(
-      magasinId,
-      v => { map.set(v.id, v); writeCache(magasinId, Array.from(map.values())); },
-      v => { map.set(v.id, v); writeCache(magasinId, Array.from(map.values())); },
-      id => { map.delete(id); writeCache(magasinId, Array.from(map.values())); },
-    );
-  });
+  // Une seule écriture du cache par mise à jour (et non une par vente).
+  unsubscribers = magasinIds.map(magasinId =>
+    abonnerVentesMagasin(magasinId, ventes => writeCache(magasinId, ventes)),
+  );
 
   return () => {
     unsubscribers.forEach(u => u());

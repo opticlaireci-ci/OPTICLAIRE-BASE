@@ -176,8 +176,16 @@ export function SgopticDashboard({ title, ventes, reglements, objectif = 0, taux
     const caChange = prevCA > 0 ? ((caMonth - prevCA) / prevCA) * 100 : (caMonth > 0 ? 100 : 0);
     const payPct = caYear > 0 ? (payYear / caYear) * 100 : 0;
     const restantPct = caYear > 0 ? (restantYear / caYear) * 100 : 0;
-    const avoirPlusMonth = Math.max(0, payMonth + bonsMonth - caMonth);
-    const avoirMoinsMonth = Math.max(0, caMonth - payMonth - bonsMonth);
+    // AVOIR-CLIENT − = ce que les clients doivent encore sur les factures du mois ;
+    // AVOIR-CLIENT + = ce qui a été payé en trop sur ces mêmes factures.
+    const avoirMoinsMonth = restantM[selMonth];
+    const avoirPlusMonth = realSales.reduce((s, v) => {
+      const d = dateOf(v.date);
+      if (!d || d.getFullYear() !== selYear || d.getMonth() !== selMonth) return s;
+      return s + Math.max(paiementVente(v) + bonsAmount(v) - venteAmount(v), 0);
+    }, 0);
+    // Montant restant : toutes les factures du magasin depuis sa création.
+    const restantTotal = realSales.reduce((s, v) => s + restantVente(v), 0);
     const monthPctRealise = objectif > 0 ? (caMonth / objectif) * 100 : 0;
     const sparkUpTo = (arr: number[]) => arr.slice(Math.max(0, selMonth - 5), selMonth + 1);
 
@@ -209,7 +217,7 @@ export function SgopticDashboard({ title, ventes, reglements, objectif = 0, taux
       dayData, annualData, annualTable, devisPie, workloadData,
       caToday, payToday, bonsToday, factToday, devisToday, pctRealiseToday,
       caYear, payYear, bonsYear, restantYear, avoirPlusYear, avoirMoinsYear,
-      caMonth, payMonth, bonsMonth, avoirPlusMonth, avoirMoinsMonth,
+      caMonth, payMonth, bonsMonth, avoirPlusMonth, avoirMoinsMonth, restantTotal,
       caChange, payPct, restantPct, monthPctRealise,
       sparkCA: sparkUpTo(caM), sparkPay: sparkUpTo(payM), sparkRestant: sparkUpTo(restantM),
       totalDevisInfo, factCount, devisCount, abandons, totalDevisYear, totalFactYear,
@@ -272,7 +280,7 @@ export function SgopticDashboard({ title, ventes, reglements, objectif = 0, taux
             <SideStat title="Objectif" pct={fmtPct(data.monthPctRealise)} value={fmtInt(objectif)} spark={data.sparkCA} />
             <SideStat title="Chiffre d'Affaires" pct={`${data.caChange >= 0 ? '+' : ''}${data.caChange.toFixed(2)}%`} value={fmtInt(data.caYear)} spark={data.sparkCA} />
             <SideStat title="Total Paiements" pct={fmtPct(data.payPct)} value={fmtInt(data.payYear)} spark={data.sparkPay} />
-            <SideStat title="Montant Restant" pct={fmtPct(data.restantPct)} value={fmtInt(data.restantYear)} spark={data.sparkRestant} />
+            <SideStat title="Montant Restant" pct="depuis la création" value={fmtInt(data.restantTotal)} spark={data.sparkRestant} />
             <SideStat title="AVOIR CLIENT +" pct="" value={fmtInt(data.avoirPlusYear)} spark={[]} />
             <SideStat title="AVOIR CLIENT −" pct="" value={fmtInt(data.avoirMoinsYear)} spark={[]} />
           </div>

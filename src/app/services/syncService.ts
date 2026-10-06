@@ -61,6 +61,10 @@ export async function pullFromCloud(): Promise<{ success: boolean; count: number
     return { success: true, count: 0, receivedKeys: new Set() };
   }
   try {
+    // Réglages déjà téléchargés en entier il y a moins de 30 s (démarrage) :
+    // inutile de tout retélécharger, le poller temps réel suit les changements.
+    const { pullCompletRecent } = await import('./supabaseRealtime');
+    if (pullCompletRecent()) return { success: true, count: 0, receivedKeys: new Set() };
     const { setItemWithoutSync } = await import('./autoSync');
 
     const snap = await getDocs(collection(db, 'app_data'));

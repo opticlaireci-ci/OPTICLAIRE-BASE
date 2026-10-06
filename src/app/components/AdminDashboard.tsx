@@ -271,7 +271,14 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
       if (String((r as any).details || '').trim().toLowerCase() === 'acompte importé') continue;
       reglementsImportesDates.push({ date: dateOf(r.date), montant: Number(r.montant) || 0 });
     }
-    const paiementVente = (v: any) => venteAcompte(v) + (estImportee(v) ? 0 : (reglementsParVente[v.id] || 0));
+    // Paiements d'une facture = acompte + TOUS ses règlements (y compris ceux
+    // d'un ancien dossier importé payés plus tard) : ils sont rattachés au mois
+    // d'ÉDITION de la facture, dont ils diminuent le reste à payer. Le jour de
+    // l'encaissement, ils apparaissent seulement dans « Règlements du jour ».
+    const paiementVente = (v: any) => venteAcompte(v) + (reglementsParVente[v.id] || 0);
+    // Excédent payé sur une facture (AVOIR-CLIENT +).
+    const excedentVente = (v: any) => Math.max(paiementVente(v) + bonsAmount(v) - venteNet(v), 0);
+    void estImportee; void reglementsImportesDates;
 
     // ── STATISTIQUES DU JOUR ──────────────────────────────────────────────────
     let caToday = 0, bonsToday = 0, payToday = 0, factToday = 0, devisToday = 0;
@@ -286,7 +293,7 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
     // et non à la date du règlement. Le rapprochement financier est donc stable
     // même lorsqu'un client règle une ancienne facture ce mois-ci.
     const z = () => Array.from({ length: 12 }, () => 0);
-    const caM = z(), payM = z(), bonsM = z(), factCntM = z(), devisCntM = z(), restantM = z();
+    const caM = z(), payM = z(), bonsM = z(), factCntM = z(), devisCntM = z(), restantM = z(), avoirPlusM = z();
     for (const v of realSales) {
       const x = dateOf(v.date);
       if (inYear(x, annee)) {
@@ -296,16 +303,15 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
         factCntM[m]++;
         payM[m] += paiementVente(v);
         restantM[m] += restantVente(v);
+        avoirPlusM[m] += excedentVente(v);
       }
     }
     for (const v of devisAll) { const x = dateOf(v.date); if (inYear(x, annee)) devisCntM[x!.getMonth()]++; }
-    for (const r of reglementsImportesDates) if (inYear(r.date, annee)) payM[r.date!.getMonth()] += r.montant;
 
     // ── Journalier (mois sélectionné) : factures créées ce jour ──────────────
     const nbJours = new Date(annee, mois + 1, 0).getDate();
     const dayData = Array.from({ length: nbJours }, (_, i) => ({ jour: i + 1, ca: 0, paiements: 0, bons: 0, restant: 0 }));
     for (const v of realSales) { const x = dateOf(v.date); if (inMonth(x)) { const i = x!.getDate() - 1; if (dayData[i]) { dayData[i].ca += venteNet(v); dayData[i].bons += bonsAmount(v); dayData[i].paiements += paiementVente(v); dayData[i].restant += restantVente(v); } } }
-    for (const r of reglementsImportesDates) { if (inMonth(r.date)) { const i = r.date!.getDate() - 1; if (dayData[i]) dayData[i].paiements += r.montant; } }
 
     // ── Cumuls année ──────────────────────────────────────────────────────────
     const caYear = caM.reduce((a, b) => a + b, 0);
@@ -314,6 +320,9 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
     const restantYear = restantM.reduce((a, b) => a + b, 0);
     // ── Bandeau mensuel ───────────────────────────────────────────────────────
     const caMonth = caM[mois], payMonth = payM[mois], bonsMonth = bonsM[mois], restantMonth = restantM[mois];
+    // AVOIR-CLIENT − = ce que les clients doivent encore sur les factures du mois ;
+    // AVOIR-CLIENT + = ce qui a été payé en trop sur ces mêmes factures.
+    const avoirMoinsMonth = restantMonth, avoirPlusMonth = avoirPlusM[mois];
     const annualMonths = MOIS_SHORT.map((m, i) => ({ mois: m, ca: caM[i], paiements: payM[i], bons: bonsM[i], restant: restantM[i], objectif: 0 }));
 
     // ── RAPPORT MARGE + produits (mois sélectionné) ───────────────────────────
@@ -362,13 +371,8 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
       const b = byMag[v.magasin_id]; if (!b) continue;
       b.restant += restantVente(v);
       const x = dateOf(v.date); if (!inYear(x, annee)) continue;
-      b.ca += venteNet(v); b.bons += bonsAmount(v); b.paiements += venteAcompte(v);
-    }
-    for (const r of reglements) {
-      const x = dateOf(r.date);
-      if (!inYear(x, annee)) continue;
-      const b = byMag[r.magasin_id];
-      if (b) b.paiements += Number(r.montant) || 0;
+      // Paiements rattachés à la facture (même règle que le bandeau mensuel).
+      b.ca += venteNet(v); b.bons += bonsAmount(v); b.paiements += paiementVente(v);
     }
 
     const magasinsPrisEnCompte = magasin === '__TOUS__' ? magasins : magasins.filter(m => m.id === magasin);
@@ -427,7 +431,7 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
     return {
       objectif,
       caToday, bonsToday, payToday, factToday, devisToday,
-      dayData, annualMonths, caMonth, payMonth, bonsMonth, restantMonth,
+      dayData, annualMonths, caMonth, payMonth, bonsMonth, restantMonth, avoirMoinsMonth, avoirPlusMonth,
       caYear, payYear, bonsYear, restantYear,
       brutMonth, netMonth, remiseMonth, margeMonth, prod, totalProduits, coutMonth, margePct, qteVente, qteCmd, coutCmd,
       margeTable, margeClassement, objCA,
@@ -477,8 +481,8 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
               { value: fmtInt(d.caMonth), label: "Chiffre d'Affaires", bg: C_CA, light: false },
               { value: fmtInt(d.payMonth), label: 'Paiements Clients', bg: C_PAY, light: false },
               { value: fmtInt(d.bonsMonth), label: 'Bons Assurance', bg: C_BONS, light: false },
-              { value: fmtInt(Math.max(0, d.payMonth + d.bonsMonth - d.caMonth)), label: 'AVOIR-CLIENT +', bg: C_AVOIR_P, light: true },
-              { value: fmtInt(Math.max(0, d.caMonth - d.payMonth - d.bonsMonth)), label: 'AVOIR-CLIENT -', bg: C_AVOIR_M, light: true },
+              { value: fmtInt(d.avoirPlusMonth), label: 'AVOIR-CLIENT +', bg: C_AVOIR_P, light: true },
+              { value: fmtInt(d.avoirMoinsMonth), label: 'AVOIR-CLIENT -', bg: C_AVOIR_M, light: true },
             ].map((c, i) => (
               <div
                 key={i}
@@ -798,11 +802,11 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
 
                 <div className="monthly-avoir" style={{ display: 'flex', flexDirection: 'column', minWidth: 0, height: 136 }}>
                   <div style={{ flex: 1, backgroundColor: C_AVOIR_P, color: '#111827', padding: '6px 10px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: 0, boxSizing: 'border-box' }}>
-                    <div style={{ fontWeight: 700, fontSize: 'clamp(16px, 1.25vw, 18px)', lineHeight: '20px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{fmtInt(Math.max(0, d.payMonth + d.bonsMonth - d.caMonth))}</div>
+                    <div style={{ fontWeight: 700, fontSize: 'clamp(16px, 1.25vw, 18px)', lineHeight: '20px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{fmtInt(d.avoirPlusMonth)}</div>
                     <div style={{ fontWeight: 700, fontSize: 'clamp(15px, 1.15vw, 17px)', lineHeight: '20px' }}>AVOIR-CLIENT<br/>+</div>
                   </div>
                   <div style={{ flex: 1, backgroundColor: C_AVOIR_M, color: '#111827', padding: '6px 10px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: 0, boxSizing: 'border-box' }}>
-                    <div style={{ fontWeight: 700, fontSize: 'clamp(16px, 1.25vw, 18px)', lineHeight: '20px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{fmtInt(Math.max(0, d.caMonth - d.payMonth - d.bonsMonth))}</div>
+                    <div style={{ fontWeight: 700, fontSize: 'clamp(16px, 1.25vw, 18px)', lineHeight: '20px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{fmtInt(d.avoirMoinsMonth)}</div>
                     <div style={{ fontWeight: 700, fontSize: 'clamp(15px, 1.15vw, 17px)', lineHeight: '20px' }}>AVOIR-CLIENT<br/>-</div>
                   </div>
                 </div>

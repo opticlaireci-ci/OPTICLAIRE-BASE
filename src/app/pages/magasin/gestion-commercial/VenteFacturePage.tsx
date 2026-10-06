@@ -20,7 +20,7 @@ import {
   useFournisseurs,
 } from '../../../utils/venteLookups';
 import { ajouterReglement, chargerReglements, chargerTousLesReglements, readReglementsCacheMap, subscriberReglementsVente, ReglementSupabase } from '../../../services/reglementsService';
-import { ajouterVente, chargerVentes as chargerVentesSupabase, subscriberVentesMagasin, readVentesCache, supprimerVente, mettreAJourVente, VenteSupabase } from '../../../services/ventesService';
+import { ajouterVente, chargerVentes as chargerVentesSupabase, abonnerVentesMagasin, readVentesCache, supprimerVente, mettreAJourVente, VenteSupabase } from '../../../services/ventesService';
 import { enregistrerVente, annulerSortiesVente } from '../../../services/inventaireService';
 import { verifierStockVente, messageRuptures } from '../../../utils/stockVente';
 import { useLentillesOpticStock } from '../../../hooks/useLentillesOpticStock';
@@ -3477,6 +3477,20 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
     return () => unsubscribe();
   }, []);
 
+  // Affichage progressif : les 100 ventes les plus récentes, puis « Afficher
+  // plus ». Dessiner des milliers de lignes d'un coup figeait la page.
+  const PAS_AFFICHAGE = 100;
+  const [nbAffiches, setNbAffiches] = useState(PAS_AFFICHAGE);
+  useEffect(() => { setNbAffiches(PAS_AFFICHAGE); }, [searchFacture, searchClient, dateDebut, dateFin]);
+  // Une seule présentation dessinée : cartes (téléphone) OU tableau (ordinateur).
+  const [estMobile, setEstMobile] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches);
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 767px)');
+    const maj = () => setEstMobile(mq.matches);
+    mq.addEventListener?.('change', maj);
+    return () => mq.removeEventListener?.('change', maj);
+  }, []);
+
   const filtered = ventes.filter(v => {
     const matchFacture = !searchFacture ||
       (v.recap.numFacture || '').toLowerCase().includes(searchFacture.toLowerCase());
@@ -5075,7 +5089,8 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
             {ventes.length === 0 ? 'Aucune vente enregistrée. Cliquez sur "Nouveau" pour en créer une.' : 'Aucun résultat pour cette recherche.'}
           </div>
         ) : (() => {
-          const rows = [...filtered].sort(ordreArrivee).map((v, i) => {
+          const tries = [...filtered].sort(ordreArrivee);
+          const rows = tries.slice(0, nbAffiches).map((v, i) => {
             const acompte = parseFloat(v.recap.acompte) || 0;
             const totalAssurance = v.bonsAssurance.reduce((s, b) => s + (parseFloat(b.montantPrisEnCharge) || 0), 0);
             const totalReglements = (reglementsParVente[v.id] || [])
@@ -5105,7 +5120,7 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
 
           return <>
             {/* ── Cartes mobiles (< md) ── */}
-            <div className="flex flex-col gap-3 md:hidden">
+            {estMobile && <div className="flex flex-col gap-3 md:hidden">
               {rows.map(({ v, i, acompte, reste, remisePct, totalBrut, totalNet, rowBgColor, actions }) => (
                 <div key={`card-${v.id}-${i}`} className="rounded-xl border-2 overflow-hidden shadow-sm" style={{ borderColor: reste > 0 ? '#fca5a5' : '#86efac', backgroundColor: rowBgColor }}>
                   {/* En-tête carte */}
@@ -5166,10 +5181,10 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
                   </div>
                 </div>
               ))}
-            </div>
+            </div>}
 
             {/* ── Tableau desktop (≥ md) ── */}
-            <div className="hidden md:block bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            {!estMobile && <div className="hidden md:block bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="text-sm border-collapse" style={{ minWidth: 780 }}>
                   <thead>
@@ -5243,7 +5258,18 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
                   </tbody>
                 </table>
               </div>
-            </div>
+            </div>}
+            {tries.length > nbAffiches && (
+              <div className="flex justify-center py-3">
+                <button
+                  onClick={() => setNbAffiches(n => n + PAS_AFFICHAGE)}
+                  className="px-5 py-2 rounded text-white text-sm font-semibold"
+                  style={{ backgroundColor: '#1a7a96' }}
+                >
+                  Afficher {Math.min(PAS_AFFICHAGE, tries.length - nbAffiches)} ventes de plus ({tries.length - nbAffiches} restantes)
+                </button>
+              </div>
+            )}
           </>;
         })()}
       </div>
@@ -5765,40 +5791,11 @@ export function VenteFacturePage() {
 
     const convertVenteSupabase = venteSupabaseToSauvegardee;
 
-    const channel = subscriberVentesMagasin(
-      magasinId,
-      (vente) => {
-        // Nouvelle vente ajoutée — dédoublonnage par id (le snapshot initial
-        // réémet un "added" pour chaque vente déjà chargée). On ignore les devis.
-        if (!estVente(vente)) return;
-        setVentes(prev => {
-          const conv = convertVenteSupabase(vente);
-          if (prev.some(v => v.id === conv.id)) {
-            return prev.map(v => v.id === conv.id ? conv : v);
-          }
-          return [conv, ...prev];
-        });
-      },
-      (vente) => {
-        // Vente mise à jour — un devis converti en vente devient visible ici ;
-        // un enregistrement resté 'devis' est retiré de la liste.
-        if (!estVente(vente)) {
-          setVentes(prev => prev.filter(v => v.id !== vente.id));
-          return;
-        }
-        setVentes(prev => {
-          const conv = convertVenteSupabase(vente);
-          if (prev.some(v => v.id === conv.id)) {
-            return prev.map(v => v.id === conv.id ? conv : v);
-          }
-          return [conv, ...prev];
-        });
-      },
-      (venteId) => {
-        // Vente supprimée
-        setVentes(prev => prev.filter(v => v.id !== venteId));
-      }
-    );
+    // Liste complète livrée en un seul appel par mise à jour (le snapshot
+    // initial ne déclenche plus des milliers de rafraîchissements d'écran).
+    const channel = abonnerVentesMagasin(magasinId, liste => {
+      setVentes(liste.filter(estVente).map(convertVenteSupabase));
+    });
 
     return () => {
       if (typeof channel === 'function') channel();

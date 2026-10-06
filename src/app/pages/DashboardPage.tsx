@@ -1,7 +1,7 @@
 import { logger } from '../utils/logger';
 import { useEffect, useMemo, useState } from 'react';
 import { getMagasins } from '../constants/magasins';
-import { chargerToutesLesVentes, subscriberToutesLesVentes, readVentesCache, type VenteSupabase } from '../services/ventesService';
+import { chargerToutesLesVentes, abonnerToutesLesVentes, readVentesCache, type VenteSupabase } from '../services/ventesService';
 import { chargerTousLesReglements, type ReglementSupabase } from '../services/reglementsService';
 import { AdminDashboard, type MagasinRef } from '../components/AdminDashboard';
 
@@ -63,13 +63,7 @@ export function DashboardPage() {
       .then(rows => { if (mounted) setVentes(rows); })
       .catch(e => logger.error('❌ dashboard ventes:', e));
 
-    const map = new Map<string, VenteSupabase>();
-    const flush = () => { if (mounted) setVentes(Array.from(map.values())); };
-    const unsub = subscriberToutesLesVentes(
-      v => { map.set(v.id, v); flush(); },
-      v => { map.set(v.id, v); flush(); },
-      id => { map.delete(id); flush(); },
-    );
+    const unsub = abonnerToutesLesVentes(liste => { if (mounted) setVentes(liste); });
     return () => { mounted = false; unsub(); };
   }, []);
 

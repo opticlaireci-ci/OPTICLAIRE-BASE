@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { ArrowLeft, Calendar, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, Edit, Search, Store, X } from 'lucide-react';
-import { subscriberVentesMagasin, chargerVentes, readVentesCache, VenteSupabase } from '../../../services/ventesService';
+import { abonnerVentesMagasin, chargerVentes, readVentesCache, VenteSupabase } from '../../../services/ventesService';
 import { normaliserTotauxVente } from '../../../utils/venteTotals';
 import { getMagasins } from '../../../constants/magasins';
 import { TENANT } from '../../../config/tenant';
@@ -168,12 +168,7 @@ export function FactureAssuranceMagasinPage() {
 
   useEffect(() => {
     if (!magasinId) return;
-    const unsub = subscriberVentesMagasin(
-      magasinId,
-      v => setVentes(prev => prev.some(x => x.id === v.id) ? prev.map(x => x.id === v.id ? v : x) : [v, ...prev]),
-      v => setVentes(prev => prev.some(x => x.id === v.id) ? prev.map(x => x.id === v.id ? v : x) : [v, ...prev]),
-      id => setVentes(prev => prev.filter(v => v.id !== id)),
-    );
+    const unsub = abonnerVentesMagasin(magasinId, setVentes);
     return () => unsub?.();
   }, [magasinId]);
 

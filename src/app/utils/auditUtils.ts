@@ -73,17 +73,22 @@ export function addUpdateAudit<T extends AuditInfo>(data: T): T {
   };
 }
 
+// Formateur créé UNE fois : `toLocaleString(…, options)` en recréait un à
+// chaque appel (très coûteux sur une liste de milliers de lignes).
+let formateurDate: Intl.DateTimeFormat | null = null;
 export function formatDate(dateStr: string | undefined): string {
   if (!dateStr) return '-';
   try {
     const date = new Date(dateStr);
-    return date.toLocaleString('fr-FR', {
+    if (isNaN(date.getTime())) return 'Invalid Date';
+    formateurDate ||= new Intl.DateTimeFormat('fr-FR', {
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',
       hour: '2-digit',
       minute: '2-digit',
     });
+    return formateurDate.format(date);
   } catch {
     return '-';
   }
