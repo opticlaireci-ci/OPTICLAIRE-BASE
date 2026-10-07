@@ -371,6 +371,16 @@ export function MagasinLayout() {
       return;
     }
 
+    // Un utilisateur rattaché à certains magasins ne peut pas ouvrir un AUTRE
+    // magasin en tapant son adresse (ex. une conseillère d'ABOBO sur /magasin/faya).
+    const sesMagasins = (user.magasinIds || []).map(m => String(m).toLowerCase());
+    if (!isAdmin && sesMagasins.length > 0 && magasinId && !sesMagasins.includes(magasinId.toLowerCase())) {
+      const sien = user.magasinActuel && sesMagasins.includes(String(user.magasinActuel).toLowerCase())
+        ? user.magasinActuel : user.magasinIds[0];
+      navigate(`/magasin/${sien}/accueil`, { replace: true });
+      return;
+    }
+
     const access = user.menuAccess || [];
     const roleLectureVenteFacture = ['conseillere', 'opticien'].includes(user.role || '');
     if (isAdmin || access.length === 0) return;
@@ -379,6 +389,11 @@ export function MagasinLayout() {
     // consulter les ventes, factures et leur détail, même si un ancien profil
     // possède un menuAccess incomplet.
     if (roleLectureVenteFacture && path.includes('/commercial/vente-facture')) return;
+    // Clients non soldés : ouvert à toute personne qui a accès à Vente/Facture
+    // (c'est là que les conseillères relancent puis encaissent).
+    if (path.includes('/commercial/recouvrement') && (roleLectureVenteFacture
+      || access.includes('magasin:commercial/vente-facture') || access.includes('commercial/vente-facture')
+      || access.includes('magasin:commercial/recouvrement'))) return;
     if (path.endsWith('/accueil') || /\/magasin\/[^/]+\/?$/.test(path)) return;
     const key = pathToButtonKey(path);
     // Compatibilité avec les anciens profils : certaines anciennes versions
@@ -425,6 +440,7 @@ export function MagasinLayout() {
     { title: 'Devis/Proforma', icon: <Description />, path: `/magasin/${magasinId}/commercial/devis-proforma` },
     { title: 'Vente Flash', icon: <FlashOn />, path: `/magasin/${magasinId}/commercial/vente-flash` },
     { title: 'Vente/Facture', icon: <Receipt />, path: `/magasin/${magasinId}/commercial/vente-facture` },
+    { title: 'Clients non soldés', icon: <Phone />, path: `/magasin/${magasinId}/commercial/recouvrement` },
     ...(peutVoirFicheMontage
       ? [{ title: 'Fiche de Montage', icon: <Visibility />, path: `/magasin/${magasinId}/commercial/fiche-montage` }]
       : []),
@@ -482,12 +498,17 @@ export function MagasinLayout() {
   const isAdminRole = user?.role === 'super_admin' || user?.role === 'admin' || user?.role === 'administrateur';
   const menuAccess = user?.menuAccess || [];
   const roleLectureVenteFacture = ['conseillere', 'opticien'].includes(user?.role || '');
+  const accesVenteFacture = roleLectureVenteFacture
+    || menuAccess.includes('magasin:commercial/vente-facture') || menuAccess.includes('commercial/vente-facture');
   const visibleMenuItems = (isAdminRole || menuAccess.length === 0)
     ? menuItems
     : filterByAccess(
         menuItems,
         menuAccess,
-        roleLectureVenteFacture ? ['/commercial/vente-facture'] : [],
+        [
+          ...(roleLectureVenteFacture ? ['/commercial/vente-facture'] : []),
+          ...(accesVenteFacture ? ['/commercial/recouvrement'] : []),
+        ],
       );
 
   const handleExpand = (title: string) => {

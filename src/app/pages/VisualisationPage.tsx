@@ -444,9 +444,9 @@ export function VisualisationPage() {
           const totalPrisEnCharge = filteredAss.reduce((s, v) => s + (v.bons_assurance as any[]).reduce((ss, b) => ss + num(
             b?.montantPrisEnCharge ?? b?.montant ?? b?.total ?? b?.montantAssurance
           ), 0), 0);
-          const totalAss = filteredAss.reduce((s, v) => s + montantVente(v), 0);
+          // Récapitulatif (écran, PDF et Excel) : uniquement la part des assurances.
           return build(titre, nomFichier, headersReg, assRows,
-            `Total pris en charge par les assurances : ${fmtMontant(totalPrisEnCharge)} · Total net des factures concernées : ${fmtMontant(totalAss)}`,
+            `Total pris en charge par les assurances : ${fmtMontant(totalPrisEnCharge)}`,
             { foot: ['T O T A L', '', fmtMontant(totalPrisEnCharge), '', ''] });
         }
 

@@ -3263,6 +3263,22 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
   const [dateDebut, setDateDebut] = useState('');
   const [dateFin, setDateFin] = useState('');
   const [detail, setDetail] = useState<VenteSauvegardee | null>(null);
+  // Ouverture directe de la fiche d'une vente (?detail=<id>), ex. depuis
+  // « Clients non soldés » pour encaisser le solde du client.
+  // NB : l'adresse est nettoyée via history.replaceState et non via le
+  // routeur — la mise en page du magasin redémarre la page à chaque changement
+  // d'adresse, ce qui refermait aussitôt la fiche.
+  const [paramsListe] = useSearchParams();
+  const detailOuvertRef = useRef<string | null>(null);
+  useEffect(() => {
+    const id = paramsListe.get('detail');
+    if (!id || detailOuvertRef.current === id) return;
+    const v = ventes.find(x => x.id === id);
+    if (!v) return;
+    detailOuvertRef.current = id;
+    setDetail(v);
+    try { window.history.replaceState(window.history.state, '', window.location.pathname); } catch { /* ignore */ }
+  }, [paramsListe, ventes]);
   const detailScrollRef = useRef<HTMLDivElement | null>(null);
   const [viewMode, setViewMode] = useState<'details' | 'reglements'>('details');
   const [showAjouterReglement, setShowAjouterReglement] = useState(false);
@@ -5744,7 +5760,8 @@ export function venteSupabaseToSauvegardee(v: VenteSupabase): VenteSauvegardee {
 
 export function VenteFacturePage() {
   const { magasinId = '' } = useParams<{ magasinId: string }>();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
+  const editionOuverteRef = useRef<string | null>(null);
   const ventesKey = `leclaire_ventes_${magasinId}`;
   const [vue, setVue] = useState<'liste' | 'formulaire'>('liste');
   const [venteEnEdition, setVenteEnEdition] = useState<VenteSauvegardee | null>(null);
@@ -5775,15 +5792,16 @@ export function VenteFacturePage() {
   // Facture Assurance. Le bouton d'édition transmet l'id de la vente dans l'URL.
   useEffect(() => {
     const venteId = searchParams.get('venteId');
-    if (!venteId || vue !== 'liste') return;
+    if (!venteId || vue !== 'liste' || editionOuverteRef.current === venteId) return;
     const vente = ventes.find(v => v.id === venteId);
     if (!vente) return;
+    editionOuverteRef.current = venteId;
     setVenteEnEdition(vente);
     setVue('formulaire');
-    const nextParams = new URLSearchParams(searchParams);
-    nextParams.delete('venteId');
-    setSearchParams(nextParams, { replace: true });
-  }, [searchParams, setSearchParams, ventes, vue]);
+    // Adresse nettoyée sans passer par le routeur (sinon la page redémarre et
+    // le formulaire se referme aussitôt).
+    try { window.history.replaceState(window.history.state, '', window.location.pathname); } catch { /* ignore */ }
+  }, [searchParams, ventes, vue]);
 
   // Synchronisation en temps réel
   useEffect(() => {

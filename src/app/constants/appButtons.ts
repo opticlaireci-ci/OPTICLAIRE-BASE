@@ -34,6 +34,7 @@ export const APP_BUTTON_GROUPS: AppButtonGroup[] = [
       { key: 'magasin:commercial/devis-proforma', label: 'Devis/Proforma' },
       { key: 'magasin:commercial/vente-flash', label: 'Vente Flash' },
       { key: 'magasin:commercial/vente-facture', label: 'Vente/Facture' },
+      { key: 'magasin:commercial/recouvrement', label: 'Clients non soldés' },
       { key: 'magasin:commercial/fiche-montage', label: 'Fiche de Montage' },
     ],
   },
