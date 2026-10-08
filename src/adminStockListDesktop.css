@@ -538,13 +538,12 @@
     gap: 10px !important;
   }
 
-  /* Activité mensuelle : les 6 cartes restent toutes visibles dans le viewport.
-     Aucun défilement horizontal pour cette zone. */
+  /* Activité mensuelle : UNE ligne de 6 cases, comme le modèle de référence
+     (AVOIR + et AVOIR − empilés dans la 5e). Toutes visibles, sans défilement. */
   .admin-general-dashboard .monthly-mobile-cards {
     display: grid !important;
-    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
-    grid-auto-rows: minmax(96px, auto) !important;
-    gap: 1px !important;
+    grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+    gap: 0 !important;
     overflow: hidden !important;
     width: 100% !important;
     max-width: 100% !important;
@@ -556,7 +555,6 @@
     width: 100% !important;
     min-width: 0 !important;
     max-width: 100% !important;
-    min-height: 96px !important;
     box-sizing: border-box !important;
     overflow: hidden !important;
   }

@@ -41,6 +41,8 @@ const C_SERV = '#e01e8a';
 
 const fmtInt = (n: number) => Math.round(Number(n) || 0).toLocaleString('fr-FR');
 const fmtMoney = (n: number) => 'F CFA ' + (Number(n) || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+/** Montant en chiffres seuls (« 4009000 ») : 6 cases tiennent ainsi sur un téléphone. */
+const chiffresBruts = (n: number) => String(Math.round(Number(n) || 0));
 const fmtAxis = (n: number) => (n >= 1_000_000 ? `${(n / 1_000_000).toFixed(0)}M` : n >= 1000 ? `${(n / 1000).toFixed(0)}K` : String(n));
 const pct = (part: number, whole: number) => (whole > 0 ? (part / whole) * 100 : 0);
 
@@ -174,6 +176,8 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
   // Sélecteur mobile : autorise aussi les mois/années à venir sans modifier
   // les contrôles Desktop existants.
   const mobileYears = Array.from({ length: 9 }, (_, i) => now.getFullYear() - 4 + i);
+  // Très petit téléphone (iPhone SE…) : un numéro de jour sur deux sous le graphique.
+  const ecranEtroit = typeof window !== 'undefined' && window.innerWidth < 350;
 
   useEffect(() => {
     // Atterrir DIRECTEMENT sur le bloc « STATISTIQUES … (chiffres du jour) ».
@@ -475,65 +479,60 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
         <div className="monthly-mobile-frame">
           <h2 className="monthly-mobile-title">ACTIVITÉ MENSUELLE</h2>
 
+          {/* Une seule ligne de 6 cases, comme le modèle de référence :
+              Objectif | CA | Paiements | Bons | AVOIR + / AVOIR − (empilés) | Montant Restant */}
           <div className="monthly-mobile-cards">
             {[
-              { value: fmtInt(d.objectif), label: 'Objectif', bg: C_OBJECTIF, light: false },
-              { value: fmtInt(d.caMonth), label: "Chiffre d'Affaires", bg: C_CA, light: false },
-              { value: fmtInt(d.payMonth), label: 'Paiements Clients', bg: C_PAY, light: false },
-              { value: fmtInt(d.bonsMonth), label: 'Bons Assurance', bg: C_BONS, light: false },
-              { value: fmtInt(d.avoirPlusMonth), label: 'AVOIR-CLIENT +', bg: C_AVOIR_P, light: true },
-              { value: fmtInt(d.avoirMoinsMonth), label: 'AVOIR-CLIENT -', bg: C_AVOIR_M, light: true },
+              { value: d.objectif, label: 'Objectif', bg: C_OBJECTIF, centre: true },
+              { value: d.caMonth, label: "Chiffre d'Affaires", bg: C_CA },
+              { value: d.payMonth, label: 'Paiements Clients', bg: C_PAY },
+              { value: d.bonsMonth, label: 'Bons Assurance', bg: C_BONS },
             ].map((c, i) => (
-              <div
-                key={i}
-                className="monthly-mobile-kpi"
-                style={{ backgroundColor: c.bg, color: c.light ? '#111827' : '#fff' }}
-              >
-                <div className="monthly-mobile-value">{c.value}</div>
-                <div className="monthly-mobile-label">{c.label}</div>
+              <div key={i} className="monthly-mobile-kpi" style={{ backgroundColor: c.bg }}>
+                <div className="monthly-mobile-value">{chiffresBruts(c.value)}</div>
+                <div className="monthly-mobile-label" style={c.centre ? { textAlign: 'center' } : undefined}>{c.label}</div>
               </div>
             ))}
-          </div>
-
-          <div className="monthly-mobile-restant" style={{ backgroundColor: C_RESTANT, color: '#fff' }}>
-            <div className="monthly-mobile-restant-value">{fmtInt(d.montantRestantTotal)}</div>
-            <div className="monthly-mobile-restant-label">Montant Restant</div>
+            <div className="monthly-mobile-avoir">
+              <div className="monthly-mobile-avoir-case" style={{ backgroundColor: C_AVOIR_P }}>
+                <div className="monthly-mobile-avoir-label">AVOIR-CLIENT +</div>
+                <div className="monthly-mobile-avoir-value">{chiffresBruts(d.avoirPlusMonth)}</div>
+              </div>
+              <div className="monthly-mobile-avoir-case" style={{ backgroundColor: C_AVOIR_M }}>
+                <div className="monthly-mobile-avoir-label">AVOIR-CLIENT -</div>
+                <div className="monthly-mobile-avoir-value">{chiffresBruts(d.avoirMoinsMonth)}</div>
+              </div>
+            </div>
+            <div className="monthly-mobile-kpi" style={{ backgroundColor: C_RESTANT }}>
+              <div className="monthly-mobile-value">{chiffresBruts(d.montantRestantTotal)}</div>
+              <div className="monthly-mobile-label">Montant Restant</div>
+            </div>
           </div>
 
           <div className="monthly-mobile-store">{magSel}</div>
 
-          <div className="monthly-mobile-month-box" aria-label="Sélection de la période de l'activité mensuelle">
+          <div className="monthly-mobile-month-box">
             <select
-              className="monthly-mobile-month-select"
-              value={mois}
-              onChange={e => setMois(Number(e.target.value))}
-              aria-label="Sélectionner le mois"
+              className="monthly-mobile-period-select"
+              value={`${annee}-${mois}`}
+              onChange={e => { const [a, m] = e.target.value.split('-').map(Number); setAnnee(a); setMois(m); }}
+              aria-label="Mois de l'activité mensuelle"
             >
-              {MOIS_LONG.map((m, i) => (
-                <option key={m} value={i}>{m.toLowerCase()}</option>
-              ))}
-            </select>
-            <select
-              className="monthly-mobile-year-select"
-              value={annee}
-              onChange={e => setAnnee(Number(e.target.value))}
-              aria-label="Sélectionner l'année"
-            >
-              {mobileYears.map(y => (
-                <option key={y} value={y}>{y}</option>
-              ))}
+              {mobileYears.flatMap(y => MOIS_LONG.map((m, i) => (
+                <option key={`${y}-${i}`} value={`${y}-${i}`}>{m.toLowerCase()} {y}</option>
+              )))}
             </select>
           </div>
 
           <div className="monthly-mobile-chart-scroll">
             <div className="monthly-mobile-chart">
-              <ResponsiveContainer width="100%" height={360}>
-                <BarChart data={d.dayData} margin={{ top: 12, right: 8, left: 0, bottom: 28 }}>
+              <ResponsiveContainer width="100%" height={380}>
+                <BarChart data={d.dayData} margin={{ top: 12, right: 4, left: 0, bottom: 4 }} barCategoryGap="12%">
                   <CartesianGrid strokeDasharray="0" vertical={false} stroke="#eeeeee" />
-                  <XAxis dataKey="jour" tick={{ fontSize: 11, fill: '#111827' }} interval={0} axisLine={{ stroke: '#111827' }} tickLine={{ stroke: '#111827' }} />
-                  <YAxis tick={{ fontSize: 11, fill: '#111827' }} tickFormatter={fmtAxis} axisLine={{ stroke: '#111827' }} tickLine={{ stroke: '#111827' }} />
+                  <XAxis dataKey="jour" tick={{ fontSize: 9, fill: '#111827' }} interval={ecranEtroit ? 1 : 0} axisLine={{ stroke: '#111827' }} tickLine={{ stroke: '#111827' }} />
+                  <YAxis tick={{ fontSize: 9, fill: '#111827' }} width={42} tickFormatter={v => String(v)} axisLine={{ stroke: '#111827' }} tickLine={{ stroke: '#111827' }} />
                   <Tooltip formatter={(v: number) => fmtInt(v) + ' F CFA'} />
-                  <Legend wrapperStyle={{ fontSize: 11, paddingTop: 4, lineHeight: '18px' }} />
+                  <Legend wrapperStyle={{ fontSize: 11, paddingTop: 6, lineHeight: '18px' }} />
                   <Bar key="ca" dataKey="ca" name="Chiffre d'Affaires" fill={C_CA} />
                   <Bar key="paiements" dataKey="paiements" name="Paiements Clients" fill={C_PAY} />
                   <Bar key="bons" dataKey="bons" name="Bons Assurance" fill={C_BONS} />
@@ -560,8 +559,6 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
           .monthly-mobile-reference,
           .monthly-mobile-frame,
           .monthly-mobile-cards,
-          .monthly-mobile-kpi,
-          .monthly-mobile-restant,
           .monthly-mobile-store,
           .monthly-mobile-month-box,
           .monthly-mobile-chart-scroll,
@@ -585,86 +582,90 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
 
           .monthly-mobile-title {
             margin: 0;
-            padding: 12px 12px 10px;
-            font-size: 17px;
-            line-height: 22px;
+            padding: 10px 6px 8px;
+            font-size: clamp(13px, 3.6vw, 15px);
+            line-height: 20px;
             font-weight: 700;
             color: #111827;
             overflow-wrap: anywhere;
             word-break: break-word;
           }
 
-          /* Les 6 indicateurs sont de vraies cartes indépendantes.
-             3 colonnes gardent des valeurs lisibles même à 320px. */
+          /* Modèle de référence : UNE ligne de 6 cases (la 5e empile AVOIR + et
+             AVOIR −). Tailles proportionnelles à l'écran : tout tient de 320 px
+             (iPhone SE) aux grands téléphones. */
           .monthly-mobile-cards {
             display: grid !important;
-            grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
-            grid-auto-rows: minmax(96px, auto) !important;
-            gap: 1px !important;
+            grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+            height: 88px;
+            gap: 0 !important;
+            padding: 0 4px;
             background: #fff;
             overflow: hidden !important;
           }
 
           .monthly-mobile-kpi {
-            min-height: 112px;
-            padding: 9px 6px !important;
+            min-width: 0;
+            padding: 5px 2px !important;
             display: flex !important;
             flex-direction: column !important;
             justify-content: space-between !important;
-            align-items: stretch !important;
-            text-align: center !important;
+            color: #fff;
             overflow: hidden !important;
-          }
-
-          .monthly-mobile-value,
-          .monthly-mobile-label,
-          .monthly-mobile-restant-value,
-          .monthly-mobile-restant-label {
-            max-width: 100%;
-            overflow-wrap: anywhere !important;
-            word-break: break-word !important;
-            white-space: normal !important;
-            text-align: center !important;
           }
 
           .monthly-mobile-value {
-            font-size: clamp(11px, 3.8vw, 17px) !important;
+            font-size: clamp(9px, 2.9vw, 12.5px) !important;
             line-height: 1.15 !important;
             font-weight: 700 !important;
+            text-align: center;
+            white-space: nowrap;
+            overflow: hidden;
+            letter-spacing: -0.2px;
           }
 
           .monthly-mobile-label {
-            font-size: clamp(11px, 3.5vw, 15px) !important;
+            font-size: clamp(8px, 2.55vw, 12px) !important;
             line-height: 1.15 !important;
             font-weight: 700 !important;
+            text-align: left;
+            /* Coupure d'un mot seulement s'il ne tient vraiment pas (gros texte). */
+            overflow-wrap: break-word;
           }
 
-          .monthly-mobile-restant {
-            margin-top: 1px;
-            min-height: 112px;
-            padding: 12px !important;
-            display: flex !important;
-            flex-direction: column !important;
-            justify-content: space-between !important;
-            align-items: center !important;
-            overflow: hidden !important;
+          .monthly-mobile-avoir {
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            padding: 2px;
+            background: #f3cbb8;
+            overflow: hidden;
           }
 
-          .monthly-mobile-restant-value {
-            font-size: clamp(18px, 6vw, 28px) !important;
-            line-height: 1.15 !important;
-            font-weight: 700 !important;
+          .monthly-mobile-avoir-case {
+            flex: 1 1 0;
+            min-height: 0;
+            padding: 2px 3px;
+            color: #111827;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            overflow: hidden;
           }
 
-          .monthly-mobile-restant-label {
-            font-size: clamp(16px, 4.8vw, 22px) !important;
-            line-height: 1.15 !important;
-            font-weight: 700 !important;
+          .monthly-mobile-avoir-label {
+            font-size: clamp(8px, 2.35vw, 10.5px);
+            line-height: 1.1;
+            font-weight: 700;
+            overflow-wrap: break-word;
           }
 
-          .monthly-mobile-store {
-            margin-top: 0;
-            padding: 0;
+          .monthly-mobile-avoir-value {
+            font-size: clamp(8.5px, 2.5vw, 11px);
+            line-height: 1.1;
+            font-weight: 700;
+            white-space: nowrap;
             overflow: hidden;
           }
 
@@ -677,8 +678,8 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
 
           .monthly-mobile-store select {
             width: 100% !important;
-            height: 48px !important;
-            min-height: 48px !important;
+            height: 42px !important;
+            min-height: 42px !important;
             border: 1px solid #cfcfcf !important;
             border-radius: 7px !important;
             box-sizing: border-box !important;
@@ -690,51 +691,35 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
             text-overflow: ellipsis;
           }
 
+          .monthly-mobile-store {
+            padding: 8px 12px 0;
+          }
+
+          /* Cadre de la période : « septembre 2026 » centré, comme le modèle. */
           .monthly-mobile-month-box {
-            min-height: 72px;
-            margin-top: 0;
-            padding: 10px 12px;
+            margin: 8px 12px 0;
+            width: auto !important;
+            min-height: 46px;
             border: 1px solid #cfcfcf;
             border-radius: 7px;
             background: #fff;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            color: #4b5563;
-            text-align: center;
             overflow: hidden;
           }
 
-          .monthly-mobile-month-select,
-          .monthly-mobile-year-select {
-            min-width: 0;
-            max-width: 100%;
-            box-sizing: border-box;
-            border: 1px solid #c7cdd4;
-            border-radius: 6px;
-            background: #fff;
-            color: #374151;
-            font-size: clamp(15px, 4.4vw, 19px);
-            font-weight: 600;
-            line-height: 1.2;
-            padding: 9px 28px 9px 10px;
+          .monthly-mobile-period-select {
+            width: 100%;
+            min-height: 44px !important;
+            border: 0;
+            background: transparent;
+            color: #4b5563;
+            font-size: 16px !important;
             text-align: center;
-            overflow-wrap: anywhere;
-          }
-
-          .monthly-mobile-month-select {
-            flex: 1 1 auto;
-          }
-
-          .monthly-mobile-year-select {
-            flex: 0 1 92px;
-          }
-
-          .monthly-mobile-month-select:focus,
-          .monthly-mobile-year-select:focus {
-            outline: 2px solid rgba(43, 143, 176, 0.25);
-            outline-offset: 1px;
+            text-align-last: center;
+            appearance: none;
+            -webkit-appearance: none;
+            padding: 0 8px 10px;
+            outline: none;
+            cursor: pointer;
           }
 
           /* Le graphique peut défiler horizontalement sans provoquer de
@@ -747,10 +732,10 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
             -webkit-overflow-scrolling: touch;
           }
 
+          /* Le mois entier dans la largeur de l'écran (plus de défilement). */
           .monthly-mobile-chart {
-            min-width: 760px;
             height: 390px;
-            padding: 0 4px;
+            padding: 0 2px;
           }
 
           .monthly-mobile-chart .recharts-wrapper,
