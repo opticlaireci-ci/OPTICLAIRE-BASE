@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { useLiveData } from '../hooks/useLiveData';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -43,6 +43,36 @@ const fmtInt = (n: number) => Math.round(Number(n) || 0).toLocaleString('fr-FR')
 const fmtMoney = (n: number) => 'F CFA ' + (Number(n) || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 /** Montant en chiffres seuls (« 4009000 ») : 6 cases tiennent ainsi sur un téléphone. */
 const chiffresBruts = (n: number) => String(Math.round(Number(n) || 0));
+
+/**
+ * Texte qui TIENT TOUJOURS dans sa case (montants, libellés) : après affichage,
+ * sa largeur réelle est mesurée et la taille du texte est réduite jusqu'à ce
+ * qu'aucun chiffre ni aucun mot ne dépasse. Cela marche quelle que soit la
+ * police du téléphone (celle des iPhone est plus large que celle des Android)
+ * et jusqu'à 9 chiffres et plus.
+ */
+function TexteAjuste({ valeur, className, style }: { valeur: string; className: string; style?: React.CSSProperties }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const ajuster = () => {
+      el.style.removeProperty('font-size'); // taille de départ (feuille de style)
+      let taille = parseFloat(getComputedStyle(el).fontSize) || 12;
+      while (el.scrollWidth > el.clientWidth + 0.5 && taille > 6.5) {
+        taille -= 0.5;
+        el.style.setProperty('font-size', `${taille}px`, 'important');
+      }
+    };
+    ajuster();
+    // La case change de largeur (rotation de l'écran, police chargée) : on réajuste.
+    const ro = typeof ResizeObserver !== 'undefined' && el.parentElement ? new ResizeObserver(ajuster) : null;
+    if (ro && el.parentElement) ro.observe(el.parentElement);
+    (document as any).fonts?.ready?.then(ajuster).catch(() => {});
+    return () => ro?.disconnect();
+  }, [valeur]);
+  return <div ref={ref} className={className} style={style}>{valeur}</div>;
+}
 const fmtAxis = (n: number) => (n >= 1_000_000 ? `${(n / 1_000_000).toFixed(0)}M` : n >= 1000 ? `${(n / 1000).toFixed(0)}K` : String(n));
 const pct = (part: number, whole: number) => (whole > 0 ? (part / whole) * 100 : 0);
 
@@ -447,6 +477,14 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
     };
   }, [ventes, reglements, commandes, magasins, magasin, mois, annee, objectifGlobal, objectifDe, tauxMarge]);
 
+  // Graphique mobile : axe vertical assez large pour le plus grand montant du
+  // mois (jusqu'à 9 chiffres), sans gaspiller de place pour les petits montants.
+  const largeurAxeMobile = useMemo(() => {
+    let max = Number(d.objectif) || 0;
+    for (const j of d.dayData) max = Math.max(max, j.ca, j.paiements, j.bons, j.restant);
+    return Math.max(30, String(Math.round(max)).length * 5.6 + 10);
+  }, [d]);
+
   const todayStr = `${String(now.getDate()).padStart(2, '0')}-${String(now.getMonth() + 1).padStart(2, '0')}-${now.getFullYear()}`;
   const pctRealiseToday = pct(d.caToday, d.objectif).toFixed(0);
   const restantGlobal = d.montantRestantTotal;
@@ -489,23 +527,23 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
               { value: d.bonsMonth, label: 'Bons Assurance', bg: C_BONS },
             ].map((c, i) => (
               <div key={i} className="monthly-mobile-kpi" style={{ backgroundColor: c.bg }}>
-                <div className="monthly-mobile-value">{chiffresBruts(c.value)}</div>
-                <div className="monthly-mobile-label" style={c.centre ? { textAlign: 'center' } : undefined}>{c.label}</div>
+                <TexteAjuste className="monthly-mobile-value" valeur={chiffresBruts(c.value)} />
+                <TexteAjuste className="monthly-mobile-label" style={c.centre ? { textAlign: 'center' } : undefined} valeur={c.label} />
               </div>
             ))}
             <div className="monthly-mobile-avoir">
               <div className="monthly-mobile-avoir-case" style={{ backgroundColor: C_AVOIR_P }}>
-                <div className="monthly-mobile-avoir-label">AVOIR-CLIENT +</div>
-                <div className="monthly-mobile-avoir-value">{chiffresBruts(d.avoirPlusMonth)}</div>
+                <TexteAjuste className="monthly-mobile-avoir-label" valeur="AVOIR-CLIENT +" />
+                <TexteAjuste className="monthly-mobile-avoir-value" valeur={chiffresBruts(d.avoirPlusMonth)} />
               </div>
               <div className="monthly-mobile-avoir-case" style={{ backgroundColor: C_AVOIR_M }}>
-                <div className="monthly-mobile-avoir-label">AVOIR-CLIENT -</div>
-                <div className="monthly-mobile-avoir-value">{chiffresBruts(d.avoirMoinsMonth)}</div>
+                <TexteAjuste className="monthly-mobile-avoir-label" valeur="AVOIR-CLIENT -" />
+                <TexteAjuste className="monthly-mobile-avoir-value" valeur={chiffresBruts(d.avoirMoinsMonth)} />
               </div>
             </div>
             <div className="monthly-mobile-kpi" style={{ backgroundColor: C_RESTANT }}>
-              <div className="monthly-mobile-value">{chiffresBruts(d.montantRestantTotal)}</div>
-              <div className="monthly-mobile-label">Montant Restant</div>
+              <TexteAjuste className="monthly-mobile-value" valeur={chiffresBruts(d.montantRestantTotal)} />
+              <TexteAjuste className="monthly-mobile-label" valeur="Montant Restant" />
             </div>
           </div>
 
@@ -529,8 +567,8 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
               <ResponsiveContainer width="100%" height={380}>
                 <BarChart data={d.dayData} margin={{ top: 12, right: 4, left: 0, bottom: 4 }} barCategoryGap="12%">
                   <CartesianGrid strokeDasharray="0" vertical={false} stroke="#eeeeee" />
-                  <XAxis dataKey="jour" tick={{ fontSize: 9, fill: '#111827' }} interval={ecranEtroit ? 1 : 0} axisLine={{ stroke: '#111827' }} tickLine={{ stroke: '#111827' }} />
-                  <YAxis tick={{ fontSize: 9, fill: '#111827' }} width={42} tickFormatter={v => String(v)} axisLine={{ stroke: '#111827' }} tickLine={{ stroke: '#111827' }} />
+                  <XAxis dataKey="jour" tick={{ fontSize: 8, fill: '#111827' }} interval={ecranEtroit ? 1 : 0} axisLine={{ stroke: '#111827' }} tickLine={{ stroke: '#111827' }} />
+                  <YAxis tick={{ fontSize: 9, fill: '#111827' }} width={largeurAxeMobile} tickFormatter={v => String(v)} axisLine={{ stroke: '#111827' }} tickLine={{ stroke: '#111827' }} />
                   <Tooltip formatter={(v: number) => fmtInt(v) + ' F CFA'} />
                   <Legend wrapperStyle={{ fontSize: 11, paddingTop: 6, lineHeight: '18px' }} />
                   <Bar key="ca" dataKey="ca" name="Chiffre d'Affaires" fill={C_CA} />
@@ -606,7 +644,7 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
 
           .monthly-mobile-kpi {
             min-width: 0;
-            padding: 5px 2px !important;
+            padding: 5px 1px !important;
             display: flex !important;
             flex-direction: column !important;
             justify-content: space-between !important;
@@ -615,13 +653,15 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
           }
 
           .monthly-mobile-value {
-            font-size: clamp(9px, 2.9vw, 12.5px) !important;
+            font-size: clamp(9.5px, 3vw, 13px) !important;
             line-height: 1.15 !important;
             font-weight: 700 !important;
             text-align: center;
             white-space: nowrap;
             overflow: hidden;
-            letter-spacing: -0.2px;
+            letter-spacing: -0.3px;
+            font-variant-numeric: tabular-nums;
+            min-width: 0;
           }
 
           .monthly-mobile-label {
@@ -629,8 +669,12 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
             line-height: 1.15 !important;
             font-weight: 700 !important;
             text-align: left;
-            /* Coupure d'un mot seulement s'il ne tient vraiment pas (gros texte). */
-            overflow-wrap: break-word;
+            padding: 0 2px;
+            /* Pas de coupure au milieu d'un mot : la taille s'ajuste à la place. */
+            overflow-wrap: normal;
+            word-break: normal;
+            overflow: hidden;
+            min-width: 0;
           }
 
           .monthly-mobile-avoir {
@@ -638,7 +682,7 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
             display: flex;
             flex-direction: column;
             gap: 2px;
-            padding: 2px;
+            padding: 2px 1px;
             background: #f3cbb8;
             overflow: hidden;
           }
@@ -646,7 +690,7 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
           .monthly-mobile-avoir-case {
             flex: 1 1 0;
             min-height: 0;
-            padding: 2px 3px;
+            padding: 2px 2px;
             color: #111827;
             display: flex;
             flex-direction: column;
@@ -658,15 +702,20 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
             font-size: clamp(8px, 2.35vw, 10.5px);
             line-height: 1.1;
             font-weight: 700;
-            overflow-wrap: break-word;
+            overflow-wrap: normal;
+            overflow: hidden;
+            min-width: 0;
           }
 
           .monthly-mobile-avoir-value {
-            font-size: clamp(8.5px, 2.5vw, 11px);
+            font-size: clamp(8.5px, 2.6vw, 11.5px);
             line-height: 1.1;
             font-weight: 700;
             white-space: nowrap;
             overflow: hidden;
+            letter-spacing: -0.3px;
+            font-variant-numeric: tabular-nums;
+            min-width: 0;
           }
 
           .monthly-mobile-store > * {
