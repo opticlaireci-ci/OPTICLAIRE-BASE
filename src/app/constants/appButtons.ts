@@ -149,6 +149,7 @@ export const APP_BUTTON_GROUPS: AppButtonGroup[] = [
       { key: '/recherche', label: 'Recherche Monture et Accessoire' },
       { key: '/atelier', label: 'Atelier' },
       { key: '/visualisation', label: 'Visualisation PDF et Excel' },
+      { key: '/clients-non-soldes', label: 'Clients non soldés (tous magasins)' },
       { key: '/historique', label: 'Historique' },
     ],
   },

@@ -216,6 +216,7 @@ export const router = createBrowserRouter([
 
       // Visualisation et Historique
       { path: "visualisation", lazy: lazyRoute(() => import("./pages/VisualisationPage"), "VisualisationPage") },
+      { path: "clients-non-soldes", lazy: lazyRoute(() => import("./pages/ClientsNonSoldesPage"), "ClientsNonSoldesPage") },
       { path: "historique", lazy: lazyRoute(() => import("./pages/HistoriquePage"), "HistoriquePage") },
     ],
   },

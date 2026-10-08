@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
-import { X, Printer, FileSpreadsheet, Search } from 'lucide-react';
+import { useNavigate } from 'react-router';
+import { X, Printer, FileSpreadsheet, Search, Users } from 'lucide-react';
 import { chargerToutesLesVentes, type VenteSupabase } from '../services/ventesService';
 import { chargerTousLesReglements, type ReglementSupabase } from '../services/reglementsService';
 import {
@@ -48,6 +49,7 @@ interface ReportView {
 }
 
 export function VisualisationPage() {
+  const navigate = useNavigate();
   const [activeReport, setActiveReport] = useState<ReportType>('ventes-factures');
 
   // Filtres généraux
@@ -1127,6 +1129,15 @@ export function VisualisationPage() {
           {btn('ca-ophtalmologues',  <>CA<br/>OPHTALMOLOGUES</>)}
           {btn('ca-cabinets',        <>CA<br/>CABINETS OPHT.</>)}
           {btn('clients',            'CLIENTS')}
+        </div>
+        {/* Raccourci : clients non soldés de tous les magasins, sans entrer dans chaque magasin */}
+        <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+          <button
+            onClick={() => navigate('/clients-non-soldes')}
+            style={{ ...reportBtnStyle(false), backgroundColor: '#dc2626', opacity: 1, display: 'inline-flex', alignItems: 'center', gap: '8px' }}
+          >
+            <Users size={16} /> CLIENTS NON SOLDÉS (TOUS MAGASINS)
+          </button>
         </div>
       </div>
 

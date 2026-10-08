@@ -35,14 +35,22 @@ const DEBOUNCE_MS = 250;
 
 type Unsubscribe = () => void;
 
+/** Ce qui s'est passé pendant la rafale d'événements regroupés. */
+export interface InfoChangement {
+  /** Au moins une ligne a été SUPPRIMÉE (le re-pull doit alors la retirer). */
+  suppression: boolean;
+}
+
 interface LiveChannel {
   /** Abonnés au réveil de cette table. */
-  listeners: Set<() => void>;
+  listeners: Set<(info: InfoChangement) => void>;
   /** Canal supabase-js (type volontairement souple : RealtimeChannel). */
   channel: any;
   /** true dès que le serveur a confirmé la souscription. */
   connected: boolean;
   debounce: ReturnType<typeof setTimeout> | null;
+  /** Une suppression a été reçue depuis le dernier réveil des abonnés. */
+  suppression?: boolean;
 }
 
 /** Un seul canal par TABLE, mutualisé entre toutes les entités qui la visent. */
@@ -98,7 +106,7 @@ export function isLive(entity: string): boolean {
  * que déclencher un re-pull (lui-même correctement filtré), un réveil un peu
  * trop large est sans conséquence fonctionnelle.
  */
-export function subscribeEntityChanges(entity: string, onChange: () => void): Unsubscribe {
+export function subscribeEntityChanges(entity: string, onChange: (info: InfoChangement) => void): Unsubscribe {
   const { table } = resolveTarget(entity);
 
   let live = channels.get(table);
@@ -110,11 +118,14 @@ export function subscribeEntityChanges(entity: string, onChange: () => void): Un
       debounce: null,
     };
 
-    const fire = () => {
+    const fire = (suppression: boolean) => {
+      if (suppression) created.suppression = true;
       if (created.debounce) clearTimeout(created.debounce);
       created.debounce = setTimeout(() => {
         created.debounce = null;
-        created.listeners.forEach(cb => { try { cb(); } catch { /* isolé */ } });
+        const info: InfoChangement = { suppression: !!created.suppression };
+        created.suppression = false;
+        created.listeners.forEach(cb => { try { cb(info); } catch { /* isolé */ } });
       }, DEBOUNCE_MS);
     };
 
@@ -132,7 +143,7 @@ export function subscribeEntityChanges(entity: string, onChange: () => void): Un
             const k = String(payload?.new?.key || payload?.old?.key || '');
             if (k.startsWith('documents_importes:')) return;
           }
-          fire();
+          fire(String(payload?.eventType || '').toUpperCase() === 'DELETE');
         })
         .subscribe((status: string) => {
           // SUBSCRIBED → opérationnel. CHANNEL_ERROR / TIMED_OUT / CLOSED →

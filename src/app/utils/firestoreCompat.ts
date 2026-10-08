@@ -235,6 +235,7 @@ export async function updateDoc(ref: DocRef, data: any) {
 
 export async function deleteDoc(ref: DocRef) {
   await kvDeleteDoc(ref.entity, ref.id);
+  oublierDocSuivi(ref.entity, ref.id);
 }
 
 // ── Temps réel (postgres_changes + polling de secours) ────────────────────────
@@ -269,6 +270,8 @@ interface EntityPoller {
   since: string | null;          // filigrane serveur du dernier pull réussi
   cycleCount: number;            // nombre de cycles depuis le dernier pull complet
   hadBaseline: boolean;          // un premier pull complet a-t-il déjà réussi ?
+  /** Suppression signalée par le temps réel : resynchroniser les `id` au prochain cycle. */
+  resyncDemandee?: boolean;
 }
 
 /**
@@ -289,6 +292,25 @@ const pollers = new Map<string, EntityPoller>();
 // autre navigateur sans perdre l'essentiel du gain de bande passante.
 const FULL_RESYNC_EVERY = 6;
 
+/**
+ * Suppression faite SUR CET APPAREIL : le document est retiré tout de suite de
+ * la copie suivie en temps réel, et les écrans abonnés sont prévenus.
+ *
+ * Sans cela, le suivi (qui ne télécharge que les lignes MODIFIÉES) gardait le
+ * document supprimé jusqu'à la resynchronisation complète suivante : une
+ * facture supprimée dans Vente | Facture restait dans « Clients non soldés »,
+ * et pouvait même réapparaître dans la liste des ventes.
+ */
+function oublierDocSuivi(entity: string, id: string) {
+  const poller = pollers.get(entity);
+  if (!poller) return;
+  let retire = false;
+  for (const cle of Array.from(poller.itemsById.keys())) {
+    if (String(cle) === String(id)) { poller.itemsById.delete(cle); retire = true; }
+  }
+  if (retire) notifierAbonnes(poller, entity, Array.from(poller.itemsById.values()));
+}
+
 async function pollEntity(entity: string) {
   const poller = pollers.get(entity);
   if (!poller || poller.subscribers.size === 0) return;
@@ -298,7 +320,10 @@ async function pollEntity(entity: string) {
   if (poller.inFlight) return;
   poller.inFlight = true;
 
-  const needsFullPull = !poller.hadBaseline || poller.cycleCount >= FULL_RESYNC_EVERY;
+  // Suppression faite sur un AUTRE appareil (signalée par le temps réel) : un pull
+  // delta ne peut pas la voir, on resynchronise donc la liste des `id` tout de suite.
+  const needsFullPull = !poller.hadBaseline || poller.cycleCount >= FULL_RESYNC_EVERY || !!poller.resyncDemandee;
+  if (needsFullPull) poller.resyncDemandee = false;
 
   let items: any[];
   try {
@@ -354,6 +379,8 @@ async function pollEntity(entity: string) {
     if (serverTime) poller.since = serverTime;
     items = Array.from(poller.itemsById.values());
   } catch (err) {
+    // Resynchronisation demandée mais échouée (réseau) : on la retentera.
+    if (needsFullPull) poller.resyncDemandee = true;
     poller.subscribers.forEach(s => s.onError?.(err as Error));
     return;
   } finally {
@@ -432,7 +459,11 @@ export function onSnapshot<T = DocumentData>(
 
   // Temps réel : un changement Postgres déclenche le pull SANS attendre le tick.
   if (!poller.unsubLive) {
-    poller.unsubLive = subscribeEntityChanges(entity, () => pollEntity(entity));
+    poller.unsubLive = subscribeEntityChanges(entity, info => {
+      const p = pollers.get(entity);
+      if (info.suppression && p) p.resyncDemandee = true;
+      pollEntity(entity);
+    });
   }
 
   applyPollCadence(entity);
