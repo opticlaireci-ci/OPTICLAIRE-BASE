@@ -95,7 +95,8 @@ export function CallCenterGlobalPage() {
     let mounted = true;
     const loadAll = () => {
       for (const m of magasins) {
-        chargerVentes(m.id.toUpperCase())
+        // Identifiant exact des ventes (minuscules) : en MAJUSCULES, rien n'était renvoyé.
+        chargerVentes(m.id)
           .then(rows => { if (mounted && rows.length) setVentesByMag(prev => ({ ...prev, [m.id]: rows })); })
           .catch(() => {});
       }

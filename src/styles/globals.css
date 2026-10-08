@@ -76,6 +76,10 @@ img, svg { max-width: 100%; height: auto; }
 
   /* ── 4. Flex rows → wrapping automatique ─────────────────────────────── */
   .flex { flex-wrap: wrap; }
+  /* Sauf les COLONNES : une colonne « wrap » prend la largeur de son contenu
+     le plus large au lieu de celle de l'écran (ex. Call Center : page de
+     1 000 px coupée à droite, bouton « Appeler » hors d'atteinte). */
+  .flex.flex-col, .flex.flex-col-reverse { flex-wrap: nowrap; }
   /* On annule le wrap uniquement là où c'est intentionnel (icônes etc.) */
   .flex.flex-nowrap { flex-wrap: nowrap !important; }
   .flex.items-center.gap-1 { flex-wrap: nowrap !important; } /* petits groupes icône+label */

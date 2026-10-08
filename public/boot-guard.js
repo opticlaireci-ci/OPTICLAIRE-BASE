@@ -33,6 +33,7 @@
     'opticlaire_erreur_rechargee_a',     // anti-boucle (ErreurGlobale)
     'leclaire_pending_cloud_writes_v2', // écritures pas encore envoyées
     'leclaire_sync_v5_cloud_first_migrated', // évite de rejouer la migration
+    'leclaire_callcenter_appel_en_cours',   // fiche d'appel à rouvrir au retour du téléphone
   ];
   var PREFIXES_A_GARDER = ['leclaire_counter_']; // n° de reçu, etc.
 

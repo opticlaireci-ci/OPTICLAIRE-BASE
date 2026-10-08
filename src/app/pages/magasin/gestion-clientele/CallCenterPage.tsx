@@ -13,6 +13,7 @@ import {
 } from '../../../utils/callCenter';
 import { savePendingCall, readPendingCall, clearPendingCall, type PendingCall } from '../../../utils/pendingCall';
 import { setVisibleInterval, PAGE_POLL_MS } from '../../../utils/visibleInterval';
+import { getMagasinById } from '../../../constants/magasins';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 export interface CallAppointment {
@@ -122,11 +123,17 @@ export function CallPanel({
   const dejaEcoule = Math.max(0, Math.floor((Date.now() - debut.getTime()) / 1000));
   const [dureeAuto, setDureeAuto] = useState(dejaEcoule);  // temps mesuré hors de l'app (secondes)
   const [revenu, setRevenu] = useState(dejaEcoule > 0);    // la conseillère est revenue dans l'app
+  // Durée ESTIMÉE (depuis le clic sur « Appeler ») quand le téléphone n'a
+  // signalé ni départ ni retour : fiche ouverte avec le bouton « Appel terminé ».
+  const [estimee, setEstimee] = useState(false);
+  const revenuRef = useRef(dejaEcoule > 0);
+  useEffect(() => { revenuRef.current = revenu; }, [revenu]);
   const [statut, setStatut] = useState<string>('Décroché'); // Décroché / Pas décroché / Injoignable
   const [resultat, setResultat] = useState('A relancer');
   const [commentaire, setCommentaire] = useState('');
   const [dateRdv, setDateRdv] = useState('');
-  const hiddenAtRef = useRef<number | null>(null);   // horodatage du passage en arrière-plan
+  // Départ vers l'application téléphone : horodatage + « page réellement masquée ? ».
+  const sortieRef = useRef<{ t: number; masquee: boolean } | null>(null);
   const accumRef = useRef(dejaEcoule);               // cumul du temps hors de l'app
   const overlayRef = useRef<HTMLDivElement>(null);
 
@@ -146,31 +153,67 @@ export function CallPanel({
     return () => { document.body.style.overflow = precedent; };
   }, []);
 
-  // Mesure automatique : on additionne chaque période où la page est en arrière-plan.
+  // Mesure automatique : on additionne chaque période passée HORS de la page.
+  // Selon le téléphone, le départ vers l'appel est signalé de façon différente :
+  //   • la plupart des Android : page masquée (visibilitychange / pagehide) ;
+  //   • certains iPhone, appel en bulle, écran partagé : simple perte de focus
+  //     (blur), la page restant « visible ».
+  // On retient le premier signal de départ et le premier signal de retour.
   useEffect(() => {
-    const onVisibility = () => {
-      if (document.visibilityState === 'hidden') {
-        hiddenAtRef.current = Date.now();
-      } else {
-        if (hiddenAtRef.current != null) {
-          accumRef.current += Math.floor((Date.now() - hiddenAtRef.current) / 1000);
-          hiddenAtRef.current = null;
-          setDureeAuto(accumRef.current);
-          if (accumRef.current > 0) setRevenu(true);
-        }
-        // Retour dans l'application (fin de l'appel) : la fiche remonte d'elle-même.
-        amenerAuPremierPlan();
-      }
+    const sortir = (masquee: boolean) => {
+      if (!sortieRef.current) sortieRef.current = { t: Date.now(), masquee };
+      else if (masquee) sortieRef.current.masquee = true;
     };
+    const revenir = () => {
+      const s = sortieRef.current;
+      if (s) {
+        sortieRef.current = null;
+        const sec = Math.floor((Date.now() - s.t) / 1000);
+        // Perte de focus très courte (fenêtre « Appeler ? » de l'iPhone annulée) :
+        // ce n'est pas un appel. Fiche déjà ouverte : seules les vraies mises en
+        // arrière-plan comptent (un menu déroulant ne doit pas allonger la durée).
+        const compte = s.masquee || (!revenuRef.current && sec >= 3);
+        if (compte && sec > 0) {
+          accumRef.current += sec;
+          setDureeAuto(accumRef.current);
+          setEstimee(false);
+          setRevenu(true);
+        }
+      }
+      // Retour dans l'application (fin de l'appel) : la fiche remonte d'elle-même.
+      amenerAuPremierPlan();
+    };
+    const onVisibility = () => (document.visibilityState === 'hidden' ? sortir(true) : revenir());
+    const onBlur = () => sortir(false);
+    const onFocus = () => { if (document.visibilityState !== 'hidden') revenir(); };
+    const onPageHide = () => sortir(true);
     document.addEventListener('visibilitychange', onVisibility);
-    window.addEventListener('focus', amenerAuPremierPlan);
-    window.addEventListener('pageshow', amenerAuPremierPlan);
+    window.addEventListener('blur', onBlur);
+    window.addEventListener('focus', onFocus);
+    window.addEventListener('pagehide', onPageHide);
+    window.addEventListener('pageshow', revenir);
     return () => {
       document.removeEventListener('visibilitychange', onVisibility);
-      window.removeEventListener('focus', amenerAuPremierPlan);
-      window.removeEventListener('pageshow', amenerAuPremierPlan);
+      window.removeEventListener('blur', onBlur);
+      window.removeEventListener('focus', onFocus);
+      window.removeEventListener('pagehide', onPageHide);
+      window.removeEventListener('pageshow', revenir);
     };
   }, []);
+
+  // Secours, valable sur TOUS les téléphones : si la fiche ne s'est pas ouverte
+  // seule au retour, la conseillère l'ouvre elle-même. Sans mesure du téléphone,
+  // la durée est estimée depuis le clic sur « Appeler ».
+  const ouvrirFiche = () => {
+    if (accumRef.current > 0) {
+      setDureeAuto(accumRef.current);
+      setEstimee(false);
+    } else {
+      setDureeAuto(Math.max(0, Math.floor((Date.now() - debut.getTime()) / 1000)));
+      setEstimee(true);
+    }
+    setRevenu(true);
+  };
 
   const enregistrer = (statut: string, res: string, duree: number) => {
     onSave({
@@ -190,13 +233,15 @@ export function CallPanel({
     <div
       ref={overlayRef}
       tabIndex={-1}
-      className="fixed inset-0 z-50 flex items-start sm:items-center justify-center overflow-y-auto overscroll-contain p-3 sm:p-4 outline-none"
-      style={{ backgroundColor: 'rgba(0,0,0,0.55)' }}>
+      className="fixed inset-0 flex items-start sm:items-center justify-center overflow-y-auto overscroll-contain p-3 sm:p-4 outline-none"
+      // Au-dessus de la barre du site (z-index 1100) : sur téléphone, elle
+      // recouvrait le haut de la fiche (nom du client, bouton Rappeler).
+      style={{ backgroundColor: 'rgba(0,0,0,0.55)', zIndex: 1350 }}>
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md my-auto overflow-hidden">
         <div className="px-6 py-5 text-white text-center" style={{ background: revenu ? 'linear-gradient(135deg, #16a34a, #0f7a37)' : 'linear-gradient(135deg, #1a7a96, #12586d)' }}>
           <div className="flex items-center justify-center gap-2 mb-1 opacity-90">
             <PhoneCall size={18} className={revenu ? '' : 'animate-pulse'} />
-            <span className="text-sm">{revenu ? 'Appel terminé — durée mesurée' : 'Appel en cours sur le téléphone…'}</span>
+            <span className="text-sm">{revenu ? (estimee ? 'Appel terminé — durée estimée' : 'Appel terminé — durée mesurée') : 'Appel en cours sur le téléphone…'}</span>
           </div>
           <div className="font-bold" style={{ fontSize: 20 }}>{rdv.client}</div>
           <button
@@ -216,8 +261,12 @@ export function CallPanel({
             <>
               <div className="flex items-start gap-2 text-sm text-gray-600 bg-blue-50 border border-blue-100 rounded-lg p-3">
                 <Smartphone size={18} className="text-blue-600 mt-0.5 flex-shrink-0" />
-                <span>Passez votre appel dans l'application téléphone. Si le client décroche, la durée est <b>mesurée automatiquement</b> : revenez ici une fois raccroché. Sinon, indiquez tout de suite l'issue :</span>
+                <span>Passez votre appel dans l'application téléphone. Si le client décroche, la durée est <b>mesurée automatiquement</b> : revenez ici une fois raccroché, la fiche s'ouvre. Si elle ne s'ouvre pas, touchez <b>« Appel terminé »</b>. Sinon, indiquez tout de suite l'issue :</span>
               </div>
+              <button onClick={ouvrirFiche}
+                className="w-full px-4 py-2.5 rounded-lg text-sm font-semibold text-white flex items-center justify-center gap-2" style={{ backgroundColor: issueColor['Décroché'] }}>
+                <CheckCircle2 size={16} /> Appel terminé — remplir la fiche
+              </button>
               <button onClick={() => enregistrer('Pas décroché', 'À rappeler', 0)}
                 className="w-full px-4 py-2.5 rounded-lg text-sm font-semibold text-white flex items-center justify-center gap-2" style={{ backgroundColor: issueColor['Pas décroché'] }}>
                 <PhoneOff size={16} /> Le client n'a pas décroché
@@ -230,7 +279,7 @@ export function CallPanel({
           ) : (
             <>
               <div className="text-sm text-gray-700 bg-green-50 border border-green-100 rounded-lg p-3 flex items-center gap-2">
-                <Timer size={16} className="text-green-600" /> Durée mesurée sur le téléphone : <b>{fmtDureeLong(dureeAuto)}</b>
+                <Timer size={16} className="text-green-600" /> {estimee ? 'Durée estimée (depuis « Appeler ») :' : 'Durée mesurée sur le téléphone :'} <b>{fmtDureeLong(dureeAuto)}</b>
               </div>
               <div>
                 <label className="text-xs text-gray-600 mb-1.5 block">Le client a-t-il décroché ?</label>
@@ -303,7 +352,11 @@ export function CallCenterPage() {
   const [appointments, setAppointments] = useLiveData<CallAppointment>(RDV_KEY(magasinId), []);
 
   // Source des contacts : TOUTES les ventes / factures du magasin (plus les RDV en ligne).
-  const magKey = magasinId.toUpperCase();
+  // Identifiant EXACT tel qu'enregistré dans les ventes (minuscules : « abobo »).
+  // Avant, la recherche se faisait en MAJUSCULES (« ABOBO ») : le serveur ne
+  // renvoyait rien et la liste ne tenait qu'à la copie locale — vide après un
+  // rechargement (fréquent sur téléphone pendant un appel).
+  const magKey = getMagasinById(magasinId)?.id || magasinId;
   const [ventes, setVentes] = useState<VenteSupabase[]>(() => readVentesCache(magasinId));
   useEffect(() => {
     if (!magasinId) return;
@@ -517,7 +570,7 @@ export function CallCenterPage() {
   };
 
   return (
-    <div className="flex flex-col gap-4 p-6" style={{ backgroundColor: '#d6e4ea', minHeight: '100vh' }}>
+    <div className="flex flex-col gap-4 p-3 sm:p-6" style={{ backgroundColor: '#d6e4ea', minHeight: '100vh' }}>
       {activeCall && (
         <CallPanel
           key={activeCall.contact.id}
@@ -546,7 +599,7 @@ export function CallCenterPage() {
           </select>
           <div className="flex items-center border border-gray-300 rounded bg-white overflow-hidden">
             <Search size={14} className="ml-2 text-gray-400" />
-            <input className="px-2 py-1.5 text-sm outline-none bg-transparent" style={{ width: 240 }}
+            <input className="px-2 py-1.5 text-sm outline-none bg-transparent min-w-0 flex-1" style={{ width: 240, maxWidth: '100%' }}
               placeholder="Rechercher client, téléphone..." value={search} onChange={e => setSearch(e.target.value)} />
             {search && <button onClick={() => setSearch('')} className="px-1.5 text-gray-400"><X size={12} /></button>}
           </div>
@@ -562,10 +615,10 @@ export function CallCenterPage() {
       </div>
 
       {/* Onglets */}
-      <div className="flex gap-2">
+      <div className="flex flex-nowrap gap-2 overflow-x-auto">
         {([['clients', `Clients à appeler (${totalClients})`], ['rappeler', `À rappeler (${aRappelerList.length})`], ['pasDecroche', `Pas décroché (${derniersStatuts.pasDecroche.length})`], ['injoignable', `Injoignable (${derniersStatuts.injoignable.length})`], ['rendezvous', `Rendez-vous (${appointments.filter(a => a.statut === 'Planifié').length})`], ['historique', `Historique des appels (${logs.length})`]] as const).map(([key, label]) => (
           <button key={key} onClick={() => setTab(key)}
-            className="px-4 py-2 rounded-t-lg text-sm font-semibold"
+            className="px-4 py-2 rounded-t-lg text-sm font-semibold whitespace-nowrap shrink-0"
             style={{ backgroundColor: tab === key ? '#fff' : 'transparent', color: tab === key ? TEAL : '#4b5563' }}>
             {label}
           </button>
@@ -573,7 +626,7 @@ export function CallCenterPage() {
       </div>
 
       {/* Contenu */}
-      <div className="bg-white rounded-lg rounded-tl-none shadow-sm p-5 -mt-4">
+      <div className="bg-white rounded-lg rounded-tl-none shadow-sm p-3 sm:p-5 -mt-4">
         {tab === 'clients' ? (
           filteredGroupes.length === 0 ? (
             <div className="text-center py-12 text-gray-400 border border-gray-200 rounded">
@@ -596,7 +649,10 @@ export function CallCenterPage() {
                       {groupe.contacts.length} client{groupe.contacts.length > 1 ? 's' : ''} à appeler
                     </span>
                   </button>
-                  {groupOpen && <table className="w-full text-sm border-collapse">
+                  {groupOpen && <>
+                  {/* Ordinateur : tableau */}
+                  <div className="cc-desktop-view">
+                  <table className="w-full text-sm border-collapse">
                     <thead>
                       <tr className="bg-gray-50 border-b border-gray-200">
                         <th className="text-left px-3 py-2.5 font-semibold text-gray-700">Client</th>
@@ -638,7 +694,41 @@ export function CallCenterPage() {
                         );
                       })}
                     </tbody>
-                  </table>}
+                  </table>
+                  </div>
+                  {/* Téléphone : une carte par client, bouton « Appeler » pleine largeur.
+                      Le tableau (plus large que l'écran) cachait la colonne Action :
+                      le bouton était hors d'atteinte. */}
+                  <div className="cc-mobile-view flex-col gap-2.5 p-2.5">
+                    {groupe.contacts.map(r => {
+                      const last = lastCallByRdv[r.id] || lastCallByRdv[r.numRef] || lastCallByRdv[r.client];
+                      const nb = nbAppelsByRdv[r.id] || nbAppelsByRdv[r.numRef] || nbAppelsByRdv[r.client] || 0;
+                      return (
+                        <div key={r.id} className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                          <div className="flex items-start justify-between gap-2">
+                            <span className="font-bold text-gray-800 break-words min-w-0">{r.client}</span>
+                            <span className="text-xs font-semibold px-2 py-0.5 rounded shrink-0" style={{ backgroundColor: TEAL + '22', color: TEAL }}>{r.motif || 'Vente'}</span>
+                          </div>
+                          <div className="text-sm text-gray-700 mt-1">{r.telephone || <span className="text-gray-400">— aucun numéro —</span>}</div>
+                          <div className="text-xs text-gray-500 mt-1">
+                            Dernier achat : {fmtDate(r.rendezVous)}
+                            {last ? (
+                              <> · <span className="px-1.5 py-0.5 rounded text-white font-semibold" style={{ backgroundColor: issueColor[last.statut] || resultatColor(last.resultat) }}>{last.statut || last.resultat}</span>
+                                {' '}{fmtDateTime(last.debut)}{nb > 1 ? ` · ${nb} appels` : ''}</>
+                            ) : ' · Jamais appelé'}
+                          </div>
+                          <button
+                            onClick={() => demarrerAppel(r)}
+                            disabled={!r.telephone}
+                            className="mt-2.5 w-full inline-flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-white text-sm font-semibold disabled:opacity-40"
+                            style={{ backgroundColor: '#16a34a' }}>
+                            <Phone size={15} /> Appeler
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  </>}
                 </div>
                 );
               })}
@@ -714,7 +804,28 @@ export function CallCenterPage() {
             ))}
           </div>
         ) : (
-          <div className="border border-gray-200 rounded overflow-hidden">
+          <>
+          <div className="cc-mobile-view flex-col gap-2.5">
+            {filteredLogs.length === 0 ? (
+              <div className="text-center py-12 text-gray-400">Aucun appel enregistré</div>
+            ) : filteredLogs.map(l => (
+              <div key={l.id} className="rounded-lg border border-gray-200 p-3">
+                <div className="flex items-start justify-between gap-2">
+                  <span className="font-bold text-gray-800 break-words min-w-0">{l.client}</span>
+                  <span className="text-xs text-gray-500 shrink-0">{fmtDateTime(l.debut)}</span>
+                </div>
+                <div className="text-sm text-gray-700 mt-0.5">{l.telephone || '—'}</div>
+                <div className="flex flex-wrap items-center gap-1.5 mt-1.5 text-xs">
+                  <span className="px-2 py-0.5 rounded font-semibold text-white" style={{ backgroundColor: issueColor[l.statut] || '#6b7280' }}>{l.statut || '—'}</span>
+                  <span className="px-2 py-0.5 rounded font-semibold text-white" style={{ backgroundColor: resultatColor(l.resultat) }}>{l.resultat}</span>
+                  {l.statut === 'Décroché' && <span className="font-mono text-gray-700">{fmtDuree(l.duree)}</span>}
+                  <span className="text-gray-500">· {l.conseillere}</span>
+                </div>
+                {l.commentaire && <div className="text-sm text-gray-600 mt-1.5 break-words">{l.commentaire}</div>}
+              </div>
+            ))}
+          </div>
+          <div className="cc-desktop-view border border-gray-200 rounded overflow-hidden">
             <table className="w-full text-sm border-collapse">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-200">
@@ -750,6 +861,7 @@ export function CallCenterPage() {
               </tbody>
             </table>
           </div>
+          </>
         )}
       </div>
     </div>
