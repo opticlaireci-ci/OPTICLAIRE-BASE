@@ -301,7 +301,7 @@ const FULL_RESYNC_EVERY = 6;
  * facture supprimée dans Vente | Facture restait dans « Clients non soldés »,
  * et pouvait même réapparaître dans la liste des ventes.
  */
-function oublierDocSuivi(entity: string, id: string) {
+export function oublierDocSuivi(entity: string, id: string) {
   const poller = pollers.get(entity);
   if (!poller) return;
   let retire = false;

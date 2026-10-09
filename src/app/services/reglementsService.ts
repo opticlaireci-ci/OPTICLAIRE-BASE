@@ -3,7 +3,7 @@ import {
   collection, doc, getDocs, setDoc, deleteDoc,
   query, where, orderBy, onSnapshot,
 } from '../utils/firestoreCompat';
-import { db, restSetDoc, restDeleteDoc, FIREBASE_DATA_ENABLED } from '../utils/firebaseClient';
+import { db, restSetDoc, restDeleteDoc, restGetDoc, FIREBASE_DATA_ENABLED } from '../utils/firebaseClient';
 import { journaliserSuppression } from './auditLogService';
 import { logNetworkAware, isAuthError, isNoSessionError } from '../utils/networkErrors';
 
@@ -118,7 +118,17 @@ export async function ajouterReglement(reglement: Omit<ReglementSupabase, 'creat
   try {
     const now = new Date().toISOString();
     const data = { ...reglement, created_at: now, updated_at: now };
-    await restSetDoc('reglements', reglement.id, data, false);
+    try {
+      await restSetDoc('reglements', reglement.id, data, false);
+    } catch (err) {
+      // Réseau instable : l'enregistrement a pu ABOUTIR sans que la réponse
+      // revienne. Avant, l'écran annonçait une erreur, la caissière ressaisissait
+      // le paiement… et il était compté deux fois. On vérifie d'abord, puis on
+      // réessaie avec le MÊME identifiant (une réécriture, jamais un doublon).
+      const dejaEnregistre = await restGetDoc('reglements', reglement.id).catch(() => null);
+      if (!dejaEnregistre) await restSetDoc('reglements', reglement.id, data, false);
+      logger.warn('Règlement confirmé après une erreur réseau:', reglement.id, err);
+    }
     upsertReglementCache(data as ReglementSupabase);
     logger.log('✅ Règlement ajouté:', reglement.id);
     return data as ReglementSupabase;

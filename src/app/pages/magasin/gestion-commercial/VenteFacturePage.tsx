@@ -19,7 +19,7 @@ import {
   useClientRecordsMagasin, ClientRecord,
   useFournisseurs,
 } from '../../../utils/venteLookups';
-import { ajouterReglement, chargerReglements, chargerTousLesReglements, readReglementsCacheMap, subscriberReglementsVente, ReglementSupabase } from '../../../services/reglementsService';
+import { ajouterReglement, supprimerReglement, chargerReglements, chargerTousLesReglements, readReglementsCacheMap, subscriberReglementsVente, ReglementSupabase } from '../../../services/reglementsService';
 import { ajouterVente, chargerVentes as chargerVentesSupabase, abonnerVentesMagasin, readVentesCache, supprimerVente, mettreAJourVente, VenteSupabase } from '../../../services/ventesService';
 import { enregistrerVente, annulerSortiesVente } from '../../../services/inventaireService';
 import { verifierStockVente, messageRuptures } from '../../../utils/stockVente';
@@ -3541,7 +3541,36 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
     return (acompte + totalAssurance + totalReglements) >= v.totalNet;
   }).length;
 
+  // Un règlement à la fois : avant, le bouton restait actif pendant l'attribution
+  // du n° de reçu (1 à 2 s de réseau) ; un 2e clic ou un double toucher
+  // enregistrait le MÊME paiement deux fois (facture soldée à tort, « -45 000 »).
+  const enregistrementReglementRef = useRef(false);
+  const [enregistrementReglement, setEnregistrementReglement] = useState(false);
+
   const handleEnregistrerReglement = async () => {
+    if (!detail || enregistrementReglementRef.current) return;
+    enregistrementReglementRef.current = true;
+    setEnregistrementReglement(true);
+    try {
+      await enregistrerReglementUneFois();
+    } finally {
+      enregistrementReglementRef.current = false;
+      setEnregistrementReglement(false);
+    }
+  };
+
+  /** Supprime un règlement saisi en double ou par erreur (administrateur). */
+  const supprimerUnReglement = async (r: ReglementSupabase) => {
+    const quand = new Date(r.date).toLocaleString('fr-FR');
+    if (!window.confirm(`Supprimer le règlement de ${Number(r.montant || 0).toLocaleString('fr-FR')} F CFA (reçu ${r.recu || '—'}, ${quand}) ?\n\nÀ utiliser pour un règlement enregistré en double ou par erreur. Le reste à payer de la facture sera recalculé.`)) return;
+    const ok = await supprimerReglement(r.id);
+    if (!ok) { alert('La suppression a échoué. Vérifiez la connexion puis réessayez.'); return; }
+    setReglementsSupabase(prev => prev.filter(x => x.id !== r.id));
+    setReglementsParVente(prev => ({ ...prev, [r.vente_id]: (prev[r.vente_id] || []).filter(x => x.id !== r.id) }));
+    try { window.dispatchEvent(new CustomEvent('reglements-updated', { detail: { magasinId } })); } catch { /* ignore */ }
+  };
+
+  const enregistrerReglementUneFois = async () => {
     if (!detail) return;
 
     if (!nouveauReglement.acompte || parseFloat(nouveauReglement.acompte) <= 0) {
@@ -3551,6 +3580,18 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
 
     if (!nouveauReglement.modePaiement) {
       alert('Veuillez choisir un mode de paiement');
+      return;
+    }
+
+    // Même montant déjà enregistré sur cette facture il y a moins de 3 minutes :
+    // très probablement un doublon (double clic, deux appareils) → confirmation.
+    const montantSaisi = parseFloat(nouveauReglement.acompte);
+    const doublonRecent = reglementsSupabase.find(r =>
+      r.vente_id === detail.id
+      && Math.abs((Number(r.montant) || 0) - montantSaisi) < 0.5
+      && Date.now() - new Date(r.date).getTime() < 3 * 60 * 1000);
+    if (doublonRecent && !window.confirm(
+      `Un règlement de ${montantSaisi.toLocaleString('fr-FR')} F CFA vient déjà d'être enregistré pour cette facture (reçu ${doublonRecent.recu || '—'}).\n\nEnregistrer quand même un DEUXIÈME règlement ?`)) {
       return;
     }
 
@@ -3703,10 +3744,11 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
               </button>
               <button
                 onClick={handleEnregistrerReglement}
-                className="px-6 py-2 rounded-lg text-sm font-semibold text-white"
+                disabled={enregistrementReglement}
+                className="px-6 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-60 disabled:cursor-wait"
                 style={{ backgroundColor: '#1a7a96' }}
               >
-                Enregistrer
+                {enregistrementReglement ? 'Enregistrement…' : 'Enregistrer'}
               </button>
             </div>
           </div>
@@ -4634,6 +4676,16 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
                                         >
                                           📄 B5
                                         </button>
+                                        {peutSupprimer && (
+                                          <button
+                                            onClick={() => supprimerUnReglement(reglement)}
+                                            className="px-2.5 py-1.5 rounded text-white text-xs font-semibold"
+                                            style={{ backgroundColor: '#7f1d1d' }}
+                                            title="Supprimer ce règlement (doublon ou erreur)"
+                                          >
+                                            🗑 Supprimer
+                                          </button>
+                                        )}
                                         <button
                                           onClick={async () => {
                                             // Import paresseux : xlsx chargé au clic.

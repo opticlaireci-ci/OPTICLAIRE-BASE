@@ -12,7 +12,7 @@
  */
 
 import { auth } from './authCompat';
-import { db } from './firestoreCompat';
+import { db, oublierDocSuivi } from './firestoreCompat';
 import { kvSetDoc, kvDeleteDoc, kvGetDoc } from './supabaseDirect';
 
 // La synchro cloud (Supabase) est active : les 9 magasins partagent les données.
@@ -51,6 +51,8 @@ export async function restSetDoc(
 
 export async function restDeleteDoc(collectionName: string, id: string): Promise<void> {
   await kvDeleteDoc(collectionName, id);
+  // Retrait immédiat des écrans suivis en temps réel sur cet appareil.
+  oublierDocSuivi(collectionName, id);
 }
 
 export async function restGetDoc<T = any>(collectionName: string, id: string): Promise<T | null> {
