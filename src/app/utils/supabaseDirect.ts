@@ -387,6 +387,14 @@ function isRetryableWriteError(err: any): boolean {
   if (status >= 400 && status < 500 && status !== 408 && status !== 429) return false;
   return true;
 }
+/**
+ * Cet enregistrement attend-il dans la file d'envoi (réseau coupé) ? Il partira
+ * alors tout seul au retour de la connexion : il ne faut PAS le ressaisir.
+ */
+export function ecritureEnAttente(entity: string, id: string): boolean {
+  return readPendingWrites().some(r => r.entity === entity && String(r.id) === String(id));
+}
+
 function enqueuePendingWrite(entity: string, id: string, value: Record<string, any>, merge: boolean) {
   const rows = readPendingWrites();
   const key = `${entity}|${id}`;

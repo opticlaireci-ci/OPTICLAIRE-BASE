@@ -71,6 +71,11 @@ interface UserLike {
 
 const ADMIN_ROLES = ['super_admin', 'admin', 'administrateur'];
 
+/** Administrateur (seul autorisé à supprimer un règlement d'argent). */
+export function estAdministrateur(user: UserLike | null | undefined): boolean {
+  return !!user && ADMIN_ROLES.includes(user.role || '');
+}
+
 /** Un droit d'action (add global/granulaire, edit ou delete) a-t-il été configuré ? */
 function aDesDroitsAction(access: string[]): boolean {
   return (

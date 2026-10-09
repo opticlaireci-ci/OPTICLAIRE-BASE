@@ -25,13 +25,13 @@ import {
   DialogContent,
   DialogActions,
 } from '@mui/material';
-import { TrendingUp, TrendingDown, AccountBalance, Print, Download, Add } from '@mui/icons-material';
+import { TrendingUp, TrendingDown, AccountBalance, Print, Download, Add, DeleteOutline } from '@mui/icons-material';
 import { excelHeaderRows } from '../../utils/documentHeader';
 import { useLiveData } from '../../hooks/useLiveData';
 import { chargerVentes, readVentesCache, VenteSupabase } from '../../services/ventesService';
-import { chargerReglementsParMagasin, readReglementsCacheMap, ReglementSupabase } from '../../services/reglementsService';
+import { chargerReglementsParMagasin, readReglementsCacheMap, supprimerReglement, ReglementSupabase } from '../../services/reglementsService';
 import { useAuth } from '../../contexts/AuthContext';
-import { canAdd } from '../../utils/actionRights';
+import { canAdd, estAdministrateur } from '../../utils/actionRights';
 import { setVisibleInterval, PAGE_POLL_MS } from '../../utils/visibleInterval';
 import { estPaiementAssurance } from '../../utils/venteTotals';
 const GridAny = Grid as any;
@@ -324,6 +324,26 @@ export function MouvementsCaissePage() {
     imprimerPageCourante();
   };
 
+  // Suppression (administrateur) : règlement client enregistré en double ou par
+  // erreur, ou mouvement saisi à la main. L'acompte d'une vente se corrige dans
+  // la vente elle-même (il fait partie de la facture).
+  const peutSupprimerMouvement = (m: MouvementCaisse) =>
+    estAdministrateur(user) && (!m.source || (m.source.kind === 'reglement' && !!m.source.reglementId));
+  const supprimerMouvement = async (m: MouvementCaisse) => {
+    const montant = (Number(m.montant) || 0).toLocaleString('fr-FR');
+    const quoi = m.source ? 'le règlement client' : 'le mouvement';
+    if (!window.confirm(`Supprimer ${quoi} de ${montant} F CFA du ${new Date(m.date).toLocaleString('fr-FR')} ?\n\nÀ utiliser pour une saisie en double ou une erreur. Les totaux seront recalculés.`)) return;
+    if (m.source?.kind === 'reglement' && m.source.reglementId) {
+      const ok = await supprimerReglement(m.source.reglementId);
+      if (!ok) { alert('La suppression a échoué. Vérifiez la connexion puis réessayez.'); return; }
+      reglementsBrutsRef.current = reglementsBrutsRef.current.filter(r => r.id !== m.source!.reglementId);
+      setReglementsDerives(prev => prev.filter(x => x.id !== m.id));
+      try { window.dispatchEvent(new CustomEvent('reglements-updated', { detail: { magasinId } })); } catch { /* ignore */ }
+      return;
+    }
+    setMouvementsPersonnalises(mouvementsPersonnalises.filter(x => x.id !== m.id));
+  };
+
   // Bouton PDF d'une ligne : pour un acompte ou un règlement client, on ouvre
   // le REÇU de ce règlement (même document que dans Ventes | Factures). Pour un
   // mouvement saisi à la main, on imprime la page comme avant.
@@ -571,15 +591,29 @@ export function MouvementsCaissePage() {
                           <div style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{dateEdition}{heureEdition ? ` ${heureEdition}` : ''}</div>
                           <div style={{ fontSize: 11, color: '#6b7280' }}>{nomResponsable(mouvement.responsable, '—')}</div>
                         </div>
-                        <Button
-                          size="small"
-                          variant="contained"
-                          onClick={() => imprimerMouvement(mouvement)}
-                          title={mouvement.source ? 'Reçu du règlement (PDF)' : 'Imprimer'}
-                          sx={{ bgcolor: '#0f7894', minWidth: 0, px: 0.75, py: 0.25, flexShrink: 0 }}
-                        >
-                          <Print sx={{ fontSize: 16 }} />
-                        </Button>
+                        <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                          <Button
+                            size="small"
+                            variant="contained"
+                            onClick={() => imprimerMouvement(mouvement)}
+                            title={mouvement.source ? 'Reçu du règlement (PDF)' : 'Imprimer'}
+                            sx={{ bgcolor: '#0f7894', minWidth: 0, px: 0.75, py: 0.25, flexShrink: 0 }}
+                          >
+                            <Print sx={{ fontSize: 16 }} />
+                          </Button>
+                          {peutSupprimerMouvement(mouvement) && (
+                            <Button
+                              size="small"
+                              variant="contained"
+                              onClick={() => supprimerMouvement(mouvement)}
+                              title="Supprimer (saisie en double ou erreur)"
+                              aria-label="Supprimer"
+                              sx={{ bgcolor: '#b91c1c', minWidth: 0, px: 0.75, py: 0.25, flexShrink: 0, '&:hover': { bgcolor: '#7f1d1d' } }}
+                            >
+                              <DeleteOutline sx={{ fontSize: 16 }} />
+                            </Button>
+                          )}
+                        </div>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -619,7 +653,12 @@ export function MouvementsCaissePage() {
                 <div style={{ overflowWrap: 'anywhere' }}><strong>Commentaire :</strong> {commentaire}</div>
                 <div><strong>Date :</strong> {new Date(mouvement.date).toLocaleDateString('fr-FR')} {new Date(mouvement.date).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</div>
                 <div><strong>Responsable :</strong> {nomResponsable(mouvement.responsable)}</div>
-                <Button size="small" variant="contained" startIcon={<Print />} onClick={() => imprimerMouvement(mouvement)} sx={{ bgcolor: '#0f7894', textTransform: 'none', width: 'fit-content', mt: 0.5 }}>{mouvement.source ? 'Reçu PDF' : 'PDF'}</Button>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
+                  <Button size="small" variant="contained" startIcon={<Print />} onClick={() => imprimerMouvement(mouvement)} sx={{ bgcolor: '#0f7894', textTransform: 'none', width: 'fit-content' }}>{mouvement.source ? 'Reçu PDF' : 'PDF'}</Button>
+                  {peutSupprimerMouvement(mouvement) && (
+                    <Button size="small" variant="contained" startIcon={<DeleteOutline />} onClick={() => supprimerMouvement(mouvement)} sx={{ bgcolor: '#b91c1c', textTransform: 'none', width: 'fit-content', '&:hover': { bgcolor: '#7f1d1d' } }}>Supprimer</Button>
+                  )}
+                </div>
               </div>
             </div>
           );

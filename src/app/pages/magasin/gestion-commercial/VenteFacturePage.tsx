@@ -29,7 +29,7 @@ import { db } from '../../../utils/firebaseClient';
 import { reportFirebaseError } from '../../../services/firebaseErrorBus';
 import { pdfHeader, printHeaderHTML, excelHeaderRows, getEntete, formatNomClient } from '../../../utils/documentHeader';
 import { logNetworkAware } from '../../../utils/networkErrors';
-import { canEdit, canDelete } from '../../../utils/actionRights';
+import { canEdit, canDelete, estAdministrateur } from '../../../utils/actionRights';
 import { useLiveData } from '../../../hooks/useLiveData';
 import { getMagasinLabel } from '../../../constants/magasins';
 import { TENANT } from '../../../config/tenant';
@@ -3628,7 +3628,11 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
     setNouveauReglement({ acompte: '', modePaiement: '', compteBanque: '', details: '' });
     setShowAjouterReglement(false);
 
-    ajouterReglement(nouveauReglementObj).catch((error) => {
+    ajouterReglement(nouveauReglementObj).then((res) => {
+      if (res?.enAttenteEnvoi) {
+        alert('Connexion instable : le règlement est bien enregistré sur cet appareil et sera envoyé automatiquement dès le retour de la connexion.\n\nNe le ressaisissez pas.');
+      }
+    }).catch((error) => {
       logger.error('Erreur lors de l\'enregistrement du règlement:', error);
       // Rollback de l'affichage optimiste.
       setReglementsSupabase(prev => prev.filter(r => r.id !== nouveauReglementObj.id));
@@ -4676,7 +4680,7 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
                                         >
                                           📄 B5
                                         </button>
-                                        {peutSupprimer && (
+                                        {estAdministrateur(user) && (
                                           <button
                                             onClick={() => supprimerUnReglement(reglement)}
                                             className="px-2.5 py-1.5 rounded text-white text-xs font-semibold"

@@ -3,6 +3,9 @@
 // avant tous les autres imports ci-dessous (l'appel suivant est sans effet).
 import { installerCacheSecours, prechargerCacheSecours } from './app/utils/cacheSecours';
 installerCacheSecours();
+// Aucun enregistrement en double (double clic / double toucher), dans tout le site.
+import { installerAntiDoubleEnregistrement } from './app/utils/antiDoubleEnregistrement';
+installerAntiDoubleEnregistrement();
 
 import React from 'react';
 import { createRoot } from 'react-dom/client';

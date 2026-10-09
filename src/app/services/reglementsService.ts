@@ -5,6 +5,7 @@ import {
 } from '../utils/firestoreCompat';
 import { db, restSetDoc, restDeleteDoc, restGetDoc, FIREBASE_DATA_ENABLED } from '../utils/firebaseClient';
 import { journaliserSuppression } from './auditLogService';
+import { ecritureEnAttente } from '../utils/supabaseDirect';
 import { logNetworkAware, isAuthError, isNoSessionError } from '../utils/networkErrors';
 
 export interface ReglementSupabase {
@@ -114,13 +115,20 @@ export async function chargerTousLesReglements(): Promise<ReglementSupabase[]> {
   }
 }
 
-export async function ajouterReglement(reglement: Omit<ReglementSupabase, 'created_at' | 'updated_at'>): Promise<ReglementSupabase | null> {
+export async function ajouterReglement(reglement: Omit<ReglementSupabase, 'created_at' | 'updated_at'>): Promise<(ReglementSupabase & { enAttenteEnvoi?: boolean }) | null> {
   try {
     const now = new Date().toISOString();
     const data = { ...reglement, created_at: now, updated_at: now };
     try {
       await restSetDoc('reglements', reglement.id, data, false);
     } catch (err) {
+      // Réseau coupé : le règlement est gardé dans la file d'envoi et partira
+      // tout seul au retour de la connexion. Il ne faut surtout pas le ressaisir.
+      if (ecritureEnAttente('reglements', reglement.id)) {
+        upsertReglementCache(data as ReglementSupabase);
+        logger.warn('Règlement en attente d\'envoi (réseau):', reglement.id, err);
+        return { ...(data as ReglementSupabase), enAttenteEnvoi: true };
+      }
       // Réseau instable : l'enregistrement a pu ABOUTIR sans que la réponse
       // revienne. Avant, l'écran annonçait une erreur, la caissière ressaisissait
       // le paiement… et il était compté deux fois. On vérifie d'abord, puis on
