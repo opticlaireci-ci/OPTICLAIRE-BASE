@@ -122,3 +122,52 @@ export function canDelete(user: UserLike | null | undefined): boolean {
   if (!aDesDroitsAction(access)) return true;
   return access.includes(ACTION_DELETE_KEY);
 }
+
+/*
+ * ACCÈS PARTICULIERS DES CONSEILLÈRES ET OPTICIENS
+ *
+ * Par défaut, une conseillère ou un opticien :
+ *  - ne voit pas les ENTRÉES dans « Mouvements Entrées et Sorties » du magasin
+ *    (il ne peut qu'y enregistrer des SORTIES) ;
+ *  - ne voit pas l'« Activité mensuelle » ni l'« Activité annuelle » du
+ *    tableau de bord du magasin.
+ * L'administrateur peut rendre chacun de ces accès en cochant la case
+ * correspondante dans Gestion des Utilisateurs → Accès aux boutons.
+ *
+ * Les cases sont rangées dans le même tableau `menuAccess` (préfixe `voir:`),
+ * déjà enregistré par le serveur : aucun changement du backend n'est
+ * nécessaire. Ces clés ne sont pas des boutons de menu : elles sont mises de
+ * côté au chargement du profil (`droitsVoir`) pour ne pas restreindre le menu.
+ */
+export const VOIR_PREFIX = 'voir:';
+export const VOIR_ENTREES_KEY = 'voir:mouvements-entrees';
+export const VOIR_ACTIVITE_MENSUELLE_KEY = 'voir:activite-mensuelle';
+export const VOIR_ACTIVITE_ANNUELLE_KEY = 'voir:activite-annuelle';
+
+/** Cases proposées à l'administrateur (Gestion des Utilisateurs). */
+export const ACCES_CONSEILLERES_OPTICIENS: { key: string; label: string }[] = [
+  { key: VOIR_ENTREES_KEY, label: 'Voir les entrées (Mouvements Entrées et Sorties)' },
+  { key: VOIR_ACTIVITE_MENSUELLE_KEY, label: "Voir l'activité mensuelle (tableau de bord du magasin)" },
+  { key: VOIR_ACTIVITE_ANNUELLE_KEY, label: "Voir l'activité annuelle (tableau de bord du magasin)" },
+];
+
+/** Rôles soumis à ces restrictions. Les autres rôles gardent leur affichage habituel. */
+export const ROLES_ACCES_RESTREINT = ['conseillere', 'opticien'];
+
+/** Clé d'accès particulier (et non bouton de menu). */
+export const estCleVoir = (k: string) => typeof k === 'string' && k.startsWith(VOIR_PREFIX);
+/** Clés de boutons de menu seulement. */
+export const sansClesVoir = (access: string[] = []) => access.filter(k => !estCleVoir(k));
+/** Accès particuliers seulement. */
+export const clesVoir = (access: string[] = []) => access.filter(estCleVoir);
+
+/**
+ * L'utilisateur peut-il voir cet élément ? Toujours oui, sauf pour une
+ * conseillère ou un opticien dont l'administrateur n'a pas coché la case.
+ */
+export function peutVoir(user: (UserLike & { droitsVoir?: string[] }) | null | undefined, key: string): boolean {
+  if (!user) return false;
+  if (!ROLES_ACCES_RESTREINT.includes(user.role || '')) return true;
+  const droits = user.droitsVoir ?? clesVoir(user.menuAccess || []);
+  return droits.includes(key);
+}

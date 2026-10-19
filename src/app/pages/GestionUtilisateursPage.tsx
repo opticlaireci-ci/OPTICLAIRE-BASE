@@ -11,7 +11,7 @@ import {
 import { logger } from '../utils/logger';
 import { getMagasins } from '../constants/magasins';
 import { APP_BUTTON_GROUPS } from '../constants/appButtons';
-import { ACTION_ADD_KEY, ACTION_EDIT_KEY, ACTION_DELETE_KEY, ADD_MODULES, addModuleKey } from '../utils/actionRights';
+import { ACTION_ADD_KEY, ACTION_EDIT_KEY, ACTION_DELETE_KEY, ADD_MODULES, addModuleKey, ACCES_CONSEILLERES_OPTICIENS, ROLES_ACCES_RESTREINT } from '../utils/actionRights';
 import { AddButton } from '../components/AddButton';
 
 // Les rôles intégrés + tout rôle personnalisé ajouté par l'administrateur.
@@ -521,6 +521,33 @@ function ModalUser({
             </div>
             <div className="px-3 pb-2 text-xs text-gray-500">
               Si aucune case n'est cochée, l'utilisateur conserve le comportement de son rôle.
+            </div>
+          </div>
+          {/* Accès particuliers des conseillères et opticiens : masqués par défaut,
+              rendus en cochant la case (sans effet pour les autres rôles). */}
+          <div className="border border-purple-200 rounded overflow-hidden" data-testid="acces-conseilleres-opticiens">
+            <div className="bg-purple-50 px-3 py-2 text-sm font-semibold text-purple-800">
+              Conseillères et opticiens : ce qu'ils peuvent voir
+            </div>
+            <div className="grid grid-cols-1 gap-y-1 p-3">
+              {ACCES_CONSEILLERES_OPTICIENS.map(a => (
+                <label key={a.key} className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="accent-purple-600"
+                    checked={form.menuAccess.includes(a.key)}
+                    onChange={() => toggleAccess(a.key)}
+                  />
+                  {a.label}
+                </label>
+              ))}
+            </div>
+            <div className="px-3 pb-2 text-xs text-gray-500">
+              Case décochée : la conseillère ou l'opticien ne voit pas cet élément (dans « Mouvements Entrées et Sorties »,
+              il ne voit et n'enregistre que des sorties). Les autres rôles voient tout, quelles que soient ces cases.
+              {!form.assignments.some(a => ROLES_ACCES_RESTREINT.includes(a.role)) && (
+                <span className="block mt-1 text-purple-700">Cet utilisateur n'est ni conseillère ni opticien : ces cases n'ont pas d'effet pour lui.</span>
+              )}
             </div>
           </div>
           {APP_BUTTON_GROUPS.map(group => {

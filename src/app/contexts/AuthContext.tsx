@@ -17,6 +17,7 @@ import { createContext, useContext, useState, useEffect, useRef, useCallback, Re
 import { supabase, authHeaders, getValidAccessToken, refreshAccessToken, serverFetch, KV_TABLE_NAME } from '../utils/supabaseClient';
 import type { UserRole } from '../utils/permissions';
 import { isTransientNetworkError } from '../utils/networkErrors';
+import { clesVoir, sansClesVoir } from '../utils/actionRights';
 import { purgeBusinessCaches } from '../utils/secureStorage';
 import { hydrateVentes, subscribeVentesRealtime } from '../services/ventesHydration';
 import { hydrateAssurance, subscribeAssuranceRealtime } from '../services/assuranceHydration';
@@ -43,6 +44,8 @@ export interface User {
   permissions?: string[];
   /** Clés de boutons/menus explicitement autorisés (géré par l'admin). Vide/absent = pas de restriction fine. */
   menuAccess?: string[];
+  /** Accès particuliers cochés par l'admin (entrées, activités du tableau de bord) — voir actionRights. */
+  droitsVoir?: string[];
 }
 
 export interface LoginResult {
@@ -74,7 +77,10 @@ function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promi
 function readCachedUser(): User | null {
   try {
     const raw = localStorage.getItem('leclaire_current_user');
-    return raw ? (JSON.parse(raw) as User) : null;
+    const u = raw ? (JSON.parse(raw) as User) : null;
+    if (!u) return null;
+    // Accès particuliers (« voir: ») séparés des boutons de menu, comme au chargement du profil.
+    return { ...u, menuAccess: sansClesVoir(u.menuAccess || []), droitsVoir: u.droitsVoir ?? clesVoir(u.menuAccess || []) };
   } catch { return null; }
 }
 
@@ -270,7 +276,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         magasinIds,
         magasinActuel,
         permissions: profile.permissions || [],
-        menuAccess: profile.menuAccess || [],
+        // Les accès particuliers (« voir: ») sont mis de côté : ce ne sont pas des
+        // boutons, ils ne doivent pas restreindre le menu de l'utilisateur.
+        menuAccess: sansClesVoir(profile.menuAccess || []),
+        droitsVoir: clesVoir(profile.menuAccess || []),
       };
 
       // Ne pas logger le profil complet (email, magasins, permissions) : évite

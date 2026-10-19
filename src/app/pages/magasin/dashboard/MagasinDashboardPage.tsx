@@ -5,6 +5,8 @@ import { chargerReglementsParMagasin, type ReglementSupabase } from '../../../se
 import { getMagasinLabel } from '../../../constants/magasins';
 import { SgopticDashboard } from '../../../components/SgopticDashboard';
 import { setVisibleInterval, PAGE_POLL_MS } from '../../../utils/visibleInterval';
+import { useAuth } from '../../../contexts/AuthContext';
+import { peutVoir, VOIR_ACTIVITE_ANNUELLE_KEY, VOIR_ACTIVITE_MENSUELLE_KEY } from '../../../utils/actionRights';
 
 const REGLEMENTS_CACHE = (m: string) => `leclaire_reglements_cache_${m}`;
 
@@ -15,6 +17,7 @@ function readLS<T = any>(key: string): T[] {
 
 export function MagasinDashboardPage() {
   const { magasinId = '' } = useParams<{ magasinId: string }>();
+  const { user } = useAuth();
   const magKey = magasinId.toUpperCase();
   const label = getMagasinLabel(magasinId) || magasinId.toUpperCase();
 
@@ -65,6 +68,9 @@ export function MagasinDashboardPage() {
       reglements={reglements}
       objectif={objectif}
       tauxMarge={tauxMarge}
+      // Conseillères et opticiens : activités masquées, sauf case cochée par l'administrateur.
+      afficherActiviteMensuelle={peutVoir(user, VOIR_ACTIVITE_MENSUELLE_KEY)}
+      afficherActiviteAnnuelle={peutVoir(user, VOIR_ACTIVITE_ANNUELLE_KEY)}
     />
   );
 }

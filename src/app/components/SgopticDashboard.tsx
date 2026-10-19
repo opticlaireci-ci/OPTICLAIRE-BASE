@@ -82,9 +82,16 @@ interface Props {
   tauxMarge?: number;
   /** Contrôles additionnels (ex : filtre magasin) rendus à droite du bandeau STATISTIQUES. */
   headerControls?: ReactNode;
+  /** Panneau « Activité mensuelle » (masqué aux conseillères et opticiens sauf case cochée). */
+  afficherActiviteMensuelle?: boolean;
+  /** Panneau « Activité annuelle » (masqué aux conseillères et opticiens sauf case cochée). */
+  afficherActiviteAnnuelle?: boolean;
 }
 
-export function SgopticDashboard({ title, ventes, reglements, objectif = 0, tauxMarge = 0.4, headerControls }: Props) {
+export function SgopticDashboard({
+  title, ventes, reglements, objectif = 0, tauxMarge = 0.4, headerControls,
+  afficherActiviteMensuelle = true, afficherActiviteAnnuelle = true,
+}: Props) {
   const now = new Date();
   const [selYear, setSelYear] = useState<number>(now.getFullYear());
   const [selMonth, setSelMonth] = useState<number>(now.getMonth());
@@ -246,7 +253,8 @@ export function SgopticDashboard({ title, ventes, reglements, objectif = 0, taux
         </div>
       </div>
 
-      <div className={`${panel} p-4`}>
+      {afficherActiviteMensuelle && (
+      <div className={`${panel} p-4`} data-testid="activite-mensuelle">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <h2 className="font-semibold text-gray-700 uppercase tracking-wide">Activité Mensuelle</h2>
           <div className="flex items-center gap-2">
@@ -287,8 +295,11 @@ export function SgopticDashboard({ title, ventes, reglements, objectif = 0, taux
         </div>
       </div>
 
+      )}
+
       {/* ═══════ SECTION 2 : ACTIVITÉ ANNUELLE ═══════ */}
-      <div className={`${panel} p-4`}>
+      {afficherActiviteAnnuelle && (
+      <div className={`${panel} p-4`} data-testid="activite-annuelle">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <h2 className="font-semibold text-gray-700 uppercase tracking-wide">Activité Annuelle</h2>
           <select value={selYear} onChange={e => setSelYear(Number(e.target.value))}
@@ -334,6 +345,8 @@ export function SgopticDashboard({ title, ventes, reglements, objectif = 0, taux
           </div>
         </div>
       </div>
+
+      )}
 
       {/* ═══════ SECTION 3 : INFORMATIONS DEVIS + RAPPROCHEMENT ═══════ */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">

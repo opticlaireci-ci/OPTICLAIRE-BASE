@@ -31,7 +31,7 @@ import { useLiveData } from '../../hooks/useLiveData';
 import { chargerVentes, readVentesCache, VenteSupabase } from '../../services/ventesService';
 import { chargerReglementsParMagasin, readReglementsCacheMap, supprimerReglement, ReglementSupabase } from '../../services/reglementsService';
 import { useAuth } from '../../contexts/AuthContext';
-import { canAdd, estAdministrateur } from '../../utils/actionRights';
+import { canAdd, estAdministrateur, peutVoir, VOIR_ENTREES_KEY } from '../../utils/actionRights';
 import { setVisibleInterval, PAGE_POLL_MS } from '../../utils/visibleInterval';
 import { estPaiementAssurance } from '../../utils/venteTotals';
 const GridAny = Grid as any;
@@ -71,6 +71,9 @@ export function MouvementsCaissePage() {
   const peutAjouter = canAdd(user, 'general');
   // Récap (Entrées / Sorties / Solde) réservé aux directeurs, comptables et administrateurs.
   const peutVoirRecap = ['super_admin', 'admin', 'administrateur', 'directeur', 'comptable'].includes(user?.role || '');
+  // Conseillères et opticiens : pas de liste des ENTRÉES, seulement l'enregistrement
+  // et la liste des SORTIES — sauf si l'administrateur a coché « Voir les entrées ».
+  const voitEntrees = peutVoir(user, VOIR_ENTREES_KEY);
   const { magasinId } = useParams();
   // Mouvements personnalisés : lecture + écriture DIRECTES Firestore (partagé entre navigateurs)
   const [mouvementsPersonnalises, setMouvementsPersonnalises] = useLiveData<MouvementCaisse>('leclaire_mouvements_caisse', []);
@@ -134,10 +137,10 @@ export function MouvementsCaissePage() {
   };
   // Affichage INSTANTANÉ depuis le cache des ventes.
   const [ventesDerivees, setVentesDerivees] = useState<MouvementCaisse[]>(
-    () => deriveFromVentes(readVentesCache(magasinId || ''), magasinId || ''),
+    () => (voitEntrees ? deriveFromVentes(readVentesCache(magasinId || ''), magasinId || '') : []),
   );
   const [reglementsDerives, setReglementsDerives] = useState<MouvementCaisse[]>(
-    () => deriveFromReglements(readReglementsCacheMagasin(magasinId || ''), magasinId || '', readVentesCache(magasinId || '')),
+    () => (voitEntrees ? deriveFromReglements(readReglementsCacheMagasin(magasinId || ''), magasinId || '', readVentesCache(magasinId || '')) : []),
   );
   // Dernières données brutes chargées (pour imprimer le reçu d'un règlement).
   const ventesBrutesRef = useRef<VenteSupabase[]>([]);
@@ -150,7 +153,8 @@ export function MouvementsCaissePage() {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
 
   // Form state
-  const [formType, setFormType] = useState<'entree' | 'sortie'>('entree');
+  const typeParDefaut: 'entree' | 'sortie' = voitEntrees ? 'entree' : 'sortie';
+  const [formType, setFormType] = useState<'entree' | 'sortie'>(typeParDefaut);
   const [formCategorie, setFormCategorie] = useState('');
   const [formMontant, setFormMontant] = useState('');
   const [formLibelle, setFormLibelle] = useState('');
@@ -159,7 +163,7 @@ export function MouvementsCaissePage() {
 
   // Dérivation des ventes (entrées) depuis Firestore — cohérent sur tous les navigateurs
   useEffect(() => {
-    if (!magasinId) { setVentesDerivees([]); return; }
+    if (!magasinId || !voitEntrees) { setVentesDerivees([]); return; }
     let annule = false;
     // Re-seed cache immédiat au changement de magasin.
     setVentesDerivees(deriveFromVentes(readVentesCache(magasinId), magasinId));
@@ -182,12 +186,12 @@ export function MouvementsCaissePage() {
       window.removeEventListener('ventes-updated', onUpdate);
       window.removeEventListener('storage', onUpdate);
     };
-  }, [magasinId]);
+  }, [magasinId, voitEntrees]);
 
   // Dérivation des RÈGLEMENTS (encaissements) depuis Firestore — chaque
   // règlement apparaît comme une entrée datée à sa propre date.
   useEffect(() => {
-    if (!magasinId) { setReglementsDerives([]); return; }
+    if (!magasinId || !voitEntrees) { setReglementsDerives([]); return; }
     let annule = false;
     setReglementsDerives(deriveFromReglements(readReglementsCacheMagasin(magasinId), magasinId, readVentesCache(magasinId)));
     const load = () => {
@@ -208,7 +212,7 @@ export function MouvementsCaissePage() {
       window.removeEventListener('reglements-updated', onUpdate);
       window.removeEventListener('storage', onUpdate);
     };
-  }, [magasinId]);
+  }, [magasinId, voitEntrees]);
 
   // Agrégation ventes dérivées + règlements + mouvements personnalisés du magasin
   useEffect(() => {
@@ -216,7 +220,7 @@ export function MouvementsCaissePage() {
     const allMouvements: MouvementCaisse[] = [...ventesDerivees, ...reglementsDerives];
 
     const mouvementsMagasin = mouvementsPersonnalises.filter(
-      (m: MouvementCaisse) => m.magasinId === magasinId
+      (m: MouvementCaisse) => m.magasinId === magasinId && (voitEntrees || m.type === 'sortie')
     );
     allMouvements.push(...mouvementsMagasin);
 
@@ -224,7 +228,7 @@ export function MouvementsCaissePage() {
     allMouvements.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
     setMouvements(allMouvements);
-  }, [magasinId, ventesDerivees, reglementsDerives, mouvementsPersonnalises]);
+  }, [magasinId, ventesDerivees, reglementsDerives, mouvementsPersonnalises, voitEntrees]);
 
   useEffect(() => {
     applyFilters();
@@ -256,11 +260,13 @@ export function MouvementsCaissePage() {
       return;
     }
 
+    // Sans le droit « Voir les entrées », seules des sorties peuvent être enregistrées.
+    const type: 'entree' | 'sortie' = voitEntrees ? formType : 'sortie';
     const nouveauMouvement: MouvementCaisse = {
       id: `custom-${Date.now()}`,
       date: new Date().toISOString(),
       magasinId: magasinId,
-      type: formType,
+      type,
       categorie: formCategorie,
       montant: parseFloat(formMontant),
       libelle: formLibelle,
@@ -270,7 +276,7 @@ export function MouvementsCaissePage() {
       beneficiaire: formLibelle.trim() || 'CAISSE',
       nature: formCategorie || 'Autre',
       compteBanque: 'CAISSE INTERNE',
-      commentaire: formLibelle.trim() || `Mouvement ${formType === 'entree' ? 'entrée' : 'sortie'}`,
+      commentaire: formLibelle.trim() || `Mouvement ${type === 'entree' ? 'entrée' : 'sortie'}`,
     };
 
     // Sauvegarder dans Firestore (partagé entre navigateurs) via useLiveData
@@ -279,7 +285,7 @@ export function MouvementsCaissePage() {
     window.dispatchEvent(new CustomEvent('leclaire-sync-update'));
 
     // Réinitialiser le formulaire
-    setFormType('entree');
+    setFormType(typeParDefaut);
     setFormCategorie('');
     setFormMontant('');
     setFormLibelle('');
@@ -403,17 +409,17 @@ export function MouvementsCaissePage() {
     <Box sx={{ p: 3 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3, flexWrap: 'wrap', gap: 2 }}>
         <Typography variant="h4" sx={{ fontSize: 'clamp(18px,4vw,24px)' }}>
-          Mouvements Entrées et Sorties - {getMagasinLabel(magasinId || '')}
+          {voitEntrees ? 'Mouvements Entrées et Sorties' : 'Sorties de caisse'} - {getMagasinLabel(magasinId || '')}
         </Typography>
         <Button
           variant="contained"
           startIcon={<Add />}
           disabled={!peutAjouter}
           title={peutAjouter ? undefined : "Vous n'avez pas le droit d'ajouter des données."}
-          onClick={() => setShowCreateDialog(true)}
-          sx={{ bgcolor: '#1976d2' }}
+          onClick={() => { setFormType(typeParDefaut); setFormCategorie(''); setShowCreateDialog(true); }}
+          sx={{ bgcolor: voitEntrees ? '#1976d2' : '#d32f2f' }}
         >
-          Nouveau Mouvement
+          {voitEntrees ? 'Nouveau Mouvement' : 'Nouvelle Sortie'}
         </Button>
       </Box>
 
@@ -465,18 +471,22 @@ export function MouvementsCaissePage() {
       {/* Filtres */}
       <Paper sx={{ p: 2, mb: 2 }}>
         <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
-          <TextField
-            select
-            label="Type"
-            value={filterType}
-            onChange={(e) => setFilterType(e.target.value)}
-            sx={{ minWidth: 150 }}
-            size="small"
-          >
-            <MenuItem value="">Tous</MenuItem>
-            <MenuItem value="entree">Entrées</MenuItem>
-            <MenuItem value="sortie">Sorties</MenuItem>
-          </TextField>
+          {voitEntrees ? (
+            <TextField
+              select
+              label="Type"
+              value={filterType}
+              onChange={(e) => setFilterType(e.target.value)}
+              sx={{ minWidth: 150 }}
+              size="small"
+            >
+              <MenuItem value="">Tous</MenuItem>
+              <MenuItem value="entree">Entrées</MenuItem>
+              <MenuItem value="sortie">Sorties</MenuItem>
+            </TextField>
+          ) : (
+            <Chip label="Sorties uniquement" color="error" variant="outlined" data-testid="sorties-uniquement" />
+          )}
 
           <TextField
             type="date"
@@ -667,13 +677,14 @@ export function MouvementsCaissePage() {
 
       {/* Dialog Création */}
       <Dialog open={showCreateDialog} onClose={() => setShowCreateDialog(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Nouveau Mouvement de Caisse</DialogTitle>
+        <DialogTitle>{voitEntrees ? 'Nouveau Mouvement de Caisse' : 'Nouvelle Sortie de Caisse'}</DialogTitle>
         <DialogContent>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 2 }}>
             <TextField
               select
               label="Type de Mouvement"
               value={formType}
+              disabled={!voitEntrees}
               onChange={(e) => {
                 setFormType(e.target.value as 'entree' | 'sortie');
                 setFormCategorie('');
@@ -681,7 +692,7 @@ export function MouvementsCaissePage() {
               fullWidth
               required
             >
-              <MenuItem value="entree">Entrée</MenuItem>
+              {voitEntrees && <MenuItem value="entree">Entrée</MenuItem>}
               <MenuItem value="sortie">Sortie</MenuItem>
             </TextField>
 
