@@ -28,12 +28,11 @@ import {
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import DeleteIcon from '@mui/icons-material/Delete';
-import { enregistrerRetour, loadStockMagasin, mouvementStockExiste } from '../../../services/inventaireService';
-import { upsertBon, retourToRow } from '../../../services/bonsService';
-import { useLiveData } from '../../../hooks/useLiveData';
+import { loadStockMagasin } from '../../../services/inventaireService';
+import { appliquerRetour } from '../../../services/bonsStock';
+import { useBons } from '../../../hooks/useBons';
 import { getCurrentUser, resolveUserName, formatDate } from '../../../utils/auditUtils';
 
-const BON_RETOUR_KEY = 'leclaire_db_bon-retour';
 
 interface BonRetour {
   id: string;
@@ -74,7 +73,8 @@ const getMagasinLabel = (magasinId: string): string => libelleMagasin(magasinId 
 
 export function BonRetourMagasinPage() {
   const { magasinId } = useParams();
-  const [allBons, setAllBons] = useLiveData<BonRetour>(BON_RETOUR_KEY, []);
+  // Bons de ce magasin, lus et enregistrés un par un dans la table `bons`.
+  const { bons: allBons, sauver } = useBons<BonRetour>('retour', magasinId ? [magasinId] : []);
   const [selectedBon, setSelectedBon] = useState<BonRetour | null>(null);
   const [showDetailDialog, setShowDetailDialog] = useState(false);
   const [showValidationDialog, setShowValidationDialog] = useState(false);
@@ -94,62 +94,25 @@ export function BonRetourMagasinPage() {
   const handleValider = async () => {
     if (!selectedBon || !magasinId) return;
 
-    // Un bon déjà traité peut être « réparé » s'il a été traité par une
-    // ancienne version qui n'avait pas créé le mouvement de stock.
-    // Une fois le mouvement présent, on ne le rejoue jamais.
+    // Les montures retournées sortent du stock du magasin. Appliqué une seule
+    // fois, même si l'administration valide aussi le bon (identifiant du bon).
     const magasin = magasinId.toUpperCase();
-
-    // Résoudre les anciens bons qui ne contiennent pas encore l'id catalogue.
-    const stockActuel = await loadStockMagasin(magasin);
     const normaliser = (v: unknown) => String(v ?? '')
       .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
       .trim().toLowerCase().replace(/\s+/g, ' ');
-
-    const items = (selectedBon.items || []).map(item => {
-      const designation = normaliser(item.designation);
-      const stock = stockActuel.find(s =>
-        (item.id && String(s.produitId) === String(item.id)) ||
-        normaliser(s.designation) === designation
-      );
-      return {
-        id: String(item.id || stock?.produitId || item.designation).trim(),
-        type: item.type === 'accessoire' ? 'accessoire' as const : 'monture' as const,
-        designation: item.designation,
-        quantite: Number(item.quantite) || 0,
-        prixVente: Number(item.prixUnit) || stock?.prixVente || 0,
-      };
-    }).filter(item => item.id && item.quantite > 0);
-
+    const { ok: stockOk, items } = await appliquerRetour({ ...selectedBon, magasin: selectedBon.magasin || magasin } as any);
     if (items.length === 0) {
       alert('❌ Aucun article valide à traiter dans ce bon de retour.');
       return;
     }
-
-    // Si le mouvement existe déjà, le bon a déjà été appliqué au stock.
-    // Cela protège contre les doubles clics et permet de réparer les anciens
-    // bons « Traité » qui n'avaient pas de mouvement.
-    const mouvementsManquants = [];
-    for (const item of items) {
-      const existe = await mouvementStockExiste('retour', selectedBon.numero, magasin, item.id);
-      if (!existe) mouvementsManquants.push(item);
-    }
-
-    if (mouvementsManquants.length > 0) {
-      const stockOk = await enregistrerRetour({
-        magasinId: magasin,
-        bonReference: selectedBon.numero,
-        items: mouvementsManquants,
-      });
-
-      if (!stockOk) {
-        logger.error('❌ Retour non confirmé dans le stock:', selectedBon.numero);
-        alert(
-          "❌ Le retour n'a pas pu être appliqué au stock.\n\n" +
-          "Le bon n'est pas considéré comme traité tant que la sortie du magasin " +
-          "et l'entrée dans le stock général ne sont pas confirmées."
-        );
-        return;
-      }
+    if (!stockOk) {
+      logger.error('❌ Retour non confirmé dans le stock:', selectedBon.numero);
+      alert(
+        "❌ Le retour n'a pas pu être appliqué au stock.\n\n" +
+        "Le bon n'est pas considéré comme traité tant que la sortie du magasin " +
+        "et l'entrée dans le stock général ne sont pas confirmées."
+      );
+      return;
     }
 
     const updatedBons = allBons.map((bon) => {
@@ -175,13 +138,12 @@ export function BonRetourMagasinPage() {
       return bon;
     });
 
-    setAllBons(updatedBons);
     const changed = updatedBons.find((b) => b.id === selectedBon.id);
     if (changed) {
       try {
-        await upsertBon(retourToRow(changed));
+        await sauver(changed);
       } catch (e) {
-        logger.error('❌ upsertBon retour:', e);
+        logger.error('❌ Enregistrement du bon de retour:', e);
         alert('⚠️ Le stock a été mis à jour, mais le bon n’a pas pu être synchronisé.');
       }
     }
@@ -275,7 +237,7 @@ export function BonRetourMagasinPage() {
     ));
   };
 
-  const handleCreateRetour = () => {
+  const handleCreateRetour = async () => {
     if (itemsRetour.length === 0) {
       alert('Veuillez ajouter au moins un produit');
       return;
@@ -309,9 +271,14 @@ export function BonRetourMagasinPage() {
       createdAt: new Date().toISOString(),
     };
 
-    // Sauvegarder dans Firestore (partagé entre navigateurs)
-    setAllBons([...allBons, newBon]);
-    upsertBon(retourToRow(newBon)).catch(e => logger.error('❌ upsertBon retour:', e));
+    // Enregistré seul dans la table `bons`, confirmé avant d'annoncer le succès.
+    try {
+      await sauver(newBon);
+    } catch (e: any) {
+      logger.error('❌ Enregistrement du bon de retour:', e);
+      alert(`❌ Le bon de retour n'a pas été enregistré.\n\n${e?.message || e}\n\nVérifiez la connexion puis réessayez.`);
+      return;
+    }
 
     window.dispatchEvent(new CustomEvent('leclaire-sync-update'));
 

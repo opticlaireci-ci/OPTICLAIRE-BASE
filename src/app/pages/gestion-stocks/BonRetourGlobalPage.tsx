@@ -4,8 +4,8 @@ import { useState } from 'react';
 import { Search, CheckCircle, XCircle, Eye } from 'lucide-react';
 import { getMagasins } from '../../constants/magasins';
 import { useAuth } from '../../contexts/AuthContext';
-import { upsertBon, retourToRow } from '../../services/bonsService';
-import { useLiveData } from '../../hooks/useLiveData';
+import { useBons } from '../../hooks/useBons';
+import { appliquerRetour } from '../../services/bonsStock';
 import { imprimerGestionStock, imprimerFormatGestionStock } from '../../utils/stockActions';
 
 interface BonRetour {
@@ -32,7 +32,8 @@ const getMagasinLabel = (magasinId: string): string => libelleMagasin(magasinId 
 
 export function BonRetourGlobalPage() {
   const { user } = useAuth();
-  const [bons, setBons] = useLiveData<BonRetour>('leclaire_db_bon-retour');
+  // Table `bons` : chaque bon est lu et enregistré séparément.
+  const { bons, sauver } = useBons<BonRetour>('retour');
   const [searchTerm, setSearchTerm] = useState('');
   const [searchDate, setSearchDate] = useState('');
   const [filterStatut, setFilterStatut] = useState('');
@@ -53,8 +54,18 @@ export function BonRetourGlobalPage() {
     return matchSearch && matchMagasin && matchStatut;
   });
 
-  const handleValider = () => {
+  const handleValider = async () => {
     if (!selectedBon) return;
+
+    // Valider un retour = les montures SORTENT du stock du magasin (une seule
+    // fois, même si le magasin a déjà « traité » ce bon).
+    const { ok, items } = await appliquerRetour(selectedBon as any);
+    if (items.length === 0 || !ok) {
+      alert(items.length === 0
+        ? '❌ Aucun article valide dans ce bon de retour.'
+        : "❌ Le retour n'a pas pu être appliqué au stock du magasin.\n\nLe bon reste « En attente » : vérifiez la connexion puis réessayez.");
+      return;
+    }
 
     const updatedBons = bons.map((bon: BonRetour) => {
       if (bon.id === selectedBon.id) {
@@ -69,18 +80,20 @@ export function BonRetourGlobalPage() {
       return bon;
     });
 
-    setBons(updatedBons);
     const changed = updatedBons.find((b: BonRetour) => b.id === selectedBon.id);
-    if (changed) upsertBon(retourToRow(changed)).catch(e => logger.error('❌ upsertBon retour:', e));
+    if (changed) {
+      try { await sauver(changed); }
+      catch (e: any) { logger.error('❌ Enregistrement du bon de retour:', e); alert('⚠️ Le stock a été mis à jour, mais le bon n’a pas pu être enregistré. Réessayez.'); return; }
+    }
 
-    alert('Bon de retour validé avec succès !');
+    alert('Bon de retour validé avec succès !\nLes montures retournées ont été retirées du stock du magasin.');
     setShowValidationModal(false);
     setShowDetailModal(false);
     setSelectedBon(null);
     setObservations('');
   };
 
-  const handleRejeter = () => {
+  const handleRejeter = async () => {
     if (!selectedBon || !motifRejet.trim()) {
       alert('Veuillez renseigner le motif de rejet');
       return;
@@ -99,9 +112,11 @@ export function BonRetourGlobalPage() {
       return bon;
     });
 
-    setBons(updatedBons);
     const changed = updatedBons.find((b: BonRetour) => b.id === selectedBon.id);
-    if (changed) upsertBon(retourToRow(changed)).catch(e => logger.error('❌ upsertBon retour:', e));
+    if (changed) {
+      try { await sauver(changed); }
+      catch (e: any) { logger.error('❌ Enregistrement du bon de retour:', e); alert(`❌ Rejet non enregistré : ${e?.message || e}`); return; }
+    }
 
     alert('Bon de retour rejeté');
     setShowRejetModal(false);

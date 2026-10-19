@@ -1,15 +1,15 @@
 import { logger } from '../../utils/logger';
 import { AddButton } from '../../components/AddButton';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Search, Trash2, Edit2 } from 'lucide-react';
 import { addCreateAudit, addUpdateAudit, formatDate, resolveUserName, AuditInfo } from '../../utils/auditUtils';
 import { getMagasins } from '../../constants/magasins';
 import { SelectionMonturesAccessoiresModal } from '../../components/SelectionMonturesAccessoiresModal';
 import { enregistrerDistribution } from '../../services/inventaireService';
-import { upsertBon, supprimerBon, distributionToRow } from '../../services/bonsService';
-import { useLiveData } from '../../hooks/useLiveData';
+import { useBons } from '../../hooks/useBons';
 import { TENANT } from '../../config/tenant';
 import { imprimerGestionStock, imprimerFormatGestionStock, imprimerBonDistribution } from '../../utils/stockActions';
+import { PaginationBons, paginer } from '../../components/PaginationBons';
 
 interface BonDistribution extends AuditInfo {
   id: string;
@@ -32,6 +32,16 @@ interface BonDistribution extends AuditInfo {
 }
 
 const MAGASINS = getMagasins().map(magasin => magasin.label);
+const MAGASIN_LABEL = (id: string) => getMagasins().find(m => m.id.toUpperCase() === String(id || '').toUpperCase())?.label || String(id || '');
+
+/** Numéro suivant (00001, 00002…) : deux bons ne portent plus le même numéro. */
+function prochaineReference(liste: Array<{ reference?: string; numero?: string }>): string {
+  const max = liste.reduce((m, b) => {
+    const n = parseInt(String(b.reference || b.numero || '').replace(/\D/g, ''), 10);
+    return Number.isFinite(n) && n > m ? n : m;
+  }, 0);
+  return String(max + 1).padStart(5, '0');
+}
 
 const getStatutColor = (statut: string) => {
   switch (statut) {
@@ -43,13 +53,23 @@ const getStatutColor = (statut: string) => {
 };
 
 export function BonDistributionGlobalPage() {
-  const [bons, setBons] = useLiveData<BonDistribution>('leclaire_db_bon-distribution');
+  // Table `bons` : chaque bon est lu et enregistré séparément (plus jamais de
+  // liste écrasée : toutes les distributions restent visibles).
+  const { bons: bonsBruts, sauver, supprimer } = useBons<BonDistribution>('distribution');
+  const bons = bonsBruts.map(b => ({
+    ...b,
+    reference: b.reference || (b as any).numero || '',
+    magasinRecepteur: b.magasinRecepteur || ((b as any).magasinDest ? MAGASIN_LABEL((b as any).magasinDest) : ''),
+    dateCreation: b.dateCreation || (b as any).date || '',
+  }));
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [searchDate, setSearchDate] = useState('');
   const [filterStatut, setFilterStatut] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  // Nouvelle recherche ou nouveau filtre : retour à la première page.
+  useEffect(() => { setCurrentPage(1); }, [searchTerm, filterStatut]);
 
   // Form state
   const [reference, setReference] = useState('00001');
@@ -58,7 +78,7 @@ export function BonDistributionGlobalPage() {
   const [searchProduit, setSearchProduit] = useState('');
   const [showSelectionModal, setShowSelectionModal] = useState(false);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!magasinRecepteur) {
       alert('Veuillez sélectionner un magasin récepteur');
       return;
@@ -78,11 +98,20 @@ export function BonDistributionGlobalPage() {
       return;
     }
 
+    const ref = reference.trim();
+    if (!ref) { alert('Veuillez saisir le numéro du bon.'); return; }
+    if (bons.some(b => b.id !== editingId && b.reference.trim().toUpperCase() === ref.toUpperCase())) {
+      const suivant = prochaineReference(bons);
+      alert(`Le numéro ${ref} est déjà utilisé par un autre bon de distribution.\nNuméro proposé : ${suivant}`);
+      setReference(suivant);
+      return;
+    }
+
     // Créer le bon avec le format attendu par la page magasin
     const newBon: any = {
       id: editingId || Date.now().toString(),
-      reference,
-      numero: reference,
+      reference: ref,
+      numero: ref,
       dateCreation: new Date().toISOString(),
       date: new Date().toISOString(),
       magasinRecepteur,
@@ -105,14 +134,18 @@ export function BonDistributionGlobalPage() {
     const bonWithAudit = editingId
       ? addUpdateAudit(newBon)
       : addCreateAudit(newBon);
-    const updatedBons = editingId
-      ? bons.map(b => b.id === editingId
-          ? { ...b, ...bonWithAudit, recepteur: b.recepteur || (b as any).receiver || '', receiver: (b as any).receiver || b.recepteur || '' , id: editingId }
-          : b)
-      : [...bons, bonWithAudit];
-    setBons(updatedBons);
-    const persistedBon = updatedBons.find(b => b.id === (editingId || bonWithAudit.id));
-    if (persistedBon) upsertBon(distributionToRow(persistedBon)).catch(e => logger.error('❌ upsertBon distribution:', e));
+    const existant = editingId ? bons.find(b => b.id === editingId) : undefined;
+    const persistedBon = existant
+      ? { ...existant, ...bonWithAudit, recepteur: existant.recepteur || (existant as any).receiver || '', receiver: (existant as any).receiver || existant.recepteur || '', id: editingId }
+      : bonWithAudit;
+    try {
+      // Le bon est enregistré seul dans la table `bons` : confirmé avant d'annoncer le succès.
+      await sauver(persistedBon);
+    } catch (e: any) {
+      logger.error('❌ Enregistrement du bon de distribution:', e);
+      alert(`❌ Le bon de distribution n'a pas été enregistré.\n\n${e?.message || e}\n\nVérifiez la connexion puis réessayez.`);
+      return;
+    }
 
     // NE PAS enregistrer la distribution maintenant
     // Le stock sera mis à jour SEULEMENT quand le magasin ACCEPTE le bon
@@ -139,10 +172,9 @@ export function BonDistributionGlobalPage() {
     setSearchProduit('');
   };
 
-  const handleDelete = (id: string) => {
-    const updatedBons = bons.filter(b => b.id !== id);
-    setBons(updatedBons);
-    supprimerBon(id).catch(e => logger.error('❌ supprimerBon distribution:', e));
+  const handleDelete = async (id: string) => {
+    try { await supprimer(id); }
+    catch (e: any) { logger.error('❌ supprimerBon distribution:', e); alert(`❌ Suppression impossible : ${e?.message || e}`); }
   };
 
   const handleSelectItems = (selectedItems: any[]) => {
@@ -176,13 +208,19 @@ export function BonDistributionGlobalPage() {
     resolveUserName(bon.createdBy || bon.responsable) || '-';
 
   const filteredBons = bons.filter(bon => {
-    const matchSearch = searchTerm === '' ||
-      bon.reference.toLowerCase().includes(searchTerm.toLowerCase());
+    // Recherche par numéro du bon OU par magasin.
+    const q = searchTerm.trim().toLowerCase();
+    const matchSearch = q === '' ||
+      (bon.reference || '').toLowerCase().includes(q) ||
+      String(bon.magasinRecepteur || (bon as any).magasinDest || '').toLowerCase().includes(q);
     const matchStatut = filterStatut === '' || bon.statut === filterStatut;
     return matchSearch && matchStatut;
   });
 
-  const sortedBons = [...filteredBons].sort((a, b) => (a.reference || '').localeCompare(b.reference || '', 'fr'));
+  // Les plus récents en haut : un bon qu'on vient de créer est toujours visible.
+  const dateDe = (b: any) => String(b.createdAt || b.dateCreation || b.date || '');
+  const sortedBons = [...filteredBons].sort((a, b) => dateDe(b).localeCompare(dateDe(a)) || (b.reference || '').localeCompare(a.reference || '', 'fr', { numeric: true }));
+  const pagination = paginer(sortedBons, currentPage);
 
   if (showModal) {
     return (
@@ -470,7 +508,7 @@ export function BonDistributionGlobalPage() {
           <p style={{ fontSize: '14px', color: '#6b7280', margin: 0 }}>Gestion Stocks: {TENANT.nom}</p>
         </div>
         <AddButton
-          onClick={() => setShowModal(true)}
+          onClick={() => { setReference(prochaineReference(bons)); setShowModal(true); }}
           style={{
             padding: '10px 24px',
             backgroundColor: '#0369a1',
@@ -591,12 +629,12 @@ export function BonDistributionGlobalPage() {
                 </td>
               </tr>
             ) : (
-              sortedBons.map((bon, idx) => (
+              pagination.elements.map((bon, idx) => (
                 <tr key={bon.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
                   <td style={{ padding: '12px' }}>
                     <input type="checkbox" />
                   </td>
-                  <td style={{ padding: '12px', textAlign: 'center', fontSize: '12px', color: '#9ca3af', fontWeight: 500 }}>{idx + 1}</td>
+                  <td style={{ padding: '12px', textAlign: 'center', fontSize: '12px', color: '#9ca3af', fontWeight: 500 }}>{pagination.debut + idx + 1}</td>
                   <td style={{ padding: '12px', fontSize: '14px', fontWeight: 600 }}>{bon.reference || (bon as any).numero || '-'}</td>
                   <td style={{ padding: '12px', fontSize: '14px' }}>{bon.magasinRecepteur || (bon as any).magasinDest || '-'}</td>
                   <td style={{ padding: '12px', fontSize: '14px' }}>{getReceiver(bon)}</td>
@@ -624,41 +662,8 @@ export function BonDistributionGlobalPage() {
 
       
 
-      {/* Pagination */}
-      <div className="admin-stock-pagination" style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '16px' }}>
-        <button
-          onClick={() => setCurrentPage(1)}
-          style={{ padding: '6px 12px', border: '1px solid #d1d5db', borderRadius: '4px', backgroundColor: '#fff', cursor: 'pointer' }}
-        >
-          {'<<'}
-        </button>
-        <button
-          onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-          style={{ padding: '6px 12px', border: '1px solid #d1d5db', borderRadius: '4px', backgroundColor: '#fff', cursor: 'pointer' }}
-        >
-          {'<'}
-        </button>
-        <button style={{ padding: '6px 12px', border: '1px solid #d1d5db', borderRadius: '4px', backgroundColor: '#3b82f6', color: '#fff', cursor: 'pointer' }}>
-          1
-        </button>
-        <button style={{ padding: '6px 12px', border: '1px solid #d1d5db', borderRadius: '4px', backgroundColor: '#fff', cursor: 'pointer' }}>
-          2
-        </button>
-        <button style={{ padding: '6px 12px', border: '1px solid #d1d5db', borderRadius: '4px', backgroundColor: '#fff', cursor: 'pointer' }}>
-          3
-        </button>
-        <button
-          onClick={() => setCurrentPage(currentPage + 1)}
-          style={{ padding: '6px 12px', border: '1px solid #d1d5db', borderRadius: '4px', backgroundColor: '#fff', cursor: 'pointer' }}
-        >
-          {'>'}
-        </button>
-        <button
-          style={{ padding: '6px 12px', border: '1px solid #d1d5db', borderRadius: '4px', backgroundColor: '#fff', cursor: 'pointer' }}
-        >
-          {'>>'}
-        </button>
-      </div>
+      {/* Pagination : 20 bons par page, les plus récents d'abord */}
+      <PaginationBons page={pagination.page} pages={pagination.pages} total={sortedBons.length} onPage={setCurrentPage} />
     </div>
   );
 }

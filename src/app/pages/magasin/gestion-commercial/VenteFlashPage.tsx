@@ -267,7 +267,7 @@ function FormulaireVenteFlash({ magasinId, onRetour, onSaved }: { magasinId: str
           prixVente: parseFloat(a.prix) || 0,
         }));
       if (items.length > 0) {
-        const stockOk = await enregistrerVente({ magasinId: magasinId.toUpperCase(), bonReference: numFacture, items });
+        const stockOk = await enregistrerVente({ magasinId: magasinId.toUpperCase(), bonReference: numFacture, items, date: new Date().toISOString() });
         if (!stockOk) {
           alert(`⚠️ LA VENTE ${numFacture} EST ENREGISTRÉE, MAIS LA SORTIE DE STOCK N'A PAS ÉTÉ CONFIRMÉE.\n\nVérifiez la connexion puis cliquez de nouveau sur « Enregistrer » : la même vente sera reprise (aucun doublon) et seule la sortie de stock sera refaite.`);
           finTentative();

@@ -6,6 +6,7 @@ import { getMagasinLabel } from '../../../constants/magasins';
 import { SgopticDashboard } from '../../../components/SgopticDashboard';
 import { setVisibleInterval, PAGE_POLL_MS } from '../../../utils/visibleInterval';
 import { useAuth } from '../../../contexts/AuthContext';
+import { reparerStockMagasinSiBesoin } from '../../../services/stockReparation';
 import { peutVoir, VOIR_ACTIVITE_ANNUELLE_KEY, VOIR_ACTIVITE_MENSUELLE_KEY } from '../../../utils/actionRights';
 
 const REGLEMENTS_CACHE = (m: string) => `leclaire_reglements_cache_${m}`;
@@ -47,6 +48,8 @@ export function MagasinDashboardPage() {
       }).catch(() => {});
     };
     load();
+    // Ventes déjà enregistrées sans sortie de stock : sortie ajoutée (une fois par session).
+    reparerStockMagasinSiBesoin(magasinId);
     const refresh = () => load();
     const stopPolling = setVisibleInterval(load, PAGE_POLL_MS);
     window.addEventListener('leclaire-sync-update', refresh);

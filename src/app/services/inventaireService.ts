@@ -11,15 +11,8 @@ import { db, auth } from '../utils/firebaseClient';
 import { logNetworkAware, isAuthError, isNoSessionError } from '../utils/networkErrors';
 import { chargerCatalogue, replaceCatalogue } from './catalogueService';
 
-export interface StockMagasin {
-  magasinId: string;
-  produitId: string;
-  produitType: 'monture' | 'accessoire';
-  designation: string;
-  quantiteDisponible: number;
-  prixVente: number;
-  derniereMiseAJour: string;
-}
+export type { StockMagasin } from './stockLedger';
+import { calculerStocks, normaliserMagasin, bonAccepte, type MouvementBrut, type StockMagasin } from './stockLedger';
 
 type Item = {
   id: string;
@@ -30,50 +23,7 @@ type Item = {
 };
 
 /** Normalise les anciens libellés de magasin (ex. « LECLAIRE ABOBO ») vers l'ID métier. */
-function normalizeMagasinId(value: any): string {
-  return String(value ?? '')
-    .trim()
-    .toUpperCase()
-    .replace(/^LECLAIRE\s+/, '')
-    .replace(/\s+MAGASIN$/, '');
-}
-
-/**
- * Mouvements qui AJOUTENT au stock du magasin de destination. `annulation_vente`
- * remet en stock les articles d'une facture supprimée.
- */
-const TYPES_ENTREE = new Set(['distribution', 'transfert', 'annulation_vente']);
-
-/**
- * Clé d'article commune à tous les mouvements.
- *
- * Les anciens bons n'avaient pas d'identifiant catalogue : leurs mouvements
- * sont rangés sous la DÉSIGNATION, alors que les ventes récentes utilisent
- * l'identifiant catalogue. Résultat : l'entrée (ancien bon) et la sortie
- * (vente) tombaient sur deux lignes différentes et la vente ne diminuait pas
- * le stock. Ici, une désignation déjà associée à un identifiant dans un autre
- * mouvement est rattachée à cet identifiant : entrées et sorties se rejoignent.
- */
-function resolveurArticles(docs: Array<{ data: any }>) {
-  const norm = (v: any) => String(v ?? '').trim().toUpperCase().replace(/\s+/g, ' ');
-  const alias = new Map<string, string>();
-  for (const { data: r } of docs) {
-    if (!r?.article_id || !r?.designation) continue;
-    const id = String(r.article_id).trim();
-    const des = norm(r.designation);
-    if (norm(id) !== des && !alias.has(des)) alias.set(des, id);
-  }
-  const produitIdDe = (r: any): string => {
-    const brut = String(r?.article_id || r?.designation || '').trim();
-    if (!brut) return '';
-    if (!r.article_id || norm(r.article_id) === norm(r.designation)) {
-      const a = alias.get(norm(r.designation || r.article_id));
-      if (a) return a;
-    }
-    return brut;
-  };
-  return { produitIdDe, articleKey: (r: any) => norm(produitIdDe(r)) };
-}
+const normalizeMagasinId = normaliserMagasin;
 
 /** Clé de cache localStorage du stock calculé d'un magasin (affichage instantané). */
 export const stockCacheKey = (magasinId: string) => `leclaire_stock_cache_${magasinId.toUpperCase()}`;
@@ -88,131 +38,59 @@ export function readStockCache(magasinId: string): StockMagasin[] {
 }
 
 /**
- * Calcule le stock d'un magasin depuis les mouvements Firestore.
- * La vue SQL `stock_par_magasin` n'existe plus — on agrège depuis `mouvements_stock`.
+ * Données du calcul : tous les mouvements, tous les bons et le catalogue.
+ * Plusieurs écrans demandent le stock en même temps (vente, tableau de bord…) :
+ * une seule lecture est faite et partagée pendant 3 secondes.
+ */
+let chargementEnCours: { promesse: Promise<DonneesStock>; t: number } | null = null;
+interface DonneesStock { mouvements: MouvementBrut[]; bons: any[]; catalogue: { montures: any[]; accessoires: any[] } }
+
+async function chargerDonneesStock(): Promise<DonneesStock> {
+  if (chargementEnCours && Date.now() - chargementEnCours.t < 3000) return chargementEnCours.promesse;
+  const promesse = (async () => {
+    const [snapM, bons, montures, accessoires] = await Promise.all([
+      getDocs(collection(db, 'mouvements_stock')),
+      getDocs(collection(db, 'bons'))
+        .then((snap: any) => snap.docs.map((d: any) => ({ id: d.id, ...(d.data() || {}) })))
+        .catch((err: any) => { logger.warn('Impossible de lire les bons pour le stock:', err); return []; }),
+      chargerCatalogue('catalogue_montures').catch(() => []),
+      chargerCatalogue('catalogue_accessoires').catch(() => []),
+    ]);
+    const mouvements = snapM.docs.map((d: any) => ({ id: d.id, data: d.data() || {} }));
+    return { mouvements, bons, catalogue: { montures, accessoires } };
+  })();
+  chargementEnCours = { promesse, t: Date.now() };
+  promesse.catch(() => { chargementEnCours = null; });
+  return promesse;
+}
+
+/** Le stock vient d'être modifié : le prochain calcul relit la base. */
+function oublierDonneesStock() { chargementEnCours = null; }
+
+function memoriserStock(target: string, rows: StockMagasin[]) {
+  try {
+    const prev = localStorage.getItem(stockCacheKey(target));
+    const next = JSON.stringify(rows);
+    if (prev !== next) {
+      localStorage.setItem(stockCacheKey(target), next);
+      window.dispatchEvent(new CustomEvent('leclaire-stock-updated', { detail: { magasinId: target } }));
+    }
+  } catch { /* quota */ }
+}
+
+/**
+ * Stock réel d'un magasin, rejoué depuis les mouvements (voir stockLedger.ts).
  * Le résultat est mis en cache localStorage + un événement 'leclaire-stock-updated'
  * est émis pour que les pages abonnées se rafraîchissent AUTOMATIQUEMENT.
  */
-/**
- * Complément de fiabilité : certaines anciennes distributions validées peuvent
- * exister dans `bons` sans leur mouvement correspondant (ancienne version /
- * coupure réseau). On les considère comme entrées uniquement si aucun mouvement
- * logique équivalent n'existe déjà. Cela rétablit le stock réel sans doubler les
- * distributions déjà enregistrées.
- */
-async function chargerMouvementsAvecBonsAcceptes(targets: string[]) {
-  const wanted = new Set(targets.map(normalizeMagasinId).filter(Boolean));
-  const snapM = await getDocs(collection(db, 'mouvements_stock'));
-  const movements = snapM.docs.map((d: any) => ({ id: d.id, data: d.data() || {} }));
-  const norm = (v: any) => String(v ?? '').trim().toUpperCase();
-  const articleKey = (r: any) => norm(r.article_id || r.designation);
-  const logicalKey = (r: any, docId = '') =>
-    `${norm(r.type)}|${norm(r.bon_id || r.reference || docId)}|${articleKey(r)}`;
-  const movementKeys = new Set(movements.map(({ id, data }) => logicalKey(data, id)));
-
-  try {
-    const snapB = await getDocs(collection(db, 'bons'));
-    for (const d of snapB.docs as any[]) {
-      const b = d.data() || {};
-      const type = norm(b.type);
-      const statut = norm(b.statut);
-      const statutAccepte = [
-        'VALIDE', 'VALIDÉ', 'VALIDEE', 'VALIDÉE',
-        'ACCEPTE', 'ACCEPTÉ', 'ACCEPTEE', 'ACCEPTÉE',
-        'RECU', 'REÇU', 'TERMINE', 'TERMINÉ'
-      ].includes(statut);
-      if (!['DISTRIBUTION', 'TRANSFERT'].includes(type) || !statutAccepte) continue;
-      const source = normalizeMagasinId(b.magasin_source);
-      const destination = normalizeMagasinId(b.magasin_destination);
-      if (!wanted.has(source) && !wanted.has(destination)) continue;
-      for (const item of Array.isArray(b.items) ? b.items : []) {
-        const article = item.id || item.article_id || item.designation;
-        if (!article) continue;
-        const fake = {
-          type: type.toLowerCase(),
-          bon_id: b.numero || b.id || d.id,
-          article_id: article,
-          designation: item.designation || article,
-        };
-        const key = logicalKey(fake);
-        if (!movementKeys.has(key)) {
-          movements.push({
-            id: stableUuid(`fallback|${d.id}|${article}`),
-            data: {
-              ...fake,
-              quantite: Number(item.quantite) || 0,
-              magasin_source: source || undefined,
-              magasin_destination: destination || undefined,
-              produit_type: item.type === 'accessoire' ? 'accessoire' : 'monture',
-              prix_vente: Number(item.prixUnit) || 0,
-              created_at: b.date || b.created_at || '',
-              _fromAcceptedBon: true,
-            },
-          });
-          movementKeys.add(key);
-        }
-      }
-    }
-  } catch (err) {
-    logger.warn('Impossible de vérifier les bons acceptés pour le stock:', err);
-  }
-  return movements;
-}
-
 export async function loadStockMagasin(magasinId: string): Promise<StockMagasin[]> {
+  const target = normalizeMagasinId(magasinId);
+  if (!target) return [];
   try {
-    const target = String(magasinId || '').trim().toUpperCase();
-    if (!target) return [];
-    const docs = await chargerMouvementsAvecBonsAcceptes([target]);
-    const stockMap = new Map<string, StockMagasin>();
-    // Un mouvement est unique par opération + bon + article. Les anciens
-    // documents sans article_id utilisent la désignation comme repli.
-    const seen = new Set<string>();
-    const norm = (v: any) => String(v ?? '').trim().toUpperCase();
-    const { articleKey, produitIdDe } = resolveurArticles(docs);
-    const logicalKey = (r: any, docId: string) =>
-      `${norm(r.type)}|${norm(r.bon_id || r.reference || docId)}|${articleKey(r)}`;
-
-    docs.forEach((d: any) => {
-      const r = d.data || {};
-      const destination = normalizeMagasinId(r.magasin_destination);
-      const source = normalizeMagasinId(r.magasin_source);
-      const isIncoming = destination === target && TYPES_ENTREE.has(r.type);
-      const isOutgoing = source === target && (r.type === 'vente' || r.type === 'retour' || r.type === 'transfert');
-      if (!isIncoming && !isOutgoing) return;
-
-      const lk = logicalKey(r, d.id);
-      if (seen.has(lk)) return;
-      seen.add(lk);
-
-      const key = articleKey(r);
-      if (!key) return;
-      const existing = stockMap.get(key) || {
-        magasinId: target,
-        produitId: produitIdDe(r) || key,
-        produitType: r.produit_type === 'accessoire' ? 'accessoire' : 'monture',
-        designation: r.designation || r.article_id || key,
-        quantiteDisponible: 0,
-        prixVente: Number(r.prix_vente) || 0,
-        derniereMiseAJour: r.created_at || '',
-      };
-      const q = Number(r.quantite) || 0;
-      if (isIncoming) existing.quantiteDisponible += q;
-      if (isOutgoing) existing.quantiteDisponible -= q;
-      if (r.created_at && r.created_at > existing.derniereMiseAJour) existing.derniereMiseAJour = r.created_at;
-      stockMap.set(key, existing);
-    });
-
-    const result = Array.from(stockMap.values()).filter(s => s.quantiteDisponible > 0);
-    try {
-      const prev = localStorage.getItem(stockCacheKey(target));
-      const next = JSON.stringify(result);
-      if (prev !== next) {
-        localStorage.setItem(stockCacheKey(target), next);
-        window.dispatchEvent(new CustomEvent('leclaire-stock-updated', { detail: { magasinId: target } }));
-      }
-    } catch {}
-    return result;
+    const { mouvements, bons, catalogue } = await chargerDonneesStock();
+    const rows = calculerStocks(mouvements, bons, catalogue, [target])[target] || [];
+    memoriserStock(target, rows);
+    return rows;
   } catch (err) {
     logger.error('loadStockMagasin:', err);
     return readStockCache(magasinId);
@@ -220,64 +98,22 @@ export async function loadStockMagasin(magasinId: string): Promise<StockMagasin[
 }
 
 export async function recalculerStockMagasin(magasinId: string): Promise<StockMagasin[]> {
+  oublierDonneesStock();
   return loadStockMagasin(magasinId);
 }
 
-/**
- * Calcule le stock de PLUSIEURS magasins en UN SEUL téléchargement de la
- * collection `mouvements_stock`. Le tableau de bord admin appelait
- * `loadStockMagasin` une fois par magasin (7 téléchargements complets de la
- * même collection) → lenteur. Ici on télécharge une fois puis on partitionne
- * en mémoire, et on écrit le cache de chaque magasin + émet l'événement live.
- */
+/** Stock de PLUSIEURS magasins en un seul téléchargement des mouvements. */
 export async function loadStocksParMagasin(
   magasinIds: string[],
 ): Promise<Record<string, StockMagasin[]>> {
-  const result: Record<string, StockMagasin[]> = {};
+  const ids = magasinIds.map(normalizeMagasinId).filter(Boolean);
   try {
-    const ids = magasinIds.map(id => String(id || '').trim().toUpperCase()).filter(Boolean);
-    const docs = await chargerMouvementsAvecBonsAcceptes(ids);
-    const norm = (v: any) => String(v ?? '').trim().toUpperCase();
-    const { articleKey, produitIdDe } = resolveurArticles(docs);
-    const logicalKey = (r: any, docId: string) =>
-      `${norm(r.type)}|${norm(r.bon_id || r.reference || docId)}|${articleKey(r)}`;
-
-    for (const target of ids) {
-      const stockMap = new Map<string, StockMagasin>();
-      const seen = new Set<string>();
-      for (const { id, data: r } of docs) {
-        const destination = normalizeMagasinId(r.magasin_destination);
-        const source = normalizeMagasinId(r.magasin_source);
-        const isIncoming = destination === target && TYPES_ENTREE.has(r.type);
-        const isOutgoing = source === target && (r.type === 'vente' || r.type === 'retour' || r.type === 'transfert');
-        if (!isIncoming && !isOutgoing) continue;
-        const lk = logicalKey(r, id);
-        if (seen.has(lk)) continue;
-        seen.add(lk);
-        const key = articleKey(r);
-        if (!key) continue;
-        const existing = stockMap.get(key) || {
-          magasinId: target, produitId: produitIdDe(r) || key,
-          produitType: r.produit_type === 'accessoire' ? 'accessoire' : 'monture',
-          designation: r.designation || r.article_id || key, quantiteDisponible: 0,
-          prixVente: Number(r.prix_vente) || 0, derniereMiseAJour: r.created_at || '',
-        };
-        const q = Number(r.quantite) || 0;
-        if (isIncoming) existing.quantiteDisponible += q;
-        if (isOutgoing) existing.quantiteDisponible -= q;
-        if (r.created_at && r.created_at > existing.derniereMiseAJour) existing.derniereMiseAJour = r.created_at;
-        stockMap.set(key, existing);
-      }
-      const rows = Array.from(stockMap.values()).filter(s => s.quantiteDisponible > 0);
-      result[target] = rows;
-      try {
-        const prev = localStorage.getItem(stockCacheKey(target));
-        const next = JSON.stringify(rows);
-        if (prev !== next) {
-          localStorage.setItem(stockCacheKey(target), next);
-          window.dispatchEvent(new CustomEvent('leclaire-stock-updated', { detail: { magasinId: target } }));
-        }
-      } catch {}
+    const { mouvements, bons, catalogue } = await chargerDonneesStock();
+    const calcul = calculerStocks(mouvements, bons, catalogue, ids);
+    const result: Record<string, StockMagasin[]> = {};
+    for (const id of ids) {
+      result[id] = calcul[id] || [];
+      memoriserStock(id, result[id]);
     }
     return result;
   } catch (err) {
@@ -295,7 +131,21 @@ export async function getQuantiteDisponible(
   return stock.find(s => s.produitId === produitId)?.quantiteDisponible ?? 0;
 }
 
-export async function recalculerTousLesStocks(): Promise<void> {}
+export async function recalculerTousLesStocks(): Promise<void> { oublierDonneesStock(); }
+
+/** Un même article sur plusieurs lignes d'un bon ou d'une facture : quantités additionnées. */
+function regrouperArticles(items: Item[]): Item[] {
+  const parId = new Map<string, Item>();
+  for (const item of items) {
+    const id = String(item.id ?? '').trim();
+    const quantite = Number(item.quantite) || 0;
+    if (!id || quantite <= 0) continue;
+    const l = parId.get(id);
+    if (l) l.quantite += quantite;
+    else parId.set(id, { ...item, id, quantite });
+  }
+  return [...parId.values()];
+}
 
 /**
  * Génère un UUID déterministe à partir d'une clé métier.
@@ -370,6 +220,7 @@ async function insertMouvements(rows: any[]): Promise<boolean> {
         }
       }
       logger.log(`✅ Mouvements de stock confirmés (${rows.length} ligne(s), tentative ${tentative})`);
+      oublierDonneesStock();
       return true;
     } catch (err: any) {
       dernierErreur = err;
@@ -471,12 +322,49 @@ async function ajusterStockGeneral(items: Item[], delta: 1 | -1): Promise<boolea
   }
 }
 
+/**
+ * Identifiant d'un mouvement lié à un bon : l'IDENTIFIANT du bon, et non son
+ * numéro. Deux bons portant le même numéro (« 00001 » par défaut) restent deux
+ * bons distincts : avant, le second était pris pour un doublon et ignoré.
+ */
+const idMouvementBon = (type: string, bonId: string, magasins: string, article: string) =>
+  stableUuid(`${type}|uid:${bonId}|${magasins}|${article}`);
+/** Ancien identifiant (numéro du bon) : sert à ne pas rejouer un bon déjà appliqué. */
+const ancienIdMouvement = (type: string, reference: string, magasins: string, article: string) =>
+  stableUuid(`${type}|${reference}|${magasins}|${article}`);
+
+/**
+ * Le bon a-t-il déjà été appliqué au stock pour cet article ? Oui si son
+ * mouvement existe ; ou si un mouvement d'une ancienne version existe sous son
+ * numéro et qu'aucun AUTRE bon validé ne porte ce numéro pour ce magasin.
+ */
+async function dejaApplique(
+  type: 'distribution' | 'retour' | 'transfert', bonId: string | undefined, reference: string,
+  magasinsCle: string, ancienneCle: string, article: string, champMagasin: 'magasin_destination' | 'magasin_source', magasin: string,
+): Promise<boolean> {
+  if (bonId && await confirmerMouvement(idMouvementBon(type, bonId, magasinsCle, article))) return true;
+  if (!(await confirmerMouvement(ancienIdMouvement(type, reference, ancienneCle, article)))) return false;
+  if (!bonId) return true;
+  try {
+    const snap = await getDocs(query(collection(db, 'bons'), where('numero', '==', reference)));
+    const autres = snap.docs.map((d: any) => ({ id: d.id, ...(d.data() || {}) })).filter((b: any) =>
+      String(b.id) !== String(bonId) && String(b.type || '').toLowerCase() === type
+      && normalizeMagasinId(b[champMagasin]) === magasin && bonAccepte(b.statut));
+    return autres.length === 0;
+  } catch {
+    return true; // dans le doute, on ne compte pas deux fois
+  }
+}
+
 export async function enregistrerDistribution(params: {
   magasinId: string;
   bonReference: string;
+  /** Identifiant du bon (unique, contrairement au numéro). */
+  bonId?: string;
   items: Item[];
 }): Promise<boolean> {
-  const rows = params.items.filter(i => i.quantite > 0);
+  const mag = normalizeMagasinId(params.magasinId);
+  const rows = regrouperArticles(params.items);
   if (rows.length === 0) return true;
 
   // Idempotence forte : si le mouvement existe déjà (double-clic, retry réseau,
@@ -484,22 +372,19 @@ export async function enregistrerDistribution(params: {
   // stock central. Seules les nouvelles lignes sont prises en compte.
   const nouvellesLignes: Item[] = [];
   for (const item of rows) {
-    const existe = await mouvementStockExiste(
-      'distribution',
-      params.bonReference,
-      params.magasinId,
-      item.id,
-    );
+    const existe = await dejaApplique('distribution', params.bonId, params.bonReference, mag, mag, item.id, 'magasin_destination', mag);
     if (!existe) nouvellesLignes.push(item);
   }
-
   if (nouvellesLignes.length === 0) return true;
 
+  const maintenant = new Date().toISOString();
   const mouvementOk = await insertMouvements(nouvellesLignes.map(item => ({
-    _docId: stableUuid(`distribution|${params.bonReference}|${params.magasinId}|${item.id}`),
+    _docId: params.bonId
+      ? idMouvementBon('distribution', params.bonId, mag, item.id)
+      : ancienIdMouvement('distribution', params.bonReference, mag, item.id),
     type: 'distribution', article_id: item.id, quantite: item.quantite,
-    magasin_id: params.magasinId, magasin_destination: params.magasinId, bon_id: params.bonReference,
-    designation: item.designation, produit_type: item.type, prix_vente: item.prixVente,
+    magasin_id: mag, magasin_destination: mag, bon_id: params.bonReference, bon_uid: params.bonId || null,
+    designation: item.designation, produit_type: item.type, prix_vente: item.prixVente, date_mouvement: maintenant,
   })));
   if (!mouvementOk) return false;
 
@@ -512,45 +397,72 @@ export async function enregistrerTransfert(params: {
   magasinSource: string;
   magasinDestination: string;
   bonReference: string;
+  bonId?: string;
   items: Item[];
 }): Promise<boolean> {
-  return insertMouvements(params.items.map(item => ({
-    _docId: stableUuid(`transfert|${params.bonReference}|${params.magasinSource}|${params.magasinDestination}|${item.id}`),
+  const source = normalizeMagasinId(params.magasinSource);
+  const destination = normalizeMagasinId(params.magasinDestination);
+  const rows = regrouperArticles(params.items);
+  if (rows.length === 0) return true;
+  const maintenant = new Date().toISOString();
+  return insertMouvements(rows.map(item => ({
+    _docId: params.bonId
+      ? idMouvementBon('transfert', params.bonId, `${source}|${destination}`, item.id)
+      : ancienIdMouvement('transfert', params.bonReference, `${source}|${destination}`, item.id),
     type: 'transfert', article_id: item.id, quantite: item.quantite,
-    magasin_id: params.magasinSource, magasin_source: params.magasinSource, magasin_destination: params.magasinDestination,
-    bon_id: params.bonReference, designation: item.designation,
-    produit_type: item.type, prix_vente: item.prixVente,
+    magasin_id: source, magasin_source: source, magasin_destination: destination,
+    bon_id: params.bonReference, bon_uid: params.bonId || null, designation: item.designation,
+    produit_type: item.type, prix_vente: item.prixVente, date_mouvement: maintenant,
   })));
 }
 
 /**
- * Enregistre une SORTIE de stock lors d'une vente (décrémente le stock réel).
- * On pose `magasin_source` = magasin vendeur, sans destination : loadStockMagasin
- * soustrait alors la quantité vendue. La clé `article_id` reprend la désignation
- * (même convention que les distributions) pour que la soustraction s'applique.
+ * Enregistre la SORTIE de stock d'une vente (magasin vendeur = `magasin_source`).
+ * Un même article sur deux lignes est additionné. Facture MODIFIÉE : un article
+ * retiré de la facture est remis à zéro (il revient donc en stock).
  */
 export async function enregistrerVente(params: {
   magasinId: string;
   bonReference: string;
   items: Item[];
+  /** Date de la vente (ordre chronologique du stock). */
+  date?: string;
 }): Promise<boolean> {
-  const rows = params.items.filter(i => i.quantite > 0);
-  if (rows.length === 0) return true;
-  return insertMouvements(rows.map(item => ({
-    _docId: stableUuid(`vente|${params.bonReference}|${params.magasinId}|${item.id}`),
+  const mag = normalizeMagasinId(params.magasinId);
+  const num = String(params.bonReference || '').trim();
+  const rows = regrouperArticles(params.items);
+  const date = params.date || new Date().toISOString();
+  const ok = await insertMouvements(rows.map(item => ({
+    _docId: stableUuid(`vente|${num}|${mag}|${item.id}`),
     type: 'vente', article_id: item.id, quantite: item.quantite,
-    magasin_id: params.magasinId, magasin_source: params.magasinId, bon_id: params.bonReference,
-    designation: item.designation, produit_type: item.type, prix_vente: item.prixVente,
+    magasin_id: mag, magasin_source: mag, bon_id: num,
+    designation: item.designation, produit_type: item.type, prix_vente: item.prixVente, date_mouvement: date,
   })));
+  if (!ok || !num) return ok;
+  // Articles retirés de la facture depuis le dernier enregistrement.
+  try {
+    const ids = new Set(rows.map(r => r.id));
+    const snap = await getDocs(query(collection(db, 'mouvements_stock'), where('bon_id', '==', num)));
+    for (const d of snap.docs as any[]) {
+      const r = d.data() || {};
+      if (r.type !== 'vente' || normalizeMagasinId(r.magasin_source) !== mag) continue;
+      if (ids.has(String(r.article_id || '').trim()) || !(Number(r.quantite) > 0)) continue;
+      await setDoc(doc(db, 'mouvements_stock', d.id), { quantite: 0, updated_at: new Date().toISOString() }, { merge: true });
+    }
+    oublierDonneesStock();
+  } catch (err) {
+    logger.warn('Contrôle des articles retirés de la facture impossible:', err);
+  }
+  return true;
 }
 
 /**
  * Facture supprimée : les montures / accessoires vendus REVIENNENT en stock.
  *
  * On ne supprime pas la sortie d'origine (traçabilité) : on ajoute une entrée
- * « annulation_vente » de même quantité, pour chaque article réellement sorti
- * par cette facture. Identifiant déterministe : un double-clic ou une nouvelle
- * tentative ne remet jamais deux fois le même article en stock.
+ * « annulation_vente » ; le calcul du stock remet exactement ce que la vente
+ * avait retiré. Identifiant déterministe : un double-clic ne remet jamais deux
+ * fois le même article en stock.
  */
 export async function annulerSortiesVente(magasinId: string, numFacture: string): Promise<boolean> {
   const mag = normalizeMagasinId(magasinId);
@@ -570,6 +482,7 @@ export async function annulerSortiesVente(magasinId: string, numFacture: string)
         type: 'annulation_vente', article_id: article, quantite: Number(r.quantite) || 0,
         magasin_id: mag, magasin_destination: mag, bon_id: num,
         designation: r.designation || article, produit_type: r.produit_type, prix_vente: r.prix_vente,
+        date_mouvement: new Date().toISOString(),
       };
     }));
     if (ok) await loadStockMagasin(mag);
@@ -580,22 +493,135 @@ export async function annulerSortiesVente(magasinId: string, numFacture: string)
   }
 }
 
+/**
+ * Bon de retour : la monture SORT du magasin et revient au stock central.
+ * Idempotent : un bon déjà appliqué (même validé deux fois, par le magasin
+ * puis par l'administration) ne retire jamais deux fois.
+ */
 export async function enregistrerRetour(params: {
   magasinId: string;
   bonReference: string;
+  bonId?: string;
   items: Item[];
 }): Promise<boolean> {
-  const rows = params.items.filter(i => i.quantite > 0);
+  const mag = normalizeMagasinId(params.magasinId);
+  const rows = regrouperArticles(params.items);
   if (rows.length === 0) return true;
 
-  const mouvementOk = await insertMouvements(rows.map(item => ({
-    _docId: stableUuid(`retour|${params.bonReference}|${params.magasinId}|${item.id}`),
+  const nouvellesLignes: Item[] = [];
+  for (const item of rows) {
+    const existe = await dejaApplique('retour', params.bonId, params.bonReference, mag, mag, item.id, 'magasin_source', mag);
+    if (!existe) nouvellesLignes.push(item);
+  }
+  if (nouvellesLignes.length === 0) return true;
+
+  const maintenant = new Date().toISOString();
+  const mouvementOk = await insertMouvements(nouvellesLignes.map(item => ({
+    _docId: params.bonId
+      ? idMouvementBon('retour', params.bonId, mag, item.id)
+      : ancienIdMouvement('retour', params.bonReference, mag, item.id),
     type: 'retour', article_id: item.id, quantite: item.quantite,
-    magasin_id: params.magasinId, magasin_source: params.magasinId, bon_id: params.bonReference,
-    designation: item.designation, produit_type: item.type, prix_vente: item.prixVente,
+    magasin_id: mag, magasin_source: mag, bon_id: params.bonReference, bon_uid: params.bonId || null,
+    designation: item.designation, produit_type: item.type, prix_vente: item.prixVente, date_mouvement: maintenant,
   })));
   if (!mouvementOk) return false;
 
   // Un retour sort du magasin et revient au stock central.
-  return ajusterStockGeneral(rows, 1);
+  return ajusterStockGeneral(nouvellesLignes, 1);
+}
+
+/**
+ * INVENTAIRE : chaque article compté prend, à la date de l'inventaire, la
+ * quantité PHYSIQUE trouvée dans le magasin ; les ventes, bons… postérieurs
+ * s'appliquent ensuite normalement. Un même article compté sur plusieurs
+ * lignes (vitrine + réserve) : quantités additionnées. Inventaire modifié :
+ * les nouvelles quantités remplacent les anciennes ; article retiré de
+ * l'inventaire : son ajustement est annulé.
+ */
+export async function enregistrerInventaire(params: {
+  inventaireId: string;
+  magasinId: string;
+  /** Moment du comptage (date de création de l'inventaire). */
+  date: string;
+  items: Array<{ articleId: string; designation: string; stockTheorique: number; stockPhysique: number }>;
+}): Promise<boolean> {
+  const mag = normalizeMagasinId(params.magasinId);
+  const invId = String(params.inventaireId || '').trim();
+  if (!mag || !invId) return false;
+  const parArticle = new Map<string, { designation: string; theorique: number; physique: number }>();
+  for (const it of params.items || []) {
+    const article = String(it.articleId || it.designation || '').trim();
+    if (!article) continue;
+    const l = parArticle.get(article);
+    if (l) l.physique += Math.max(0, Number(it.stockPhysique) || 0);
+    else parArticle.set(article, { designation: it.designation || article, theorique: Number(it.stockTheorique) || 0, physique: Math.max(0, Number(it.stockPhysique) || 0) });
+  }
+  const ok = await insertMouvements([...parArticle.entries()].map(([article, l]) => ({
+    _docId: stableUuid(`inventaire|${invId}|${mag}|${article}`),
+    type: 'inventaire', article_id: article, designation: l.designation, quantite: 0,
+    stock_theorique: l.theorique, stock_physique: l.physique, ecart: l.physique - l.theorique,
+    magasin_id: mag, magasin_destination: mag, bon_id: invId, date_mouvement: params.date, annule: false,
+  })));
+  if (!ok) return false;
+  return annulerLignesInventaire(invId, new Set(parArticle.keys()));
+}
+
+/** Inventaire supprimé : ses ajustements sont annulés (le stock redevient celui calculé). */
+export function annulerInventaire(inventaireId: string): Promise<boolean> {
+  return annulerLignesInventaire(String(inventaireId || '').trim(), new Set());
+}
+
+async function annulerLignesInventaire(invId: string, garder: Set<string>): Promise<boolean> {
+  if (!invId) return true;
+  try {
+    const snap = await getDocs(query(collection(db, 'mouvements_stock'), where('bon_id', '==', invId)));
+    for (const d of snap.docs as any[]) {
+      const r = d.data() || {};
+      if (r.type !== 'inventaire' || r.annule || garder.has(String(r.article_id || '').trim())) continue;
+      await setDoc(doc(db, 'mouvements_stock', d.id), { annule: true, updated_at: new Date().toISOString() }, { merge: true });
+    }
+    oublierDonneesStock();
+    return true;
+  } catch (err) {
+    logger.error('❌ Annulation des ajustements d\'inventaire:', err);
+    return false;
+  }
+}
+
+/**
+ * Ventes enregistrées SANS sortie de stock (devis converti en facture avec une
+ * ancienne version, coupure réseau…) : la sortie manquante est écrite. Les
+ * ventes importées de l'ancien logiciel sont ignorées. Sans risque : le calcul
+ * ne descend jamais sous zéro et ne compte jamais deux fois une vente.
+ */
+export async function reparerSortiesVentes(magasinId: string, ventes: any[]): Promise<number> {
+  const mag = normalizeMagasinId(magasinId);
+  if (!mag) return 0;
+  const { mouvements } = await chargerDonneesStock();
+  const facturesAvecSortie = new Set(mouvements
+    .filter(m => m.data?.type === 'vente' && normalizeMagasinId(m.data?.magasin_source) === mag)
+    .map(m => String(m.data?.bon_id || '').trim()));
+  let reparees = 0;
+  for (const v of ventes || []) {
+    const num = String(v?.recap?.numFacture || '').trim();
+    if (!num || facturesAvecSortie.has(num)) continue;
+    if ((v?.type || 'vente') !== 'vente' || v?.recap?.imported || String(v?.statut || '').toLowerCase() === 'devis') continue;
+    const items = (Array.isArray(v?.articles) ? v.articles : [])
+      .filter((a: any) => a?.type === 'monture' || a?.type === 'accessoire')
+      .map((a: any) => ({
+        id: String(a.produitId || a.designation || '').trim(),
+        type: a.type as 'monture' | 'accessoire',
+        designation: String(a.designation || '').trim(),
+        quantite: parseFloat(a.quantite) || 0,
+        prixVente: parseFloat(a.prix) || 0,
+      }))
+      .filter((a: Item) => a.id && a.quantite > 0);
+    if (items.length === 0) continue;
+    if (await enregistrerVente({ magasinId: mag, bonReference: num, items, date: v.date || v.created_at })) {
+      reparees++;
+      facturesAvecSortie.add(num);
+    }
+  }
+  if (reparees) logger.log(`✅ ${reparees} vente(s) sans sortie de stock réparée(s) pour ${mag}`);
+  return reparees;
 }

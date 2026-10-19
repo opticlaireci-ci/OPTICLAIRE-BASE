@@ -31,12 +31,11 @@ import CancelIcon from '@mui/icons-material/Cancel';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { enregistrerTransfert, loadStockMagasin } from '../../../services/inventaireService';
-import { upsertBon, transfertToRow } from '../../../services/bonsService';
+
 import { getMagasins } from '../../../constants/magasins';
-import { useLiveData } from '../../../hooks/useLiveData';
+import { useBons } from '../../../hooks/useBons';
 import { getCurrentUser, resolveUserName, formatDate } from '../../../utils/auditUtils';
 
-const BON_TRANSFERT_KEY = 'leclaire_db_bon-transfert';
 
 interface BonTransfert {
   id: string;
@@ -74,7 +73,8 @@ interface ItemTransfert {
 
 export function BonTransfertMagasinPage() {
   const { magasinId } = useParams();
-  const [allBons, setAllBons] = useLiveData<BonTransfert>(BON_TRANSFERT_KEY, []);
+  // Transferts envoyés ou reçus par ce magasin, lus et enregistrés un par un.
+  const { bons: allBons, sauver } = useBons<BonTransfert>('transfert', magasinId ? [magasinId] : []);
   const [selectedBon, setSelectedBon] = useState<BonTransfert | null>(null);
   const [showDetailDialog, setShowDetailDialog] = useState(false);
   const [showValidationDialog, setShowValidationDialog] = useState(false);
@@ -152,6 +152,7 @@ export function BonTransfertMagasinPage() {
         magasinSource: source,
         magasinDestination: selectedBon.magasinDest.toUpperCase(),
         bonReference: selectedBon.numero,
+        bonId: selectedBon.id,
         items,
       });
       if (!mouvementOk) {
@@ -174,9 +175,11 @@ export function BonTransfertMagasinPage() {
       return bon;
     });
 
-    setAllBons(updatedBons);
     const changed = updatedBons.find((b) => b.id === selectedBon.id);
-    if (changed) upsertBon(transfertToRow(changed)).catch(e => logger.error('❌ upsertBon transfert:', e));
+    if (changed) {
+      try { await sauver(changed); }
+      catch (e: any) { logger.error('❌ Enregistrement du bon de transfert:', e); alert('⚠️ Le stock a été mis à jour, mais le bon n’a pas pu être enregistré. Réessayez.'); return; }
+    }
 
     window.dispatchEvent(new CustomEvent('leclaire-sync-update'));
 
@@ -252,7 +255,7 @@ export function BonTransfertMagasinPage() {
     ));
   };
 
-  const handleCreateTransfert = () => {
+  const handleCreateTransfert = async () => {
     if (!magasinDestination) {
       alert('Veuillez sélectionner un magasin de destination');
       return;
@@ -284,9 +287,14 @@ export function BonTransfertMagasinPage() {
       createdAt: new Date().toISOString(),
     };
 
-    // Sauvegarder dans Firestore (partagé entre navigateurs)
-    setAllBons([...allBons, newBon]);
-    upsertBon(transfertToRow(newBon)).catch(e => logger.error('❌ upsertBon transfert:', e));
+    // Enregistré seul dans la table `bons`, confirmé avant d'annoncer le succès.
+    try {
+      await sauver(newBon);
+    } catch (e: any) {
+      logger.error('❌ Enregistrement du bon de transfert:', e);
+      alert(`❌ Le bon de transfert n'a pas été enregistré.\n\n${e?.message || e}\n\nVérifiez la connexion puis réessayez.`);
+      return;
+    }
 
     window.dispatchEvent(new CustomEvent('leclaire-sync-update'));
 

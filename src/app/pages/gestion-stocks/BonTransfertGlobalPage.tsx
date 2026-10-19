@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Search } from 'lucide-react';
 import { getMagasins } from '../../constants/magasins';
-import { useLiveData } from '../../hooks/useLiveData';
+import { useBons } from '../../hooks/useBons';
 import { imprimerGestionStock, imprimerFormatGestionStock } from '../../utils/stockActions';
+import { PaginationBons, paginer } from '../../components/PaginationBons';
 
 interface BonTransfert {
   id: string;
@@ -15,6 +16,7 @@ interface BonTransfert {
 }
 
 const MAGASINS = getMagasins().map(magasin => magasin.label);
+const MAGASIN_LABEL = (id: string) => getMagasins().find(m => m.id.toUpperCase() === String(id || '').toUpperCase())?.label || String(id || '');
 
 const getStatutColor = (statut: string) => {
   switch (statut) {
@@ -26,23 +28,40 @@ const getStatutColor = (statut: string) => {
 };
 
 export function BonTransfertGlobalPage() {
-  const [bons, setBons] = useLiveData<BonTransfert>('leclaire_db_bon-transfert');
+  // Table `bons` : tous les transferts, enregistrés un par un (aucun ne disparaît).
+  const { bons: bonsBruts, sauver } = useBons<BonTransfert>('transfert');
+  const bons = bonsBruts.map((b: any) => ({
+    ...b,
+    numeroBon: b.numeroBon || b.numero || '',
+    magasinExpediteur: b.magasinExpediteur || MAGASIN_LABEL(b.magasinSource),
+    magasinRecepteur: b.magasinRecepteur || MAGASIN_LABEL(b.magasinDest),
+    recepteur: b.recepteur || '',
+    dateTransfert: b.dateTransfert || b.date || '',
+    statut: b.statut || 'En attente',
+  })) as BonTransfert[];
   const [searchTerm, setSearchTerm] = useState('');
   const [searchDate, setSearchDate] = useState('');
   const [filterStatut, setFilterStatut] = useState('');
   const [filterMagasin, setFilterMagasin] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  // Nouvelle recherche ou nouveau filtre : retour à la première page.
+  useEffect(() => { setCurrentPage(1); }, [searchTerm, filterStatut, filterMagasin]);
 
   const handleEdit = (bon: BonTransfert) => {
     const expediteur = window.prompt('Magasin expéditeur', bon.magasinExpediteur || ''); if (expediteur === null) return;
     const recepteur = window.prompt('Magasin récepteur', bon.magasinRecepteur || ''); if (recepteur === null) return;
     const responsable = window.prompt('Récepteur', bon.recepteur || ''); if (responsable === null) return;
-    setBons(bons.map(b => b.id === bon.id ? { ...b, magasinExpediteur: expediteur, magasinRecepteur: recepteur, recepteur: responsable } : b));
+    const original = bonsBruts.find(b => b.id === bon.id);
+    if (original) sauver({ ...original, magasinExpediteur: expediteur, magasinRecepteur: recepteur, recepteur: responsable } as any)
+      .catch(e => alert(`❌ Modification non enregistrée : ${e?.message || e}`));
   };
 
   const filteredBons = bons.filter(bon => {
-    const matchSearch = searchTerm === '' ||
-      bon.numeroBon.toLowerCase().includes(searchTerm.toLowerCase());
+    const q = searchTerm.trim().toLowerCase();
+    const matchSearch = q === '' ||
+      (bon.numeroBon || '').toLowerCase().includes(q) ||
+      String(bon.magasinExpediteur || '').toLowerCase().includes(q) ||
+      String(bon.magasinRecepteur || '').toLowerCase().includes(q);
     const matchStatut = filterStatut === '' || bon.statut === filterStatut;
     const matchMagasin = filterMagasin === '' ||
       bon.magasinExpediteur === filterMagasin ||
@@ -50,7 +69,8 @@ export function BonTransfertGlobalPage() {
     return matchSearch && matchStatut && matchMagasin;
   });
 
-  const sortedBons = [...filteredBons].sort((a, b) => (a.numeroBon || '').localeCompare(b.numeroBon || '', 'fr'));
+  const sortedBons = [...filteredBons].sort((a, b) => String(b.dateTransfert || '').localeCompare(String(a.dateTransfert || '')) || (a.numeroBon || '').localeCompare(b.numeroBon || '', 'fr'));
+  const pagination = paginer(sortedBons, currentPage);
 
   return (
     <div className="admin-stock-list-page" style={{ padding: 'clamp(12px, 3vw, 24px)', backgroundColor: '#f9fafb', minHeight: '100vh' }}>
@@ -171,10 +191,10 @@ export function BonTransfertGlobalPage() {
                 </td>
               </tr>
             ) : (
-              sortedBons.map((bon, idx) => (
+              pagination.elements.map((bon, idx) => (
                 <tr key={bon.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
                   <td className="stock-select-col" style={{ padding: '12px', textAlign: 'center' }}><input type="checkbox" /></td>
-                  <td style={{ padding: '12px', textAlign: 'center', fontSize: '12px', color: '#9ca3af', fontWeight: 500 }}>{idx + 1}</td>
+                  <td style={{ padding: '12px', textAlign: 'center', fontSize: '12px', color: '#9ca3af', fontWeight: 500 }}>{pagination.debut + idx + 1}</td>
                   <td style={{ padding: '12px', fontSize: '14px' }}>{bon.numeroBon}</td>
                   <td style={{ padding: '12px', fontSize: '14px' }}>{bon.magasinExpediteur}</td>
                   <td style={{ padding: '12px', fontSize: '14px' }}>{bon.magasinRecepteur}</td>
@@ -195,35 +215,8 @@ export function BonTransfertGlobalPage() {
 
       
 
-      {/* Pagination */}
-      <div className="admin-stock-pagination" style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '16px' }}>
-        <button
-          onClick={() => setCurrentPage(1)}
-          style={{ padding: '6px 12px', border: '1px solid #d1d5db', borderRadius: '4px', backgroundColor: '#fff', cursor: 'pointer' }}
-        >
-          {'<<'}
-        </button>
-        <button
-          onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-          style={{ padding: '6px 12px', border: '1px solid #d1d5db', borderRadius: '4px', backgroundColor: '#fff', cursor: 'pointer' }}
-        >
-          {'<'}
-        </button>
-        <button style={{ padding: '6px 12px', border: '1px solid #d1d5db', borderRadius: '4px', backgroundColor: '#3b82f6', color: '#fff', cursor: 'pointer' }}>
-          1
-        </button>
-        <button
-          onClick={() => setCurrentPage(currentPage + 1)}
-          style={{ padding: '6px 12px', border: '1px solid #d1d5db', borderRadius: '4px', backgroundColor: '#fff', cursor: 'pointer' }}
-        >
-          {'>'}
-        </button>
-        <button
-          style={{ padding: '6px 12px', border: '1px solid #d1d5db', borderRadius: '4px', backgroundColor: '#fff', cursor: 'pointer' }}
-        >
-          {'>>'}
-        </button>
-      </div>
+      {/* Pagination : 20 bons par page, les plus récents d'abord */}
+      <PaginationBons page={pagination.page} pages={pagination.pages} total={sortedBons.length} onPage={setCurrentPage} />
     </div>
   );
 }

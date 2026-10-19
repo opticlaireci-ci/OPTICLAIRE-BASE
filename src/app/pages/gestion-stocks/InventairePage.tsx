@@ -5,7 +5,7 @@ import { Search, Save, ChevronDown, X, Pencil, Printer, Package, Trash2 } from '
 import { addCreateAudit, addUpdateAudit, formatDate, formatAuditInfo, logDeletion, showAuditNotification, AuditInfo } from '../../utils/auditUtils';
 import { getMagasins } from '../../constants/magasins';
 import { replaceInventaires, chargerInventaires, rowToInventaire } from '../../services/inventairesService';
-import { loadStockMagasin, readStockCache, type StockMagasin } from '../../services/inventaireService';
+import { loadStockMagasin, readStockCache, enregistrerInventaire, annulerInventaire, type StockMagasin } from '../../services/inventaireService';
 import { safeUuid } from '../../utils/safeId';
 import { TENANT, nomMagasin } from '../../config/tenant';
 import { imprimerGestionStock, imprimerFormatGestionStock } from '../../utils/stockActions';
@@ -301,8 +301,37 @@ export function InventairePage() {
 
   // ── sauvegarde ─────────────────────────────────────────────────────────────
 
+  /**
+   * Le STOCK PHYSIQUE compté devient le stock du magasin pour chaque article
+   * inventorié (à la date de l'inventaire ; les ventes et bons suivants
+   * s'appliquent ensuite normalement).
+   */
+  const ajusterStock = async (inv: Inventaire): Promise<boolean> => {
+    const magasinId = inv.magasinId || ALL_MAGASINS.find(m => m.label === inv.magasin)?.id || '';
+    const ok = await enregistrerInventaire({
+      inventaireId: inv.id,
+      magasinId,
+      date: inv.createdAt || new Date().toISOString(),
+      items: (inv.items || []).map(i => ({
+        articleId: i.codeBarre || i.produit,
+        designation: i.produit,
+        stockTheorique: Number(i.stockTheorique) || 0,
+        stockPhysique: Number(i.stockPhysique) || 0,
+      })),
+    });
+    if (ok) {
+      await loadStockMagasin(magasinId.toUpperCase()).catch(() => []);
+      const ecarts = (inv.items || []).filter(i => (Number(i.stockPhysique) || 0) !== (Number(i.stockTheorique) || 0)).length;
+      alert(`✅ Inventaire enregistré.\nLe stock du magasin ${magasinLabel(inv.magasin)} est ajusté au stock physique compté (${inv.items.length} article(s), dont ${ecarts} avec écart).`);
+    } else {
+      alert("⚠️ L'inventaire est enregistré, mais l'ajustement du stock du magasin n'a pas été confirmé.\nRouvrez l'inventaire et enregistrez-le de nouveau quand la connexion est rétablie.");
+    }
+    return ok;
+  };
+
   const handleSaveInventaire = async () => {
     let ok = false;
+    let enregistre: Inventaire | undefined;
     if (editingInventaire) {
       const updated = inventaires.map(inv =>
         inv.id === editingInventaire.id
@@ -310,6 +339,7 @@ export function InventairePage() {
           : inv
       );
       ok = await saveInventaires(updated);
+      enregistre = updated.find(inv => inv.id === editingInventaire.id);
       if (ok) showAuditNotification('update', 'Inventaire');
     } else {
       const newInv: Inventaire = {
@@ -321,8 +351,10 @@ export function InventairePage() {
       };
       const withAudit = addCreateAudit(newInv);
       ok = await saveInventaires([...inventaires, withAudit]);
+      enregistre = withAudit;
       if (ok) showAuditNotification('create', 'Inventaire');
     }
+    if (ok && enregistre) await ajusterStock(enregistre);
     if (ok) handleCloseInventaireModal();
   };
 
@@ -331,6 +363,8 @@ export function InventairePage() {
     const updated = inventaires.filter(i => i.id !== inv.id);
     const ok = await saveInventaires(updated);
     if (ok) {
+      // Inventaire supprimé : son ajustement du stock est annulé.
+      await annulerInventaire(inv.id);
       logDeletion('inventaire', inv.id, inv);
       showAuditNotification('delete', 'Inventaire');
     }

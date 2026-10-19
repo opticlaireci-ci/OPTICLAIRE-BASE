@@ -2061,7 +2061,8 @@ function StepIII({
   // Un article en rupture n'apparaît plus dans la liste de choix.
   const montureAccOptions = [...new Set(
     products.filter(p => (p.type === 'monture' || p.type === 'accessoire') && (p.stock ?? 0) > 0)
-      .flatMap(p => [p.label, p.codeBarre].filter(Boolean))
+      // Libellé complet (couleur, taille) en plus : on choisit la variante exacte.
+      .flatMap(p => [p.label, p.labelComplet !== p.label ? p.labelComplet : '', p.codeBarre].filter(Boolean))
   )];
   const traitServiceOptions = [...new Set(
     products.filter(p => p.type === 'verre' || p.type === 'service' || p.type === 'traitement')
@@ -5559,8 +5560,10 @@ function FormulaireVente({ magasinId, onRetour, onVenteEnregistree, venteInitial
           quantite: parseFloat(a.quantite) || 0,
           prixVente: parseFloat(a.prix) || 0,
         }));
-      if (items.length > 0) {
-        const stockOk = await enregistrerVente({ magasinId: magasinId.toUpperCase(), bonReference: recapAvecRecu.numFacture, items });
+      // Facture modifiée : appelé même sans monture, pour remettre en stock un
+      // article retiré de la facture.
+      if (items.length > 0 || enEdition) {
+        const stockOk = await enregistrerVente({ magasinId: magasinId.toUpperCase(), bonReference: recapAvecRecu.numFacture, items, date: venteWithAudit.date });
         if (!stockOk) {
           // La vente est bien dans la base, mais sa sortie de stock n'est pas
           // confirmée : on ne masque pas ce problème derrière l'écran succès.

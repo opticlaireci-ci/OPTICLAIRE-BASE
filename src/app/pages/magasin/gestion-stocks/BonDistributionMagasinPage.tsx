@@ -25,13 +25,10 @@ import PrintIcon from '@mui/icons-material/Print';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
 import { enregistrerDistribution } from '../../../services/inventaireService';
-import { upsertBon, distributionToRow } from '../../../services/bonsService';
-import { useLiveData } from '../../../hooks/useLiveData';
+import { useBons } from '../../../hooks/useBons';
 import { getCurrentUser, resolveUserName, formatDate } from '../../../utils/auditUtils';
 import { imprimerBonDistribution } from '../../../utils/stockActions';
 import { getMagasinLabel as getConfiguredMagasinLabel } from '../../../constants/magasins';
-
-const BON_DISTRIBUTION_KEY = 'leclaire_db_bon-distribution';
 
 interface BonDistribution {
   id: string;
@@ -63,7 +60,8 @@ function getStatutColor(statut: string): 'success' | 'error' | 'warning' {
 
 export function BonDistributionMagasinPage() {
   const { magasinId } = useParams();
-  const [allBons, setAllBons] = useLiveData<BonDistribution>(BON_DISTRIBUTION_KEY, []);
+  // Bons de ce magasin, lus et enregistrés un par un dans la table `bons`.
+  const { bons: allBons, sauver } = useBons<BonDistribution>('distribution', magasinId ? [magasinId] : []);
   const [selectedBon, setSelectedBon] = useState<BonDistribution | null>(null);
   const [showDetailDialog, setShowDetailDialog] = useState(false);
   const [showValidationDialog, setShowValidationDialog] = useState(false);
@@ -115,6 +113,7 @@ export function BonDistributionMagasinPage() {
         stockSuccess = await enregistrerDistribution({
           magasinId: magasinId.toUpperCase(),
           bonReference: selectedBon.numero,
+          bonId: selectedBon.id,
           items,
         });
 
@@ -135,11 +134,8 @@ export function BonDistributionMagasinPage() {
         receiver: getCurrentUser(),
       };
 
-      const updatedBons = allBons.map((bon) => bon.id === selectedBon.id ? changed : bon);
-      setAllBons(updatedBons);
-
       // Attendre la persistance du statut : le stock a déjà été confirmé.
-      await upsertBon(distributionToRow(changed));
+      await sauver(changed);
 
       if (action === 'accepter') {
         logger.log(`✅ Distribution acceptée et stock confirmé pour ${magasinId}`);

@@ -23,6 +23,7 @@ import SearchIcon from '@mui/icons-material/Search';
 import PrintIcon from '@mui/icons-material/Print';
 import DownloadIcon from '@mui/icons-material/Download';
 import { recalculerStockMagasin, readStockCache, type StockMagasin } from '../../../services/inventaireService';
+import { reparerStockMagasinSiBesoin } from '../../../services/stockReparation';
 import { excelHeaderRows, printHeaderHTML } from '../../../utils/documentHeader';
 import { afficherHtml } from '../../../utils/inAppViewer';
 import { setVisibleInterval, PAGE_POLL_MS } from '../../../utils/visibleInterval';
@@ -51,7 +52,8 @@ function toProduits(stock: StockMagasin[]): ProduitStock[] {
     .map(s => ({
       id: s.produitId,
       type: s.produitType,
-      codeBarre: s.produitId,
+      // Stock d'un ancien bon rangé au niveau du modèle : pas de code-barre.
+      codeBarre: s.codeBarre || (s.produitId.startsWith('MODELE:') ? '' : s.produitId),
       marque: s.designation.split(' - ')[0] || '',
       reference: s.designation.split(' - ')[1] || s.designation,
       couleur: '',
@@ -87,6 +89,8 @@ export function EtatStockMagasinPage() {
       }
     };
     loadStock();
+    // Ventes déjà enregistrées sans sortie de stock : sortie ajoutée (une fois par session).
+    reparerStockMagasinSiBesoin(magasinId).then(() => { if (mounted) loadStock(); });
 
     // 3) Rafraîchissement AUTOMATIQUE : périodique + sur événements.
     const stopPolling = setVisibleInterval(loadStock, PAGE_POLL_MS);

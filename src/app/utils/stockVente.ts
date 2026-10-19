@@ -207,10 +207,10 @@ export function useStockTousMagasins(): StockMagasinVente[] {
  * « épuisé » désignent la même réalité côté vente.
  */
 export function quantiteDansMagasin(entree: StockMagasinVente, prod: VenteProduct): number {
-  return (
-    entree.quantites.get(prod.produitId)
+  const variante = entree.quantites.get(prod.produitId)
     ?? entree.quantites.get(prod.label.toLowerCase().trim())
     ?? (prod.codeBarre ? entree.quantites.get(prod.codeBarre.toLowerCase().trim()) : undefined)
-    ?? 0
-  );
+    ?? 0;
+  // + stock d'un ancien bon rangé au niveau du modèle (même calcul qu'à la vente).
+  return variante + (prod.cleStockModele ? entree.quantites.get(prod.cleStockModele) ?? 0 : 0);
 }

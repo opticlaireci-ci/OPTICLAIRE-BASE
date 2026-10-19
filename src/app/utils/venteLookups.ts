@@ -6,6 +6,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { api } from '../services/api';
 import { loadStockMagasin, readStockCache, type StockMagasin } from '../services/inventaireService';
+import { PREFIXE_MODELE, cleModele } from '../services/stockLedger';
 import { setVisibleInterval, PAGE_POLL_MS } from './visibleInterval';
 
 // ── Hook générique localStorage ──────────────────────────────────────────────
@@ -233,6 +234,10 @@ export interface VenteProduct {
   prix: number;
   /** Quantité réelle en magasin, ou null si non gérée en stock (verre/service/traitement). */
   stock: number | null;
+  /** Monture / accessoire : libellé avec couleur et taille (distingue les variantes). */
+  labelComplet?: string;
+  /** Monture : clé du stock rangé au niveau du MODÈLE (anciens bons sans couleur ni taille). */
+  cleStockModele?: string;
 }
 
 export function useVenteProducts(magasinId: string): VenteProduct[] {
@@ -267,9 +272,14 @@ export function useVenteProducts(magasinId: string): VenteProduct[] {
         produitId: m.id,
         type: 'monture',
         label: getMontureLabel(m),
+        labelComplet: modalDesig,
         codeBarre: m.codeBarre || '',
         prix: Number(m.prix) || 0,
-        stock: lookupStock(m.id, modalDesig, getMontureLabel(m)) ?? 0,
+        // Le stock est rangé sous l'identifiant catalogue (voir stockLedger) ;
+        // s'y ajoute le stock d'un ancien bon rangé au niveau du MODÈLE (sans
+        // couleur ni taille), dans lequel la vente d'une variante puise.
+        stock: (lookupStock(m.id, modalDesig) ?? 0) + (stockMap.get(PREFIXE_MODELE + cleModele(m.marque, m.reference)) ?? 0),
+        cleStockModele: PREFIXE_MODELE + cleModele(m.marque, m.reference),
       });
     }
 
@@ -284,9 +294,10 @@ export function useVenteProducts(magasinId: string): VenteProduct[] {
         produitId: a.id,
         type: 'accessoire',
         label,
+        labelComplet: modalDesig,
         codeBarre: a.codeBarre || '',
         prix: Number(a.prix) || 0,
-        stock: lookupStock(a.id, modalDesig, label) ?? 0,
+        stock: lookupStock(a.id, modalDesig) ?? 0,
       });
     }
 
@@ -328,14 +339,27 @@ export function useVenteProducts(magasinId: string): VenteProduct[] {
   }, [montures, accessoires, verres, services, traitements, stockMap]);
 }
 
-/** Cherche un produit par libellé exact ou code-barre (insensible à la casse). */
+/**
+ * Cherche un produit par libellé exact, libellé complet (avec couleur et
+ * taille) ou code-barre (insensible à la casse).
+ *
+ * Plusieurs variantes d'un même modèle (couleurs, tailles) partagent le libellé
+ * « MARQUE - RÉF ». Avant, la PREMIÈRE variante du catalogue était retenue,
+ * même absente du magasin : la vente sortait alors une variante qui n'était
+ * pas en stock, et la monture réellement vendue restait en stock. Désormais la
+ * variante PRÉSENTE dans le magasin est toujours préférée.
+ */
 export function findVenteProduct(products: VenteProduct[], query: string): VenteProduct | null {
   if (!query?.trim()) return null;
   const q = query.trim().toLowerCase();
+  const enStock = (p: VenteProduct) => p.stock == null || p.stock > 0;
+  const meilleur = (liste: VenteProduct[]) =>
+    liste.length ? (liste.find(enStock) ?? liste[0]) : undefined;
   return (
-    products.find(p => p.label.toLowerCase() === q) ??
-    products.find(p => p.codeBarre && p.codeBarre.toLowerCase() === q) ??
-    products.find(p => p.label.toLowerCase().includes(q) && q.length >= 3) ??
+    meilleur(products.filter(p => (p.labelComplet || '').toLowerCase() === q)) ??
+    meilleur(products.filter(p => p.label.toLowerCase() === q)) ??
+    meilleur(products.filter(p => p.codeBarre && p.codeBarre.toLowerCase() === q)) ??
+    (q.length >= 3 ? meilleur(products.filter(p => p.label.toLowerCase().includes(q) || (p.labelComplet || '').toLowerCase().includes(q))) : undefined) ??
     null
   );
 }

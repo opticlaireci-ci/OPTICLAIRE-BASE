@@ -14,6 +14,7 @@ import { genCodeBarre, attribuerNumero } from '../../../utils/autoNumbers';
 import { printHeaderHTML, formatNomClient } from '../../../utils/documentHeader';
 import { useSupabaseSync } from '../../../hooks/useSupabaseSync';
 import { ajouterVente, chargerVentes, readVentesCache, supprimerVente, mettreAJourVente, VenteSupabase } from '../../../services/ventesService';
+import { enregistrerVente } from '../../../services/inventaireService';
 import { loadFromSupabase, saveToSupabase } from '../../../services/supabaseRealtime';
 import { useAuth } from '../../../contexts/AuthContext';
 import { canEdit, canDelete } from '../../../utils/actionRights';
@@ -1504,6 +1505,26 @@ function ListeDevis({ magasinId, onNouveau, onModifier }: { magasinId: string; o
       } as any);
       setDevis(prev => prev.filter(x => x.id !== d.id));
       window.dispatchEvent(new CustomEvent('ventes-updated'));
+      // La facture issue du devis fait SORTIR du stock ses montures et
+      // accessoires (avant : la conversion ne diminuait jamais le stock).
+      const items = (prop.articles || [])
+        .filter(a => a.type === 'monture' || a.type === 'accessoire')
+        .map(a => ({
+          id: String(a.produitId || a.designation || '').trim(),
+          type: a.type as 'monture' | 'accessoire',
+          designation: String(a.designation || '').trim(),
+          quantite: parseFloat(a.quantite) || 0,
+          prixVente: parseFloat(a.prix) || 0,
+        }))
+        .filter(a => a.id && a.quantite > 0);
+      if (items.length > 0 && magasinId) {
+        const stockOk = await enregistrerVente({ magasinId: magasinId.toUpperCase(), bonReference: numFacture, items, date: new Date().toISOString() });
+        if (!stockOk) {
+          alert(`⚠️ Le devis est converti en facture ${numFacture}, mais la sortie de stock n'a pas été confirmée.\nElle sera refaite automatiquement à la prochaine ouverture du stock du magasin.`);
+          return;
+        }
+        window.dispatchEvent(new CustomEvent('leclaire-sync-update'));
+      }
       alert(`✅ Devis converti en vente (facture ${numFacture}).\nRetrouvez-le dans Vente | Facture.`);
     } catch (e) {
       logger.error('❌ Conversion devis → vente:', e);

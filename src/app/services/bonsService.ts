@@ -56,6 +56,29 @@ export async function chargerBons(magasinIds: string[]): Promise<BonRow[]> {
   }
 }
 
+/**
+ * Bons d'un type, lus dans la table `bons` (SOURCE UNIQUE des listes de bons).
+ * Sans `magasinIds` : tous les magasins (administration). Lève une erreur si la
+ * lecture échoue (une liste vide ne doit jamais remplacer une liste réelle).
+ */
+export async function lireBonsTable(type: BonType, magasinIds?: string[]): Promise<BonRow[]> {
+  let rows: BonRow[];
+  if (magasinIds && magasinIds.length) {
+    const ids = magasinIds.map(s => s.toUpperCase());
+    const [snapSrc, snapDst] = await Promise.all([
+      getDocs(query(collection(db, 'bons'), where('magasin_source', 'in', ids))),
+      getDocs(query(collection(db, 'bons'), where('magasin_destination', 'in', ids))),
+    ]);
+    const parId = new Map<string, BonRow>();
+    for (const snap of [snapSrc, snapDst]) snap.docs.forEach(d => parId.set(d.id, { id: d.id, ...d.data() } as BonRow));
+    rows = [...parId.values()];
+  } else {
+    const snap = await getDocs(query(collection(db, 'bons'), where('type', '==', type)));
+    rows = snap.docs.map(d => ({ id: d.id, ...d.data() } as BonRow));
+  }
+  return rows.filter(r => r.type === type);
+}
+
 export async function upsertBon(row: BonRow): Promise<void> {
   await setDoc(doc(db, 'bons', row.id), { ...row, updated_at: new Date().toISOString() }, { merge: true });
 }
