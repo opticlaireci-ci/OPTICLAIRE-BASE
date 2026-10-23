@@ -154,8 +154,27 @@ export const ACCES_CONSEILLERES_OPTICIENS: { key: string; label: string }[] = [
 /** Rôles soumis à ces restrictions. Les autres rôles gardent leur affichage habituel. */
 export const ROLES_ACCES_RESTREINT = ['conseillere', 'opticien'];
 
-/** Clé d'accès particulier (et non bouton de menu). */
-export const estCleVoir = (k: string) => typeof k === 'string' && k.startsWith(VOIR_PREFIX);
+/*
+ * DROITS PARTICULIERS (préfixe `droit:`), rangés comme les accès « voir: » :
+ * ce ne sont pas des boutons de menu.
+ *
+ * MODIFIER UN RÈGLEMENT (Détails Vente | Facture → Règlement) : autorisé
+ * d'office à l'assistante administrative, aux administrateurs et au super
+ * administrateur ; l'administrateur peut le donner à n'importe quel autre
+ * utilisateur en cochant la case dans Gestion des Utilisateurs.
+ */
+export const DROIT_PREFIX = 'droit:';
+export const DROIT_MODIFIER_REGLEMENT_KEY = 'droit:modifier-reglement';
+/** Rôles qui peuvent modifier un règlement sans case cochée. */
+export const ROLES_MODIFIER_REGLEMENT = ['super_admin', 'admin', 'administrateur', 'assistante_admin'];
+
+/** Cases « droits particuliers » proposées pour tout utilisateur. */
+export const DROITS_PARTICULIERS: { key: string; label: string; roles: string[] }[] = [
+  { key: DROIT_MODIFIER_REGLEMENT_KEY, label: 'Modifier un règlement (Détails Vente | Facture → Règlement)', roles: ROLES_MODIFIER_REGLEMENT },
+];
+
+/** Clé d'accès ou de droit particulier (et non bouton de menu). */
+export const estCleVoir = (k: string) => typeof k === 'string' && (k.startsWith(VOIR_PREFIX) || k.startsWith(DROIT_PREFIX));
 /** Clés de boutons de menu seulement. */
 export const sansClesVoir = (access: string[] = []) => access.filter(k => !estCleVoir(k));
 /** Accès particuliers seulement. */
@@ -170,4 +189,12 @@ export function peutVoir(user: (UserLike & { droitsVoir?: string[] }) | null | u
   if (!ROLES_ACCES_RESTREINT.includes(user.role || '')) return true;
   const droits = user.droitsVoir ?? clesVoir(user.menuAccess || []);
   return droits.includes(key);
+}
+
+/** L'utilisateur peut-il modifier un règlement (montant, mode, compte, détails, date) ? */
+export function peutModifierReglement(user: (UserLike & { droitsVoir?: string[] }) | null | undefined): boolean {
+  if (!user) return false;
+  if (ROLES_MODIFIER_REGLEMENT.includes(user.role || '')) return true;
+  const droits = user.droitsVoir ?? clesVoir(user.menuAccess || []);
+  return droits.includes(DROIT_MODIFIER_REGLEMENT_KEY);
 }

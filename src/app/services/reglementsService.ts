@@ -4,7 +4,7 @@ import {
   query, where, orderBy, onSnapshot,
 } from '../utils/firestoreCompat';
 import { db, restSetDoc, restDeleteDoc, restGetDoc, FIREBASE_DATA_ENABLED } from '../utils/firebaseClient';
-import { journaliserSuppression } from './auditLogService';
+import { journaliserSuppression, journaliserAction } from './auditLogService';
 import { ecritureEnAttente } from '../utils/supabaseDirect';
 import { logNetworkAware, isAuthError, isNoSessionError } from '../utils/networkErrors';
 
@@ -144,6 +144,67 @@ export async function ajouterReglement(reglement: Omit<ReglementSupabase, 'creat
     logger.error('Erreur ajouterReglement:', err);
     throw err;
   }
+}
+
+/** Champs d'un règlement que l'on peut corriger (le numéro de reçu ne change jamais). */
+export type ModificationReglement = Partial<Pick<ReglementSupabase, 'montant' | 'mode_paiement' | 'compte_banque' | 'details' | 'date'>>;
+
+const LIBELLES_CHAMPS: Record<string, string> = {
+  montant: 'montant', mode_paiement: 'mode de paiement', compte_banque: 'compte', details: 'détails', date: 'date',
+};
+const valeurLisible = (champ: string, v: unknown) =>
+  champ === 'montant' ? `${(Number(v) || 0).toLocaleString('fr-FR')} F`
+    : champ === 'date' ? (v ? new Date(String(v)).toLocaleDateString('fr-FR') : '—')
+      : (String(v ?? '').trim() || '—');
+
+/** Ce qui change entre l'ancien règlement et la correction (pour le journal). */
+export function resumerModification(avant: ReglementSupabase, maj: ModificationReglement): string[] {
+  const lignes: string[] = [];
+  for (const champ of Object.keys(LIBELLES_CHAMPS) as Array<keyof ModificationReglement>) {
+    if (!(champ in maj)) continue;
+    const a = (avant as any)[champ], b = (maj as any)[champ];
+    const differe = champ === 'montant' ? Math.abs((Number(a) || 0) - (Number(b) || 0)) >= 0.005
+      : champ === 'date' ? String(a || '').slice(0, 10) !== String(b || '').slice(0, 10)
+        : String(a ?? '').trim() !== String(b ?? '').trim();
+    if (differe) lignes.push(`${LIBELLES_CHAMPS[champ]} : ${valeurLisible(champ, a)} → ${valeurLisible(champ, b)}`);
+  }
+  return lignes;
+}
+
+/**
+ * MODIFIE un règlement (assistante administrative, administrateurs, ou
+ * utilisateur à qui le droit a été donné). Seuls les champs corrigés sont
+ * écrits ; le numéro de reçu, la facture et le magasin ne changent pas.
+ * La correction est inscrite au journal (avant → après).
+ */
+export async function modifierReglement(
+  avant: ReglementSupabase, maj: ModificationReglement, auteur: string,
+): Promise<(ReglementSupabase & { enAttenteEnvoi?: boolean }) | null> {
+  const changements = resumerModification(avant, maj);
+  if (changements.length === 0) return avant;
+  const now = new Date().toISOString();
+  const champs = { ...maj, updated_at: now, modifie_par: auteur, modifie_le: now };
+  const apres = { ...avant, ...champs } as ReglementSupabase;
+  let enAttenteEnvoi = false;
+  try {
+    // Règlement complet (et non les seuls champs corrigés) : même s'il attend
+    // encore son premier envoi sur cet appareil, il ne peut pas devenir partiel.
+    await restSetDoc('reglements', avant.id, apres, true);
+  } catch (err) {
+    // Réseau coupé : la correction part toute seule au retour de la connexion.
+    if (!ecritureEnAttente('reglements', avant.id)) {
+      logger.error('Erreur modifierReglement:', err);
+      throw err;
+    }
+    enAttenteEnvoi = true;
+  }
+  upsertReglementCache(apres);
+  journaliserAction({
+    action: 'update', module: 'Règlements', magasinId: avant.magasin_id, user: auteur,
+    details: `Règlement modifié (reçu ${avant.recu || avant.id}) — ${changements.join(' ; ')}`,
+  });
+  logger.log('✅ Règlement modifié:', avant.id);
+  return enAttenteEnvoi ? { ...apres, enAttenteEnvoi } : apres;
 }
 
 export async function supprimerReglement(reglementId: string): Promise<boolean> {

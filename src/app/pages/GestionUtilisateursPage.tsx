@@ -11,11 +11,11 @@ import {
 import { logger } from '../utils/logger';
 import { getMagasins } from '../constants/magasins';
 import { APP_BUTTON_GROUPS } from '../constants/appButtons';
-import { ACTION_ADD_KEY, ACTION_EDIT_KEY, ACTION_DELETE_KEY, ADD_MODULES, addModuleKey, ACCES_CONSEILLERES_OPTICIENS, ROLES_ACCES_RESTREINT } from '../utils/actionRights';
+import { ACTION_ADD_KEY, ACTION_EDIT_KEY, ACTION_DELETE_KEY, ADD_MODULES, addModuleKey, ACCES_CONSEILLERES_OPTICIENS, ROLES_ACCES_RESTREINT, DROITS_PARTICULIERS } from '../utils/actionRights';
 import { AddButton } from '../components/AddButton';
 
 // Les rôles intégrés + tout rôle personnalisé ajouté par l'administrateur.
-type Role = 'super_admin' | 'admin' | 'administrateur' | 'directeur' | 'manager' | 'comptable' | 'conseillere' | 'employee' | 'caissier' | (string & {});
+type Role = 'super_admin' | 'admin' | 'administrateur' | 'directeur' | 'manager' | 'comptable' | 'assistante_admin' | 'conseillere' | 'employee' | 'caissier' | (string & {});
 
 interface Assignment {
   magasin_id: string;
@@ -73,6 +73,7 @@ const ROLES: RoleOption[] = [
   { value: 'admin', label: 'Administrateur' },
   { value: 'directeur', label: 'Directeur' },
   { value: 'comptable', label: 'Comptable' },
+  { value: 'assistante_admin', label: 'Assistante administrative' },
   { value: 'conseillere', label: 'Conseillère' },
   { value: 'caissier', label: 'Caissier' },
   { value: 'responsable_call_center', label: 'Responsable Call Center' },
@@ -521,6 +522,35 @@ function ModalUser({
             </div>
             <div className="px-3 pb-2 text-xs text-gray-500">
               Si aucune case n'est cochée, l'utilisateur conserve le comportement de son rôle.
+            </div>
+          </div>
+          {/* Droits particuliers : donnés d'office à certains rôles, et à
+              n'importe quel autre utilisateur en cochant la case. */}
+          <div className="border border-amber-300 rounded overflow-hidden" data-testid="droits-particuliers">
+            <div className="bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900">
+              Droits particuliers
+            </div>
+            <div className="grid grid-cols-1 gap-y-1 p-3">
+              {DROITS_PARTICULIERS.map(d => {
+                const parLeRole = form.assignments.some(a => d.roles.includes(a.role));
+                return (
+                  <label key={d.key} className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="accent-amber-600"
+                      checked={parLeRole || form.menuAccess.includes(d.key)}
+                      disabled={parLeRole}
+                      onChange={() => toggleAccess(d.key)}
+                    />
+                    {d.label}
+                    {parLeRole && <span className="text-xs text-amber-700">(inclus dans son rôle)</span>}
+                  </label>
+                );
+              })}
+            </div>
+            <div className="px-3 pb-2 text-xs text-gray-500">
+              L'assistante administrative, les administrateurs et le super administrateur peuvent toujours modifier un règlement.
+              Cochez la case pour donner ce droit à un autre utilisateur ; décochez-la pour le lui retirer.
             </div>
           </div>
           {/* Accès particuliers des conseillères et opticiens : masqués par défaut,

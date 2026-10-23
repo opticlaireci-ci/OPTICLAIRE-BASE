@@ -19,7 +19,7 @@ import {
   useClientRecordsMagasin, ClientRecord,
   useFournisseurs,
 } from '../../../utils/venteLookups';
-import { ajouterReglement, supprimerReglement, chargerReglements, chargerTousLesReglements, readReglementsCacheMap, subscriberReglementsVente, ReglementSupabase } from '../../../services/reglementsService';
+import { ajouterReglement, supprimerReglement, modifierReglement, resumerModification, chargerReglements, chargerTousLesReglements, readReglementsCacheMap, subscriberReglementsVente, ReglementSupabase } from '../../../services/reglementsService';
 import { ajouterVente, chargerVentes as chargerVentesSupabase, abonnerVentesMagasin, readVentesCache, supprimerVente, mettreAJourVente, VenteSupabase } from '../../../services/ventesService';
 import { enregistrerVente, annulerSortiesVente } from '../../../services/inventaireService';
 import { verifierStockVente, messageRuptures } from '../../../utils/stockVente';
@@ -29,7 +29,8 @@ import { db } from '../../../utils/firebaseClient';
 import { reportFirebaseError } from '../../../services/firebaseErrorBus';
 import { pdfHeader, printHeaderHTML, excelHeaderRows, getEntete, formatNomClient } from '../../../utils/documentHeader';
 import { logNetworkAware } from '../../../utils/networkErrors';
-import { canEdit, canDelete, estAdministrateur } from '../../../utils/actionRights';
+import { canEdit, canDelete, estAdministrateur, peutModifierReglement } from '../../../utils/actionRights';
+import { journaliserAction } from '../../../services/auditLogService';
 import { useLiveData } from '../../../hooks/useLiveData';
 import { getMagasinLabel } from '../../../constants/magasins';
 import { TENANT } from '../../../config/tenant';
@@ -1261,6 +1262,9 @@ interface RecapInfo {
   rdvRetrait: string;
   numFacture: string;
   numRecu?: string;
+  /** Acompte corrigé après coup (assistante administrative, administrateur…). */
+  acompteModifiePar?: string;
+  acompteModifieLe?: string;
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -3258,6 +3262,9 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
   // Le règlement (encaissement) dans le détail de vente est accessible aux
   // opticiens, conseillères, directeurs, comptables et administrateurs.
   const peutReglement = ['super_admin', 'admin', 'administrateur', 'directeur', 'comptable', 'opticien', 'conseillere'].includes(user?.role || '');
+  // Corriger un règlement : assistante administrative, administrateurs, super
+  // administrateur, et tout utilisateur à qui la case a été cochée.
+  const peutModifierRegl = peutModifierReglement(user as any);
   const { magasinId = '' } = useParams<{ magasinId: string }>();
   const [searchFacture, setSearchFacture] = useState('');
   const [searchClient, setSearchClient] = useState('');
@@ -3571,6 +3578,96 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
     try { window.dispatchEvent(new CustomEvent('reglements-updated', { detail: { magasinId } })); } catch { /* ignore */ }
   };
 
+  // ── Correction d'un règlement (ou de l'acompte versé avec la facture) ──────
+  // `reglement` null = acompte de la facture (rangé dans la vente elle-même).
+  const [reglementAModifier, setReglementAModifier] = useState<{
+    reglement: ReglementSupabase | null; recu: string;
+    montant: string; modePaiement: string; compteBanque: string; details: string; date: string;
+  } | null>(null);
+  const [modificationEnCours, setModificationEnCours] = useState(false);
+  const jourLocal = (iso?: string) => {
+    const d = iso ? new Date(iso) : null;
+    if (!d || isNaN(d.getTime())) return '';
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+  const ouvrirModificationReglement = (r: ReglementSupabase | null) => {
+    if (!detail || !peutModifierRegl) return;
+    setReglementAModifier(r ? {
+      reglement: r, recu: r.recu || '—', montant: String(r.montant ?? ''), modePaiement: r.mode_paiement || '',
+      compteBanque: r.compte_banque || '', details: r.details || '', date: jourLocal(r.date),
+    } : {
+      reglement: null, recu: detail.recap.numRecu || '—', montant: String(parseFloat(detail.recap.acompte || '0') || ''),
+      modePaiement: detail.recap.modePaiement || 'ESPECE', compteBanque: detail.recap.compteBanque || 'CAISSE INTERNE',
+      details: detail.recap.details || '', date: jourLocal(detail.date),
+    });
+  };
+  /** Reste à payer de la facture si la correction en cours est enregistrée. */
+  const resteApresModification = () => {
+    if (!detail || !reglementAModifier) return 0;
+    const m = parseFloat(reglementAModifier.montant) || 0;
+    const r = reglementAModifier.reglement;
+    const acompteInitial = r ? (parseFloat(detail.recap.acompte || '0') || 0) : m;
+    const totalReglements = reglementsEffectifs.reduce((s, x) => s + (r && x.id === r.id ? m : (Number(x.montant) || 0)), 0);
+    const totalAssurance = detail.bonsAssurance.reduce((s, b) => s + (parseFloat(b.montantPrisEnCharge) || 0), 0);
+    return normaliserTotauxVente(detail).totalNet - acompteInitial - totalReglements - totalAssurance;
+  };
+  const enregistrerModificationReglement = async () => {
+    if (!detail || !reglementAModifier || modificationEnCours) return;
+    if (!peutModifierRegl) { alert("Vous n'avez pas le droit de modifier un règlement."); return; }
+    const f = reglementAModifier;
+    const montant = parseFloat(f.montant);
+    if (!(montant > 0)) { alert('Veuillez saisir un montant valide'); return; }
+    if (!f.modePaiement.trim()) { alert('Veuillez choisir un mode de paiement'); return; }
+    const reste = resteApresModification();
+    if (reste < 0 && !window.confirm(`Après cette correction, le client aurait payé ${Math.abs(reste).toLocaleString('fr-FR')} F CFA de PLUS que le total de la facture.\n\nEnregistrer quand même ?`)) return;
+    const auteur = user?.nom || user?.prenom || user?.email || 'Utilisateur';
+    setModificationEnCours(true);
+    try {
+      if (f.reglement) {
+        const r = f.reglement;
+        const maj: Record<string, any> = {
+          montant, mode_paiement: f.modePaiement.trim(), compte_banque: f.compteBanque, details: f.details,
+        };
+        // Autre jour : on garde l'heure d'origine du règlement.
+        if (f.date && f.date !== jourLocal(r.date)) {
+          const d = new Date(r.date);
+          const [y, mo, j] = f.date.split('-').map(Number);
+          if (!isNaN(d.getTime()) && y && mo && j) { d.setFullYear(y, mo - 1, j); maj.date = d.toISOString(); }
+        }
+        if (resumerModification(r, maj).length === 0) { setReglementAModifier(null); return; }
+        const res = await modifierReglement(r, maj, auteur);
+        if (res) {
+          const { enAttenteEnvoi, ...apres } = res as any;
+          setReglementsSupabase(prev => prev.map(x => (x.id === r.id ? apres : x)));
+          setReglementsParVente(prev => ({ ...prev, [r.vente_id]: (prev[r.vente_id] || []).map(x => (x.id === r.id ? apres : x)) }));
+          if (enAttenteEnvoi) alert('Connexion instable : la correction est gardée sur cet appareil et sera envoyée automatiquement dès le retour de la connexion.');
+        }
+      } else {
+        // Acompte versé avec la facture : corrigé dans la facture elle-même.
+        const avant = {
+          montant: parseFloat(detail.recap.acompte || '0') || 0, mode_paiement: detail.recap.modePaiement || 'ESPECE',
+          compte_banque: detail.recap.compteBanque || 'CAISSE INTERNE', details: detail.recap.details || '',
+        } as any;
+        const maj = { montant, mode_paiement: f.modePaiement.trim(), compte_banque: f.compteBanque, details: f.details };
+        const changements = resumerModification(avant, maj);
+        if (changements.length === 0) { setReglementAModifier(null); return; }
+        const newRecap = { ...detail.recap, acompte: String(montant), modePaiement: maj.mode_paiement, compteBanque: maj.compte_banque, details: maj.details,
+          acompteModifiePar: auteur, acompteModifieLe: new Date().toISOString() };
+        await mettreAJourVente(detail.id, { recap: newRecap });
+        setDetail(prev => prev ? { ...prev, recap: newRecap } : prev);
+        journaliserAction({ action: 'update', module: 'Règlements', magasinId, user: auteur,
+          details: `Acompte de la facture ${detail.recap.numFacture || detail.id} modifié (reçu ${detail.recap.numRecu || '—'}) — ${changements.join(' ; ')}` });
+      }
+      try { window.dispatchEvent(new CustomEvent('reglements-updated', { detail: { magasinId } })); } catch { /* ignore */ }
+      setReglementAModifier(null);
+    } catch (err) {
+      logger.error('Modification du règlement impossible:', err);
+      alert("La modification n'a pas pu être enregistrée. Vérifiez la connexion puis réessayez.");
+    } finally {
+      setModificationEnCours(false);
+    }
+  };
+
   const enregistrerReglementUneFois = async () => {
     if (!detail) return;
 
@@ -3647,6 +3744,120 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
 
   return (
     <>
+      {/* Modal Modifier un règlement */}
+      {reglementAModifier && detail && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[950] flex items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="bg-white rounded-lg shadow-2xl w-full max-w-3xl mx-4 overflow-hidden" role="dialog" aria-label="Modifier le règlement" data-testid="fenetre-modifier-reglement">
+            <div className="flex items-center justify-between px-6 py-3 bg-purple-50 border-b border-purple-200">
+              <h3 className="text-lg font-bold text-purple-900">
+                Modifier {reglementAModifier.reglement ? 'le règlement' : "l'acompte de la facture"} — reçu {reglementAModifier.recu}
+              </h3>
+              <button onClick={() => setReglementAModifier(null)} className="text-gray-600 hover:text-gray-800" aria-label="Fermer">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-6">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Montant</label>
+                  <input
+                    type="number"
+                    className={iCls}
+                    value={reglementAModifier.montant}
+                    onChange={(e) => setReglementAModifier(f => f && ({ ...f, montant: e.target.value }))}
+                    data-testid="modif-montant"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Mode de Paiement</label>
+                  <input
+                    list="modif-reglement-modes-paiement"
+                    className={iCls}
+                    value={reglementAModifier.modePaiement}
+                    onChange={(e) => setReglementAModifier(f => f && ({ ...f, modePaiement: e.target.value }))}
+                    data-testid="modif-mode"
+                  />
+                  <datalist id="modif-reglement-modes-paiement">
+                    {modesPaiement.map((m) => <option key={m} value={m} />)}
+                  </datalist>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Compte Banque</label>
+                  <select
+                    className={selCls}
+                    value={reglementAModifier.compteBanque}
+                    onChange={(e) => setReglementAModifier(f => f && ({ ...f, compteBanque: e.target.value }))}
+                    data-testid="modif-compte"
+                  >
+                    <option value="">Choisir Compte Banque....</option>
+                    {reglementAModifier.compteBanque && !comptesBanque.includes(reglementAModifier.compteBanque) && (
+                      <option value={reglementAModifier.compteBanque}>{reglementAModifier.compteBanque}</option>
+                    )}
+                    {comptesBanque.map((c) => <option key={c}>{c}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+                <div className="sm:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Détails</label>
+                  <textarea
+                    className={iCls}
+                    rows={2}
+                    value={reglementAModifier.details}
+                    onChange={(e) => setReglementAModifier(f => f && ({ ...f, details: e.target.value }))}
+                    data-testid="modif-details"
+                  ></textarea>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+                  {reglementAModifier.reglement ? (
+                    <input
+                      type="date"
+                      className={iCls}
+                      value={reglementAModifier.date}
+                      onChange={(e) => setReglementAModifier(f => f && ({ ...f, date: e.target.value }))}
+                      data-testid="modif-date"
+                    />
+                  ) : (
+                    <div className="text-sm text-gray-600 py-1.5" title="La date de l'acompte est celle de la facture.">{fmt(detail.date)}</div>
+                  )}
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="text-xs text-gray-500">
+                  Le numéro de reçu ne change pas. La correction est inscrite au journal (ancienne → nouvelle valeur).
+                </div>
+                {(() => {
+                  const reste = resteApresModification();
+                  return (
+                    <div className="rounded px-4 py-2 text-white font-bold text-center" style={{ backgroundColor: reste <= 0 ? '#16a34a' : '#e53935' }} data-testid="modif-reste">
+                      Reste après correction : {Math.max(0, reste).toLocaleString('fr-FR')}
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50">
+              <button
+                onClick={() => setReglementAModifier(null)}
+                className="px-6 py-2 rounded-lg text-sm font-medium border border-gray-300 text-gray-700 hover:bg-gray-100"
+              >
+                Fermer
+              </button>
+              <button
+                onClick={enregistrerModificationReglement}
+                disabled={modificationEnCours}
+                className="px-6 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-60 disabled:cursor-wait"
+                style={{ backgroundColor: '#6d28d9' }}
+              >
+                {modificationEnCours ? 'Enregistrement…' : 'Enregistrer la modification'}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
       {/* Modal Ajouter Règlement */}
       {showAjouterReglement && detail && typeof document !== 'undefined' && createPortal(
         <div className="fixed inset-0 z-[900] flex items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
@@ -4268,7 +4479,7 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
                 <div className="col-span-12 md:col-span-3 flex flex-col gap-2">
                   <div className="text-xs font-semibold uppercase mb-1">💼 Actions</div>
 
-                  {peutReglement && (
+                  {(peutReglement || peutModifierRegl) && (
                     <button
                       onClick={(e) => {
                         e.preventDefault();
@@ -4661,6 +4872,11 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
                                     <td className="px-3 py-2 border border-gray-300">
                                       <div>{fmt(reglement.date)} {new Date(reglement.date).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</div>
                                       <div className="text-xs text-gray-600">{reglement.edite_par}</div>
+                                      {(reglement as any).modifie_par && (
+                                        <div className="text-[10px] text-purple-700" title={(reglement as any).modifie_le ? new Date((reglement as any).modifie_le).toLocaleString('fr-FR') : ''}>
+                                          Modifié par {(reglement as any).modifie_par}
+                                        </div>
+                                      )}
                                     </td>
                                     <td className="px-3 py-2 border border-gray-300 text-right font-semibold">{reglement.montant.toLocaleString('fr-FR')}</td>
                                     <td className="px-3 py-2 border border-gray-300">
@@ -4681,6 +4897,17 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
                                         >
                                           📄 B5
                                         </button>
+                                        {peutModifierRegl && (
+                                          <button
+                                            onClick={() => ouvrirModificationReglement(reglement)}
+                                            className="px-2.5 py-1.5 rounded text-white text-xs font-semibold"
+                                            style={{ backgroundColor: '#6d28d9' }}
+                                            title="Modifier ce règlement (montant, mode, compte, détails, date)"
+                                            data-testid="modifier-reglement"
+                                          >
+                                            ✏️ Modifier
+                                          </button>
+                                        )}
                                         {estAdministrateur(user) && (
                                           <button
                                             onClick={() => supprimerUnReglement(reglement)}
@@ -4735,6 +4962,9 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
                                   <td className="px-3 py-2 border border-gray-300">
                                     <div>{fmt(detail.date)} {new Date(detail.date).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</div>
                                     <div className="text-xs text-gray-600">{(detail as any).createdBy || 'LOUISE MARLÈNE'}</div>
+                                    {detail.recap.acompteModifiePar && (
+                                      <div className="text-[10px] text-purple-700">Modifié par {detail.recap.acompteModifiePar}</div>
+                                    )}
                                   </td>
                                   <td className="px-3 py-2 border border-gray-300 text-right font-semibold">{parseFloat(detail.recap.acompte).toLocaleString('fr-FR')}</td>
                                   <td className="px-3 py-2 border border-gray-300">
@@ -4754,6 +4984,17 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
                                       >
                                         📄 A4
                                       </button>
+                                      {peutModifierRegl && (
+                                        <button
+                                          onClick={() => ouvrirModificationReglement(null)}
+                                          className="px-2.5 py-1.5 rounded text-white text-xs font-semibold"
+                                          style={{ backgroundColor: '#6d28d9' }}
+                                          title="Modifier l'acompte versé avec la facture"
+                                          data-testid="modifier-acompte"
+                                        >
+                                          ✏️ Modifier
+                                        </button>
+                                      )}
                                       <button
                                         onClick={() => imprimerReglement({
                                           recu: detail.recap.numRecu || '—',
