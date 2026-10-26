@@ -1,9 +1,8 @@
 /**
  * Tableau du stock RÉEL de chaque magasin pour les articles de la vente en cours.
  *
- * Objectif : quand un article manque dans le magasin vendeur, le vendeur voit
- * immédiatement s'il est disponible ailleurs et peut demander un transfert, au
- * lieu de perdre la vente ou de téléphoner aux autres magasins.
+ * Objectif : quand un article manque dans le magasin vendeur, l'administration
+ * voit immédiatement s'il est disponible ailleurs et peut organiser un transfert.
  *
  * Les quantités proviennent des mouvements (bons de distribution, transferts,
  * retours, ventes) — jamais d'une saisie manuelle.
@@ -17,6 +16,8 @@ import {
   type LigneVenteStock,
 } from '../utils/stockVente';
 import type { VenteProduct } from '../utils/venteLookups';
+import { useAuth } from '../contexts/AuthContext';
+import { estAdministrateur } from '../utils/actionRights';
 
 interface Props {
   /** Lignes d'article de la vente en cours. */
@@ -33,7 +34,17 @@ function couleurQuantite(q: number): string {
   return '#10b981';               // disponible
 }
 
-export function StockParMagasin({ lignes, products, magasinId }: Props) {
+/**
+ * Réservé à l'administration : chaque vendeuse ne voit que le stock de SON
+ * magasin (elle ne reçoit d'ailleurs que les lignes de stock de son magasin).
+ */
+export function StockParMagasin(props: Props) {
+  const { user } = useAuth();
+  if (!estAdministrateur(user)) return null;
+  return <TableauStockParMagasin {...props} />;
+}
+
+function TableauStockParMagasin({ lignes, products, magasinId }: Props) {
   const stocks = useStockTousMagasins();
   const courant = (magasinId || '').toUpperCase();
 

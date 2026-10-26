@@ -28,7 +28,7 @@ import { enregistrerDistribution } from '../../../services/inventaireService';
 import { useBons } from '../../../hooks/useBons';
 import { getCurrentUser, resolveUserName, formatDate } from '../../../utils/auditUtils';
 import { imprimerBonDistribution } from '../../../utils/stockActions';
-import { getMagasinLabel as getConfiguredMagasinLabel } from '../../../constants/magasins';
+import { getMagasinLabel as getConfiguredMagasinLabel, memeMagasin } from '../../../constants/magasins';
 
 interface BonDistribution {
   id: string;
@@ -71,7 +71,7 @@ export function BonDistributionMagasinPage() {
 
   // Filtrer les bons destinés à ce magasin
   const bons = magasinId
-    ? allBons.filter((bon) => bon.magasinDest?.trim().toUpperCase() === magasinId.trim().toUpperCase())
+    ? allBons.filter((bon) => memeMagasin(bon.magasinDest, magasinId))
     : [];
 
   // Compteurs calculés à partir de la liste filtrée : ils restent donc

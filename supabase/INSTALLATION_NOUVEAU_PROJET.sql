@@ -202,10 +202,22 @@ language sql
 immutable
 set search_path = ''
 as $$
-  select regexp_replace(
-           regexp_replace(lower(coalesce(v, '')), '[^a-z0-9]', '', 'g'),
-           '^leclaire', ''
-         );
+  -- Sans accents ni anciens noms : « BOUAKÉ » = « bouake », « COCODY » = BOUAKÉ,
+  -- « MARCORY » = YOPOUGON GANDI (voir CORRECTION_STOCK_MAGASINS_2026-10-26.sql).
+  select case n
+           when 'cocody'  then 'bouake'
+           when 'marcory' then 'yopougongandi'
+           else n
+         end
+  from (
+    select regexp_replace(
+             regexp_replace(
+               translate(lower(coalesce(v, '')),
+                         'àáâãäåāăąçćčďèéêëēėęěìíîïīįñńňòóôõöøōùúûüūůýÿžźż',
+                         'aaaaaaaaacccdeeeeeeeeiiiiiinnnooooooouuuuuuyyzzz'),
+               '[^a-z0-9]', '', 'g'),
+             '^leclaire', '') as n
+  ) s;
 $$;
 
 -- L'application est-elle déjà initialisée (un propriétaire existe) ?

@@ -10,9 +10,11 @@ import {
 import { db, auth } from '../utils/firebaseClient';
 import { logNetworkAware, isAuthError, isNoSessionError } from '../utils/networkErrors';
 import { chargerCatalogue, replaceCatalogue } from './catalogueService';
+import { lireLignesStock } from '../utils/supabaseDirect';
+import { magasinCanonique, normaliseurMagasins } from '../constants/magasins';
 
 export type { StockMagasin } from './stockLedger';
-import { calculerStocks, normaliserMagasin, bonAccepte, type MouvementBrut, type StockMagasin } from './stockLedger';
+import { calculerStocks, bonAccepte, type MouvementBrut, type StockMagasin } from './stockLedger';
 
 type Item = {
   id: string;
@@ -22,14 +24,27 @@ type Item = {
   prixVente: number;
 };
 
-/** Normalise les anciens libellés de magasin (ex. « LECLAIRE ABOBO ») vers l'ID métier. */
-const normalizeMagasinId = normaliserMagasin;
+/**
+ * Ramène toute écriture d'un magasin à son identifiant (« LECLAIRE ABOBO »,
+ * « YOPOUGON GANDI », « BOUAKÉ », ancien « COCODY »…), voir magasinCanonique.
+ */
+const normalizeMagasinId = (value: unknown) => magasinCanonique(value);
 
 /** Clé de cache localStorage du stock calculé d'un magasin (affichage instantané). */
-export const stockCacheKey = (magasinId: string) => `leclaire_stock_cache_${magasinId.toUpperCase()}`;
+export const stockCacheKey = (magasinId: string) =>
+  `leclaire_stock_cache_${normalizeMagasinId(magasinId) || String(magasinId ?? '').toUpperCase()}`;
+
+/**
+ * Dernier stock calculé, gardé AUSSI en mémoire : quand le localStorage du poste
+ * est plein, l'écriture du cache échoue en silence ; avant, chaque écran de vente
+ * repartait alors d'un stock vide en attendant le réseau.
+ */
+const stocksEnMemoire = new Map<string, StockMagasin[]>();
 
 /** Lecture SYNCHRONE du dernier stock connu (cache) — pour un affichage immédiat. */
 export function readStockCache(magasinId: string): StockMagasin[] {
+  const enMemoire = stocksEnMemoire.get(stockCacheKey(magasinId));
+  if (enMemoire) return enMemoire;
   try {
     const raw = localStorage.getItem(stockCacheKey(magasinId));
     const p = raw ? JSON.parse(raw) : [];
@@ -45,18 +60,34 @@ export function readStockCache(magasinId: string): StockMagasin[] {
 let chargementEnCours: { promesse: Promise<DonneesStock>; t: number } | null = null;
 interface DonneesStock { mouvements: MouvementBrut[]; bons: any[]; catalogue: { montures: any[]; accessoires: any[] } }
 
+/**
+ * Mouvements et bons utiles au stock : ceux des magasins du compte (tous pour
+ * l'administration). D'abord par la fonction de la base `stock_lignes`
+ * (CORRECTION_STOCK_MAGASINS_2026-10-26.sql), qui reconnaît le magasin quelle
+ * que soit son écriture (accent, ancien nom, colonne ou `data`) et ne dépend pas
+ * du script de sécurité exécuté en dernier. Fonction absente (script pas encore
+ * exécuté) : lecture directe des tables, comme avant.
+ */
+async function lireMouvementsEtBons(): Promise<{ mouvements: MouvementBrut[]; bons: any[] }> {
+  const parFonction = await lireLignesStock();
+  if (parFonction) return parFonction;
+  const [snapM, bons] = await Promise.all([
+    getDocs(collection(db, 'mouvements_stock')),
+    getDocs(collection(db, 'bons'))
+      .then((snap: any) => snap.docs.map((d: any) => ({ id: d.id, ...(d.data() || {}) })))
+      .catch((err: any) => { logger.warn('Impossible de lire les bons pour le stock:', err); return []; }),
+  ]);
+  return { mouvements: snapM.docs.map((d: any) => ({ id: d.id, data: d.data() || {} })), bons };
+}
+
 async function chargerDonneesStock(): Promise<DonneesStock> {
   if (chargementEnCours && Date.now() - chargementEnCours.t < 3000) return chargementEnCours.promesse;
   const promesse = (async () => {
-    const [snapM, bons, montures, accessoires] = await Promise.all([
-      getDocs(collection(db, 'mouvements_stock')),
-      getDocs(collection(db, 'bons'))
-        .then((snap: any) => snap.docs.map((d: any) => ({ id: d.id, ...(d.data() || {}) })))
-        .catch((err: any) => { logger.warn('Impossible de lire les bons pour le stock:', err); return []; }),
+    const [{ mouvements, bons }, montures, accessoires] = await Promise.all([
+      lireMouvementsEtBons(),
       chargerCatalogue('catalogue_montures').catch(() => []),
       chargerCatalogue('catalogue_accessoires').catch(() => []),
     ]);
-    const mouvements = snapM.docs.map((d: any) => ({ id: d.id, data: d.data() || {} }));
     return { mouvements, bons, catalogue: { montures, accessoires } };
   })();
   chargementEnCours = { promesse, t: Date.now() };
@@ -68,14 +99,24 @@ async function chargerDonneesStock(): Promise<DonneesStock> {
 function oublierDonneesStock() { chargementEnCours = null; }
 
 function memoriserStock(target: string, rows: StockMagasin[]) {
+  const cle = stockCacheKey(target);
+  const next = JSON.stringify(rows);
+  const avant = stocksEnMemoire.get(cle);
+  stocksEnMemoire.set(cle, rows);
+  let change = !avant || JSON.stringify(avant) !== next;
   try {
-    const prev = localStorage.getItem(stockCacheKey(target));
-    const next = JSON.stringify(rows);
+    const prev = localStorage.getItem(cle);
     if (prev !== next) {
-      localStorage.setItem(stockCacheKey(target), next);
-      window.dispatchEvent(new CustomEvent('leclaire-stock-updated', { detail: { magasinId: target } }));
+      change = true;
+      localStorage.setItem(cle, next);
     }
-  } catch { /* quota */ }
+  } catch { /* quota : la mémoire prend le relais */ }
+  if (change) window.dispatchEvent(new CustomEvent('leclaire-stock-updated', { detail: { magasinId: target } }));
+}
+
+/** Calcul du stock avec la même identification des magasins partout. */
+function calculer(donnees: DonneesStock, ids: string[]) {
+  return calculerStocks(donnees.mouvements, donnees.bons, donnees.catalogue, ids, { magasin: normaliseurMagasins() });
 }
 
 /**
@@ -87,8 +128,7 @@ export async function loadStockMagasin(magasinId: string): Promise<StockMagasin[
   const target = normalizeMagasinId(magasinId);
   if (!target) return [];
   try {
-    const { mouvements, bons, catalogue } = await chargerDonneesStock();
-    const rows = calculerStocks(mouvements, bons, catalogue, [target])[target] || [];
+    const rows = calculer(await chargerDonneesStock(), [target])[target] || [];
     memoriserStock(target, rows);
     return rows;
   } catch (err) {
@@ -102,14 +142,27 @@ export async function recalculerStockMagasin(magasinId: string): Promise<StockMa
   return loadStockMagasin(magasinId);
 }
 
+/**
+ * Stock relu à l'instant dans la base, SANS repli sur le cache : lève une erreur
+ * si la lecture échoue. Sert au contrôle final d'une vente, qui doit savoir si
+ * le stock affiché est confirmé ou seulement le dernier connu.
+ */
+export async function lireStockMagasinFrais(magasinId: string): Promise<StockMagasin[]> {
+  const target = normalizeMagasinId(magasinId);
+  if (!target) return [];
+  oublierDonneesStock();
+  const rows = calculer(await chargerDonneesStock(), [target])[target] || [];
+  memoriserStock(target, rows);
+  return rows;
+}
+
 /** Stock de PLUSIEURS magasins en un seul téléchargement des mouvements. */
 export async function loadStocksParMagasin(
   magasinIds: string[],
 ): Promise<Record<string, StockMagasin[]>> {
-  const ids = magasinIds.map(normalizeMagasinId).filter(Boolean);
+  const ids = [...new Set(magasinIds.map(normalizeMagasinId).filter(Boolean))];
   try {
-    const { mouvements, bons, catalogue } = await chargerDonneesStock();
-    const calcul = calculerStocks(mouvements, bons, catalogue, ids);
+    const calcul = calculer(await chargerDonneesStock(), ids);
     const result: Record<string, StockMagasin[]> = {};
     for (const id of ids) {
       result[id] = calcul[id] || [];

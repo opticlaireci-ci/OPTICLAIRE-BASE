@@ -1,4 +1,4 @@
-import { getMagasinLabel as libelleMagasin } from '../../../constants/magasins';
+import { getMagasinLabel as libelleMagasin, memeMagasin } from '../../../constants/magasins';
 import { logger } from '../../../utils/logger';
 import { useState } from 'react';
 import { useParams } from 'react-router';
@@ -88,7 +88,7 @@ export function BonRetourMagasinPage() {
 
   // Filtrer les bons de ce magasin
   const bons = magasinId
-    ? allBons.filter((bon) => bon.magasin?.toUpperCase() === magasinId.toUpperCase())
+    ? allBons.filter((bon) => memeMagasin(bon.magasin, magasinId))
     : [];
 
   const handleValider = async () => {

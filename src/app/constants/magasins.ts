@@ -1,5 +1,6 @@
 import { logger } from '../utils/logger';
 import { TENANT, nomMagasin, tenantConfigDefaut } from '../config/tenant';
+import { creerNormaliseurMagasins } from '../services/stockLedger';
 /**
  * Liste complète des magasins OPTICLAIRE
  * Centralisé pour éviter les duplications
@@ -122,6 +123,33 @@ export function initMagasins(): void {
   } catch {
     saveMagasins(MAGASINS);
   }
+}
+
+/**
+ * Identifiant d'un magasin (MAJUSCULES), quelle que soit la façon dont il a été
+ * écrit dans un bon, une vente ou un mouvement de stock : identifiant
+ * (« yopougon-gandi »), libellé (« YOPOUGON GANDI », « BOUAKÉ »), ancien nom
+ * renommé (« cocody » → BOUAKE, « marcory » → YOPOUGON-GANDI), « LECLAIRE X »…
+ */
+let normaliseur: { cle: string; f: (v: unknown) => string } | null = null;
+/** Fonction de normalisation (à garder pour toute une boucle : la liste des magasins n'est lue qu'une fois). */
+export function normaliseurMagasins(): (value: unknown) => string {
+  const magasins = getMagasins();
+  const cle = JSON.stringify(magasins.map(m => [m.id, m.label]));
+  if (!normaliseur || normaliseur.cle !== cle) {
+    const anciens = Object.fromEntries(Object.entries(LEGACY_MAGASIN_IDS).map(([ancien, m]) => [ancien, m.id]));
+    normaliseur = { cle, f: creerNormaliseurMagasins(magasins, anciens) };
+  }
+  return normaliseur.f;
+}
+export function magasinCanonique(value: unknown): string {
+  return normaliseurMagasins()(value);
+}
+
+/** Les deux écritures désignent-elles le même magasin ? */
+export function memeMagasin(a: unknown, b: unknown): boolean {
+  const x = magasinCanonique(a);
+  return !!x && x === magasinCanonique(b);
 }
 
 /**

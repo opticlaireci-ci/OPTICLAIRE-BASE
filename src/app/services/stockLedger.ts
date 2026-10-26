@@ -52,8 +52,55 @@ export const normaliser = (v: unknown) => String(v ?? '')
 
 /** Normalise les anciens libellés de magasin (« LECLAIRE ABOBO ») vers l'identifiant. */
 export function normaliserMagasin(value: unknown): string {
+  return normaliserMagasinParDefaut(value);
+}
+function normaliserMagasinParDefaut(value: unknown): string {
   return String(value ?? '').trim().toUpperCase()
     .replace(/^LECLAIRE\s+/, '').replace(/\s+MAGASIN$/, '');
+}
+
+/**
+ * Clé de comparaison d'un magasin : lettres et chiffres seulement, sans accents
+ * ni « LECLAIRE » devant. « YOPOUGON GANDI », « yopougon-gandi » et
+ * « Leclaire Yopougon-Gandi » donnent la même clé ; « BOUAKÉ » et « bouake » aussi.
+ */
+export const cleMagasin = (value: unknown) => String(value ?? '')
+  .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  .toUpperCase().replace(/[^A-Z0-9]/g, '')
+  .replace(/^LECLAIRE/, '').replace(/MAGASIN$/, '');
+
+/**
+ * Ramène TOUTE écriture d'un magasin à son identifiant configuré, en majuscules :
+ * identifiant (« yopougon-gandi »), libellé (« YOPOUGON GANDI », « BOUAKÉ »),
+ * ancien identifiant renommé (« cocody » → BOUAKE), « LECLAIRE X »…
+ * Avant, seules la casse et le préfixe « LECLAIRE » étaient tolérés : un bon ou
+ * une vente rangé sous le libellé, ou sous un ancien nom, était compté pour un
+ * AUTRE magasin, et le stock paraissait vide à la vente.
+ * Un magasin inconnu garde l'ancienne normalisation (aucune donnée perdue).
+ */
+export function creerNormaliseurMagasins(
+  magasins: Array<{ id: string; label?: string }>,
+  anciens: Record<string, string> = {},
+): (value: unknown) => string {
+  const parCle = new Map<string, string>();
+  // Les identifiants d'abord : un libellé ne prend jamais la place d'un identifiant.
+  for (const champ of ['id', 'label'] as const) {
+    for (const m of magasins || []) {
+      const id = String(m?.id ?? '').trim().toUpperCase();
+      const k = cleMagasin(m?.[champ]);
+      if (id && k && !parCle.has(k)) parCle.set(k, id);
+    }
+  }
+  for (const [ancien, nouveau] of Object.entries(anciens || {})) {
+    const k = cleMagasin(ancien);
+    const id = String(nouveau ?? '').trim().toUpperCase();
+    if (k && id) parCle.set(k, id);
+  }
+  return (value: unknown) => {
+    const k = cleMagasin(value);
+    if (!k) return '';
+    return parCle.get(k) ?? normaliserMagasin(value);
+  };
 }
 
 // ── Catalogue ────────────────────────────────────────────────────────────────
@@ -211,7 +258,9 @@ export function calculerStocks(
   bons: any[],
   catalogue: { montures?: any[]; accessoires?: any[] },
   magasins: string[],
+  options: { magasin?: (value: unknown) => string } = {},
 ): Record<string, StockMagasin[]> {
+  const normaliserMagasin = options.magasin ?? normaliserMagasinParDefaut;
   const index = indexerCatalogue(catalogue.montures, catalogue.accessoires);
   const cle = resolveurArticles(index, mouvementsBruts);
   const modeleDe = (article: string) =>

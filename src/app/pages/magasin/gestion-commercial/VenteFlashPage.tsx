@@ -10,7 +10,7 @@ import { autoSaveClient } from '../../../utils/autoClient';
 import { useSupabaseSync } from '../../../hooks/useSupabaseSync';
 import { ajouterVente, chargerVentes, VenteSupabase } from '../../../services/ventesService';
 import { enregistrerVente } from '../../../services/inventaireService';
-import { verifierStockVente, messageRuptures } from '../../../utils/stockVente';
+import { controlerStockVente, messageRuptures, messageStockNonVerifie } from '../../../utils/stockVente';
 import { StockParMagasin } from '../../../components/StockParMagasin';
 import { useAuth } from '../../../contexts/AuthContext';
 import { normaliserTotauxVente } from '../../../utils/venteTotals';
@@ -188,16 +188,6 @@ function FormulaireVenteFlash({ magasinId, onRetour, onSaved }: { magasinId: str
     const numFactureCourant = numFactureEtat;
     if (!client) { alert('Veuillez renseigner le client.'); return; }
 
-    // Contrôle du STOCK, identique à la Vente/Facture : une monture ou un
-    // accessoire absent du magasin (aucun bon de distribution ni de transfert
-    // reçu, ou tout déjà vendu) ne peut pas être vendu. La Vente Flash affichait
-    // le stock sans jamais l'imposer : le stock partait donc en négatif.
-    const ruptures = verifierStockVente(articles, products);
-    if (ruptures.length > 0) {
-      alert(messageRuptures(ruptures));
-      return;
-    }
-
     // Garde-fou : un bon d'assurance est un mode de règlement, pas une ligne de
     // vente. Sans article renseigné, le Total serait 0 F et le bon d'assurance
     // pourrait, par erreur, être perçu comme le total de la vente.
@@ -211,6 +201,23 @@ function FormulaireVenteFlash({ magasinId, onRetour, onSaved }: { magasinId: str
     savingRef.current = true;
     setEnCours(true);
     const finTentative = () => { savingRef.current = false; setEnCours(false); };
+
+    // Contrôle du STOCK, identique à la Vente/Facture : une monture ou un
+    // accessoire absent du magasin (aucun bon de distribution ni de transfert
+    // reçu, ou tout déjà vendu) ne peut pas être vendu. Avant de refuser, le
+    // stock est relu dans la base (le stock affiché peut dater).
+    const controle = await controlerStockVente(articles, products, magasinId);
+    if (controle.ruptures.length > 0) {
+      if (controle.verifie) {
+        alert(messageRuptures(controle.ruptures));
+        finTentative();
+        return;
+      }
+      if (!confirm(messageStockNonVerifie(controle.ruptures))) {
+        finTentative();
+        return;
+      }
+    }
     if (!venteIdRef.current) venteIdRef.current = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     // Conservé dans l'état : une nouvelle tentative réutilise le même numéro.
     const numFacture = numFactureCourant || await attribuerNumero('vente_flash');

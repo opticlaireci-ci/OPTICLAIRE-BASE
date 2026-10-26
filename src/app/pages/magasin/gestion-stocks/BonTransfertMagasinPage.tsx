@@ -30,10 +30,12 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
-import { enregistrerTransfert, loadStockMagasin } from '../../../services/inventaireService';
+import { enregistrerTransfert, loadStockMagasin, lireStockMagasinFrais, type StockMagasin } from '../../../services/inventaireService';
 
-import { getMagasins } from '../../../constants/magasins';
+import { getMagasins, memeMagasin } from '../../../constants/magasins';
 import { useBons } from '../../../hooks/useBons';
+import { useAuth } from '../../../contexts/AuthContext';
+import { estAdministrateur } from '../../../utils/actionRights';
 import { getCurrentUser, resolveUserName, formatDate } from '../../../utils/auditUtils';
 
 
@@ -73,6 +75,7 @@ interface ItemTransfert {
 
 export function BonTransfertMagasinPage() {
   const { magasinId } = useParams();
+  const { user } = useAuth();
   // Transferts envoyés ou reçus par ce magasin, lus et enregistrés un par un.
   const { bons: allBons, sauver } = useBons<BonTransfert>('transfert', magasinId ? [magasinId] : []);
   const [selectedBon, setSelectedBon] = useState<BonTransfert | null>(null);
@@ -91,8 +94,10 @@ export function BonTransfertMagasinPage() {
   // Filtrer les bons destinés à ce magasin OU provenant de ce magasin
   const bons = magasinId
     ? allBons.filter((bon) =>
-        bon.magasinDest?.toUpperCase() === magasinId.toUpperCase() ||
-        bon.magasinSource?.toUpperCase() === magasinId.toUpperCase()
+        // Même magasin quelle que soit l'écriture (« YOPOUGON GANDI » / yopougon-gandi,
+        // « BOUAKÉ », ancien nom…) : un bon écrit autrement n'était jamais proposé.
+        memeMagasin(bon.magasinDest, magasinId) ||
+        memeMagasin(bon.magasinSource, magasinId)
       )
     : [];
 
@@ -105,7 +110,23 @@ export function BonTransfertMagasinPage() {
     // une coupure réseau laisse le bon « En attente », à réessayer.
     if (action === 'accepter' && selectedBon.items && selectedBon.magasinSource && selectedBon.magasinDest) {
       const source = selectedBon.magasinSource.toUpperCase();
-      const stockSource = await loadStockMagasin(source);
+      // Chaque magasin ne voit que SON stock : le magasin qui reçoit ne lit pas
+      // celui du magasin qui envoie. Avant, ce stock lui paraissait vide et le
+      // transfert était refusé pour « stock insuffisant ». Le contrôle du stock
+      // de l'expéditeur est fait à la création du bon (articles pris dans son
+      // stock) ; il est refait ici seulement par l'expéditeur lui-même ou par
+      // l'administration.
+      const voitSource = estAdministrateur(user)
+        || (user?.magasinIds || []).some(m => memeMagasin(m, source));
+      let stockSource: StockMagasin[] = [];
+      if (voitSource) {
+        try {
+          stockSource = await lireStockMagasinFrais(source);
+        } catch {
+          alert(`Le stock de ${selectedBon.magasinSource} n'a pas pu être lu (connexion).\n\nLe bon reste « En attente » : réessayez quand la connexion est rétablie.`);
+          return;
+        }
+      }
       const normaliser = (v: unknown) => String(v ?? '')
         .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
         .trim().toLowerCase().replace(/\s+/g, ' ');
@@ -128,7 +149,7 @@ export function BonTransfertMagasinPage() {
         d.demande += quantite;
         demandes.set(cle, d);
       }
-      const manques = [...demandes.values()].filter(d => d.demande > d.disponible);
+      const manques = voitSource ? [...demandes.values()].filter(d => d.demande > d.disponible) : [];
       if (manques.length > 0) {
         alert(
           `❌ Transfert impossible — stock insuffisant à ${selectedBon.magasinSource} :\n\n` +

@@ -22,7 +22,7 @@ import {
 import { ajouterReglement, supprimerReglement, modifierReglement, resumerModification, chargerReglements, chargerTousLesReglements, readReglementsCacheMap, subscriberReglementsVente, ReglementSupabase } from '../../../services/reglementsService';
 import { ajouterVente, chargerVentes as chargerVentesSupabase, abonnerVentesMagasin, readVentesCache, supprimerVente, mettreAJourVente, VenteSupabase } from '../../../services/ventesService';
 import { enregistrerVente, annulerSortiesVente } from '../../../services/inventaireService';
-import { verifierStockVente, messageRuptures } from '../../../utils/stockVente';
+import { controlerStockVente, messageRuptures, messageStockNonVerifie } from '../../../utils/stockVente';
 import { useLentillesOpticStock } from '../../../hooks/useLentillesOpticStock';
 import { collection, onSnapshot } from '../../../utils/firestoreCompat';
 import { db } from '../../../utils/firebaseClient';
@@ -5650,17 +5650,6 @@ function FormulaireVente({ magasinId, onRetour, onVenteEnregistree, venteInitial
   const handleEnregistrer = async (totalNet: number) => {
     if (!client.nom) { alert('Veuillez renseigner le nom du client (Étape I).'); return; }
 
-    // Contrôle du STOCK : on interdit la validation si une monture (ou un
-    // accessoire géré en stock) demandée est en rupture ou en quantité
-    // insuffisante dans le magasin. Le stock provient des bons de distribution /
-    // transfert reçus (useVenteProducts → useStockMagasin).
-    // Logique mutualisée avec la Vente Flash dans `utils/stockVente.ts`.
-    const ruptures = verifierStockVente(articles, venteProducts);
-    if (ruptures.length > 0) {
-      alert(messageRuptures(ruptures));
-      return;
-    }
-
     // Garde-fou : un bon d'assurance est une prise en charge de règlement, PAS
     // une ligne de vente. Si l'opérateur a ajouté un bon d'assurance sans avoir
     // saisi la moindre monture/article ni le moindre verre, le TOTAL calculé
@@ -5679,6 +5668,26 @@ function FormulaireVente({ magasinId, onRetour, onVenteEnregistree, venteInitial
     if (savingRef.current) return;
     savingRef.current = true;
     setEnregistrementEnCours(true);
+
+    // Contrôle du STOCK : on interdit la validation si une monture (ou un
+    // accessoire géré en stock) demandée est en rupture ou en quantité
+    // insuffisante dans le magasin. Le stock provient des bons de distribution /
+    // transfert reçus (useVenteProducts → useStockLignesMagasin). Avant de
+    // refuser, le stock est relu dans la base (le stock affiché peut dater).
+    // Facture modifiée : ses articles déjà enregistrés restent disponibles.
+    // Logique mutualisée avec la Vente Flash dans `utils/stockVente.ts`.
+    const controle = await controlerStockVente(articles, venteProducts, magasinId, venteInitiale?.articles || []);
+    if (controle.ruptures.length > 0) {
+      if (controle.verifie) {
+        alert(messageRuptures(controle.ruptures));
+        finTentative();
+        return;
+      }
+      if (!confirm(messageStockNonVerifie(controle.ruptures))) {
+        finTentative();
+        return;
+      }
+    }
 
     const userName = user?.nom || user?.prenom || user?.email || 'Utilisateur';
 

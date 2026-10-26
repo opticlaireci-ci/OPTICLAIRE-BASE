@@ -187,6 +187,66 @@ async function selectToutesLesLignes(
   return lignes;
 }
 
+// ── Lignes du calcul de stock, par la fonction `stock_lignes` ────────────────
+// Lues table par table, les lignes de stock dépendaient du script de sécurité
+// exécuté en dernier : une vendeuse ne recevait pas les transferts reçus par son
+// magasin, ni les lignes écrites sous un autre nom du magasin (« BOUAKÉ »,
+// ancien « COCODY »…). La fonction renvoie toutes les lignes des magasins du
+// compte (de tous les magasins pour l'administration), avec uniquement les
+// champs utiles au stock (ni client ni montant de facture).
+// Pages par identifiant croissant (« après tel id »), 1 000 lignes à la fois.
+let fonctionStockAbsenteJusqua = 0;
+
+function fonctionAbsente(err: any): boolean {
+  const code = String(err?.code || '');
+  const msg = String(err?.message || '');
+  return code === 'PGRST202' || code === '42883' || /could not find the function|function .* does not exist/i.test(msg);
+}
+
+async function lignesStockParFonction(table: 'mouvements_stock' | 'bons'): Promise<Array<{ id: string; ligne: any }>> {
+  const lignes: Array<{ id: string; ligne: any }> = [];
+  let apres = '';
+  for (let page = 0; page < PAGES_MAX; page++) {
+    const { data, error } = await supabase.rpc('stock_lignes', { p_table: table, p_apres: apres, p_limite: PAGE_LIGNES });
+    if (error) throw error;
+    const rows: Array<{ id: string; ligne: any }> = Array.isArray(data) ? data : [];
+    lignes.push(...rows);
+    if (rows.length < PAGE_LIGNES) break;
+    const dernier = String(rows[rows.length - 1]?.id ?? '');
+    if (!dernier || dernier === apres) break; // garde-fou : pas de boucle sans fin
+    apres = dernier;
+  }
+  return lignes;
+}
+
+/**
+ * Mouvements (`{ id, data }`) et bons de stock (objets à plat, comme une lecture
+ * de la table) des magasins du compte. `null` : fonction indisponible (script SQL
+ * non exécuté, compte sans magasin…) — l'appelant lit alors les tables.
+ */
+export async function lireLignesStock(): Promise<{ mouvements: Array<{ id: string; data: any }>; bons: any[] } | null> {
+  if (Date.now() < fonctionStockAbsenteJusqua) return null;
+  try {
+    const [mouvements, bons] = await Promise.all([
+      lignesStockParFonction('mouvements_stock'),
+      lignesStockParFonction('bons'),
+    ]);
+    return {
+      mouvements: mouvements.map(r => ({ id: String(r.id), data: r.ligne || {} })),
+      bons: bons.map(r => ({ ...(r.ligne || {}), id: String(r.id) })),
+    };
+  } catch (err: any) {
+    if (fonctionAbsente(err)) {
+      // On ne redemande pas à chaque rafraîchissement (toutes les 30 s).
+      fonctionStockAbsenteJusqua = Date.now() + 10 * 60_000;
+      logger.warn('Fonction stock_lignes absente : exécuter supabase/CORRECTION_STOCK_MAGASINS_2026-10-26.sql');
+    } else {
+      logger.warn('stock_lignes indisponible, lecture directe des tables:', err?.message || err);
+    }
+    return null;
+  }
+}
+
 /** Renvoie tous les documents (valeurs) d'une entité/collection. */
 // Lectures de collection EN COURS, par entité. Quand plusieurs écrans demandent
 // la même collection au même instant (ex. un événement 'ventes-updated' réveille

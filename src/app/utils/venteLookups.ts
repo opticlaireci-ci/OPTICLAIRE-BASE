@@ -6,7 +6,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { api } from '../services/api';
 import { loadStockMagasin, readStockCache, type StockMagasin } from '../services/inventaireService';
-import { PREFIXE_MODELE, cleModele } from '../services/stockLedger';
+import { PREFIXE_MODELE, cleModele, normaliser, designationMonture, designationAccessoire } from '../services/stockLedger';
 import { setVisibleInterval, PAGE_POLL_MS } from './visibleInterval';
 
 // ── Hook générique localStorage ──────────────────────────────────────────────
@@ -170,47 +170,54 @@ export function useTraitements(): TraitementRecord[] {
 }
 
 // ── Stock RÉEL d'un magasin (mouvements Firestore) ───────────────────────────
+/** Texte comparable d'une désignation : sans accents, majuscules, espaces réduits. */
+const cleTexte = (v: unknown) => normaliser(v);
+
 /**
- * Retourne le stock réel disponible du magasin, agrégé depuis les mouvements
- * (distribution/transfert/retour). Map indexée par `produitId` ET par
- * désignation en minuscules pour retrouver la quantité côté vente.
- */
-/**
- * Indexe des lignes de stock par produitId ET par désignation (minuscules).
+ * Indexe des lignes de stock par produitId, par désignation (minuscules, et sans
+ * accents ni espaces doublés) et par code-barre.
  * Exporté pour `stockVente.ts`, qui applique EXACTEMENT la même indexation aux
  * autres magasins : les deux vues doivent s'accorder sur les mêmes clés, sinon
  * un article compté ici serait introuvable là-bas.
  */
 export function rowsToStockMap(rows: StockMagasin[]): Map<string, number> {
   const m = new Map<string, number>();
+  const ajouter = (k: string, q: number) => { if (k) m.set(k, (m.get(k) || 0) + q); };
   for (const r of rows) {
-    m.set(r.produitId, (m.get(r.produitId) || 0) + r.quantiteDisponible);
+    ajouter(r.produitId, r.quantiteDisponible);
+    const cles = new Set<string>();
     if (r.designation) {
-      const k = r.designation.toLowerCase().trim();
-      m.set(k, (m.get(k) || 0) + r.quantiteDisponible);
+      cles.add(r.designation.toLowerCase().trim());
+      cles.add(cleTexte(r.designation));
     }
+    if (r.codeBarre) cles.add(r.codeBarre.toLowerCase().trim());
+    cles.delete(r.produitId);
+    for (const k of cles) ajouter(k, r.quantiteDisponible);
   }
   return m;
 }
 
-export function useStockMagasin(magasinId: string): Map<string, number> {
-  // Seed INSTANTANÉ depuis le cache — plus d'attente réseau avant l'affichage.
-  const [map, setMap] = useState<Map<string, number>>(() => rowsToStockMap(readStockCache(magasinId)));
+/**
+ * Lignes du stock réel du magasin : affichage immédiat depuis le dernier stock
+ * connu, puis recalcul depuis la base, rafraîchi automatiquement.
+ */
+export function useStockLignesMagasin(magasinId: string): StockMagasin[] {
+  const [lignes, setLignes] = useState<StockMagasin[]>(() => readStockCache(magasinId));
   useEffect(() => {
-    if (!magasinId) { setMap(new Map()); return; }
+    if (!magasinId) { setLignes([]); return; }
     let cancelled = false;
     // Re-seed cache immédiat (changement de magasin).
-    setMap(rowsToStockMap(readStockCache(magasinId)));
+    setLignes(readStockCache(magasinId));
     const load = async () => {
       try {
-        const rows = await loadStockMagasin(magasinId.toUpperCase());
-        if (!cancelled) setMap(rowsToStockMap(rows));
+        const rows = await loadStockMagasin(magasinId);
+        if (!cancelled) setLignes(rows);
       } catch { /* on garde le cache */ }
     };
     load();
     // Rafraîchissement AUTOMATIQUE : périodique + événements.
     const stopPolling = setVisibleInterval(load, PAGE_POLL_MS);
-    const onStockUpdated = () => { if (!cancelled) setMap(rowsToStockMap(readStockCache(magasinId))); };
+    const onStockUpdated = () => { if (!cancelled) setLignes(readStockCache(magasinId)); };
     window.addEventListener('leclaire-sync-update', load);
     window.addEventListener('storage', load);
     window.addEventListener('leclaire-stock-updated', onStockUpdated);
@@ -222,7 +229,12 @@ export function useStockMagasin(magasinId: string): Map<string, number> {
       window.removeEventListener('leclaire-stock-updated', onStockUpdated);
     };
   }, [magasinId]);
-  return map;
+  return lignes;
+}
+
+export function useStockMagasin(magasinId: string): Map<string, number> {
+  const lignes = useStockLignesMagasin(magasinId);
+  return useMemo(() => rowsToStockMap(lignes), [lignes]);
 }
 
 // ── Index unifié des produits vendables (avec stock réel du magasin) ──────────
@@ -240,103 +252,207 @@ export interface VenteProduct {
   cleStockModele?: string;
 }
 
+/** Catalogues du poste utilisés pour la vente (montures, accessoires, verres…). */
+export interface CatalogueVente {
+  montures: MontureRecord[];
+  accessoires: AccessoireRecord[];
+  verres: VerreRecord[];
+  services: ServiceRecord[];
+  traitements: TraitementRecord[];
+}
+
+/** Lecture directe des catalogues du poste (contrôle final d'une vente). */
+export function lireCatalogueVenteLocal(): CatalogueVente {
+  const lire = (key: string) => {
+    try { const v = JSON.parse(localStorage.getItem(key) || '[]'); return Array.isArray(v) ? v : []; } catch { return []; }
+  };
+  return {
+    montures: lire('leclaire_global_montures'),
+    accessoires: lire('leclaire_global_accessoires'),
+    verres: lire('leclaire_global_verres'),
+    services: lire('leclaire_global_services'),
+    traitements: lire('leclaire_global_traitements'),
+  };
+}
+
+/**
+ * Produits vendables du magasin.
+ *
+ * Le STOCK RÉEL fait foi : chaque ligne de stock du magasin est proposée à la
+ * vente, une seule fois. Une ligne est d'abord rattachée à l'article du
+ * catalogue du poste qui porte le même identifiant ; sinon à celui qui porte la
+ * même désignation (sans tenir compte des accents, des majuscules ni des
+ * espaces) ou le même code-barre ; sinon elle est proposée telle quelle.
+ * Avant, seuls les articles du catalogue ENREGISTRÉ SUR LE POSTE étaient
+ * proposés : un article reçu par bon mais absent ou écrit autrement dans ce
+ * catalogue (poste pas encore synchronisé, article saisi au bon, catalogue
+ * modifié depuis) apparaissait dans « État du stock » mais jamais à la vente,
+ * qui le déclarait épuisé.
+ */
+export function construireProduitsVente(catalogue: CatalogueVente, lignes: StockMagasin[]): VenteProduct[] {
+  const { montures, accessoires, verres, services, traitements } = catalogue;
+  const list: VenteProduct[] = [];
+
+  // Lignes de stock du magasin, par identifiant, désignation et code-barre.
+  const parId = new Map<string, StockMagasin>();
+  const parTexte = new Map<string, StockMagasin[]>();
+  const indexer = (k: string, l: StockMagasin) => {
+    if (!k) return;
+    const liste = parTexte.get(k) || [];
+    if (!liste.includes(l)) liste.push(l);
+    parTexte.set(k, liste);
+  };
+  for (const l of lignes) {
+    if (!l?.produitId) continue;
+    parId.set(l.produitId, l);
+    indexer(cleTexte(l.designation), l);
+    indexer(cleTexte(l.produitId), l);
+    if (l.codeBarre) indexer(cleTexte(l.codeBarre), l);
+  }
+  const rattachees = new Set<string>();
+
+  // Articles du catalogue gérés en stock, avec leurs clés de rapprochement.
+  interface Candidat { produit: VenteProduct; id: string; textes: string[] }
+  const candidats: Candidat[] = [];
+  for (const m of montures || []) {
+    if (!m) continue;
+    // Désignation telle qu'écrite par le bon de distribution (modal).
+    const modalDesig = designationMonture(m);
+    const cleModeleStock = PREFIXE_MODELE + cleModele(m.marque, m.reference);
+    candidats.push({
+      id: String(m.id ?? ''),
+      textes: [m.id, modalDesig, m.codeBarre].map(cleTexte).filter(Boolean),
+      produit: {
+        produitId: String(m.id ?? ''),
+        type: 'monture',
+        label: getMontureLabel(m),
+        labelComplet: modalDesig,
+        codeBarre: m.codeBarre || '',
+        prix: Number(m.prix) || 0,
+        stock: 0,
+        cleStockModele: cleModeleStock,
+      },
+    });
+  }
+  for (const a of accessoires || []) {
+    if (!a) continue;
+    const label =
+      a.designation ||
+      [a.marque, a.reference].filter(Boolean).join(' - ') ||
+      a.reference ||
+      '';
+    const modalDesig = designationAccessoire(a);
+    candidats.push({
+      id: String(a.id ?? ''),
+      textes: [a.id, modalDesig, a.codeBarre].map(cleTexte).filter(Boolean),
+      produit: {
+        produitId: String(a.id ?? ''),
+        type: 'accessoire',
+        label,
+        labelComplet: modalDesig,
+        codeBarre: a.codeBarre || '',
+        prix: Number(a.prix) || 0,
+        stock: 0,
+      },
+    });
+  }
+
+  // 1. Même identifiant (d'abord, pour qu'aucune autre fiche ne prenne la ligne).
+  const stockTrouve = new Map<Candidat, number>();
+  for (const c of candidats) {
+    const l = c.id ? parId.get(c.id) : undefined;
+    if (!l || rattachees.has(l.produitId)) continue;
+    rattachees.add(l.produitId);
+    stockTrouve.set(c, l.quantiteDisponible);
+  }
+  // 2. Même désignation ou même code-barre, parmi les lignes encore libres.
+  //    La vente sortira alors l'article sous la clé de la ligne de stock.
+  for (const c of candidats) {
+    if (stockTrouve.has(c)) continue;
+    const libres = [...new Set(c.textes.flatMap(t => parTexte.get(t) || []))]
+      .filter(l => !rattachees.has(l.produitId) && !l.produitId.startsWith(PREFIXE_MODELE));
+    if (libres.length === 0) continue;
+    // La ligne la mieux fournie ; les autres restent proposées séparément (étape 4).
+    const l = libres.sort((x, y) => y.quantiteDisponible - x.quantiteDisponible)[0];
+    rattachees.add(l.produitId);
+    stockTrouve.set(c, l.quantiteDisponible);
+    c.produit.produitId = l.produitId;
+  }
+  // 3. Stock rangé au niveau du MODÈLE (ancien bon sans couleur ni taille) :
+  //    chaque variante du modèle peut y puiser.
+  for (const c of candidats) {
+    const cle = c.produit.cleStockModele;
+    const modele = cle ? parId.get(cle) : undefined;
+    if (modele) rattachees.add(modele.produitId);
+    c.produit.stock = (stockTrouve.get(c) ?? 0) + (modele?.quantiteDisponible ?? 0);
+    list.push(c.produit);
+  }
+  // 4. Lignes de stock rattachées à aucune fiche du poste : proposées telles quelles.
+  for (const l of lignes) {
+    if (!l?.produitId || rattachees.has(l.produitId) || !(l.quantiteDisponible > 0)) continue;
+    rattachees.add(l.produitId);
+    const designation = String(l.designation || '').trim()
+      || (l.produitId.startsWith(PREFIXE_MODELE) ? l.produitId.slice(PREFIXE_MODELE.length) : l.produitId);
+    list.push({
+      produitId: l.produitId,
+      type: l.produitType === 'accessoire' ? 'accessoire' : 'monture',
+      label: designation,
+      labelComplet: designation,
+      codeBarre: l.codeBarre || '',
+      prix: Number(l.prixVente) || 0,
+      stock: l.quantiteDisponible,
+    });
+  }
+
+  for (const v of verres || []) {
+    list.push({
+      produitId: v.id,
+      type: 'verre',
+      label: v.verre || '',
+      codeBarre: '',
+      prix: Number(v.prixVerre) || 0,
+      stock: null,
+    });
+  }
+
+  for (const s of services || []) {
+    const label = s.designation || s.service || s.nom || '';
+    list.push({
+      produitId: s.id,
+      type: 'service',
+      label,
+      codeBarre: s.codeBarre || '',
+      prix: Number(s.prix) || 0,
+      stock: null,
+    });
+  }
+
+  for (const t of traitements || []) {
+    list.push({
+      produitId: t.id,
+      type: 'traitement',
+      label: t.designation || '',
+      codeBarre: '',
+      prix: Number(t.prix) || 0,
+      stock: null,
+    });
+  }
+
+  return list.filter(p => p.label);
+}
+
 export function useVenteProducts(magasinId: string): VenteProduct[] {
   const montures = useMontures();
   const accessoires = useAccessoires();
   const verres = useVerresList();
   const services = useServices();
   const traitements = useTraitements();
-  const stockMap = useStockMagasin(magasinId);
+  const lignes = useStockLignesMagasin(magasinId);
 
-    // Le stock (mouvements) peut être indexé par l'id catalogue OU par la
-    // désignation (selon l'ancienneté du bon de distribution). On tente donc
-    // toutes les clés plausibles pour retrouver la quantité réelle disponible.
-    const lookupStock = (...keys: (string | undefined)[]): number | null => {
-      for (const k of keys) {
-        if (!k) continue;
-        const direct = stockMap.get(k);
-        if (direct != null) return direct;
-        const lower = stockMap.get(k.toLowerCase().trim());
-        if (lower != null) return lower;
-      }
-      return null;
-    };
-
-  return useMemo(() => {
-    const list: VenteProduct[] = [];
-
-    for (const m of montures) {
-      // Désignation telle qu'écrite par le bon de distribution (modal).
-      const modalDesig = `${m.marque} - ${m.reference} ${(m as any).couleur ?? ''} ${(m as any).taille ?? ''}`.replace(/\s+/g, ' ').trim();
-      list.push({
-        produitId: m.id,
-        type: 'monture',
-        label: getMontureLabel(m),
-        labelComplet: modalDesig,
-        codeBarre: m.codeBarre || '',
-        prix: Number(m.prix) || 0,
-        // Le stock est rangé sous l'identifiant catalogue (voir stockLedger) ;
-        // s'y ajoute le stock d'un ancien bon rangé au niveau du MODÈLE (sans
-        // couleur ni taille), dans lequel la vente d'une variante puise.
-        stock: (lookupStock(m.id, modalDesig) ?? 0) + (stockMap.get(PREFIXE_MODELE + cleModele(m.marque, m.reference)) ?? 0),
-        cleStockModele: PREFIXE_MODELE + cleModele(m.marque, m.reference),
-      });
-    }
-
-    for (const a of accessoires) {
-      const label =
-        a.designation ||
-        [a.marque, a.reference].filter(Boolean).join(' - ') ||
-        a.reference ||
-        '';
-      const modalDesig = `${a.marque ?? ''} - ${a.designation ?? ''}`.replace(/\s+/g, ' ').trim();
-      list.push({
-        produitId: a.id,
-        type: 'accessoire',
-        label,
-        labelComplet: modalDesig,
-        codeBarre: a.codeBarre || '',
-        prix: Number(a.prix) || 0,
-        stock: lookupStock(a.id, modalDesig) ?? 0,
-      });
-    }
-
-    for (const v of verres) {
-      list.push({
-        produitId: v.id,
-        type: 'verre',
-        label: v.verre || '',
-        codeBarre: '',
-        prix: Number(v.prixVerre) || 0,
-        stock: null,
-      });
-    }
-
-    for (const s of services) {
-      const label = s.designation || s.service || s.nom || '';
-      list.push({
-        produitId: s.id,
-        type: 'service',
-        label,
-        codeBarre: s.codeBarre || '',
-        prix: Number(s.prix) || 0,
-        stock: null,
-      });
-    }
-
-    for (const t of traitements) {
-      list.push({
-        produitId: t.id,
-        type: 'traitement',
-        label: t.designation || '',
-        codeBarre: '',
-        prix: Number(t.prix) || 0,
-        stock: null,
-      });
-    }
-
-    return list.filter(p => p.label);
-  }, [montures, accessoires, verres, services, traitements, stockMap]);
+  return useMemo(
+    () => construireProduitsVente({ montures, accessoires, verres, services, traitements }, lignes),
+    [montures, accessoires, verres, services, traitements, lignes],
+  );
 }
 
 /**
