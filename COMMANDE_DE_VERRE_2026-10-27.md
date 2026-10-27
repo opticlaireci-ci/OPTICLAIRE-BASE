@@ -54,6 +54,16 @@ voit que sa partie (voir « Droits » ci-dessous).
   **verre arrivé** (et voit l'icône « Commandes de verre à confirmer »), pour
   les magasins rattachés à son compte.
 - Un lien vers une partie non permise (icône, message) ouvre l'autre partie.
+
+## Connexion de l'assistante administrative (28/10/2026)
+
+L'assistante administrative est rattachée à tous les magasins : à la
+connexion, elle arrive sur l'**accueil général** (et non plus dans le premier
+magasin de sa liste, ABOBO). Accès rapides : **Tableau de Bord**, **Accès
+Magasins** (pour ouvrir un magasin si besoin) et **Commande de verre**
+(Réception commande). Son menu garde toujours Accueil, Accès Magasins et
+Atelier, même si ses boutons cochés ne les contiennent pas. Les conseillères
+et opticiens arrivent toujours dans leur magasin.
 - Chaque magasin ne voit que **ses** commandes.
 - L'assistante administrative voit les commandes des magasins auxquels son
   compte est rattaché : dans **Gestion des utilisateurs**, choisissez **« Tous
@@ -113,4 +123,8 @@ reste légère et rapide, les fichiers ne sont téléchargés qu'à l'ouverture.
   cases de Gestion des utilisateurs ; main donnée à une conseillère qui
   confirme ; assistante avec Passer commande cochée) : 38/38.
 - Droits par rôle et par case : 15 tests.
+- Connexion par la page de connexion (navigateur) : assistante sur l'accueil
+  général avec ou sans boutons cochés, menu, Commande de verre, Accès
+  Magasins ; conseillère toujours dans son magasin ; administrateur inchangé :
+  10/10 (l'ancienne version envoyait l'assistante sur /magasin/abobo).
 - Compilation de production et vérification des types : sans nouvelle erreur.

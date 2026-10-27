@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import {
   LayoutDashboard, Users, Store, RefreshCw, Receipt, UserPlus,
-  Calendar, Package, BarChart3, ArrowRight, Clock,
+  Calendar, Package, BarChart3, ArrowRight, Clock, Glasses,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { getMagasinLabel, getMagasins } from '../constants/magasins';
@@ -31,7 +31,7 @@ function greeting(h: number): string {
   return 'Bonsoir';
 }
 
-interface QuickLink { title: string; desc: string; icon: React.ReactNode; to: string; color: string; }
+interface QuickLink { title: string; desc: string; icon: React.ReactNode; to: string; color: string; toujours?: boolean; }
 
 export function AccueilPage() {
   const { user } = useAuth();
@@ -78,6 +78,8 @@ export function AccueilPage() {
   }, []);
 
   const isAdmin = ADMIN_ROLES.includes(user?.role || '');
+  // Assistante administrative : rattachée à tous les magasins, accueil général.
+  const estAssistante = user?.role === 'assistante_admin';
   const displayName = user?.prenom || user?.name || user?.email?.split('@')[0] || 'Utilisateur';
   const roleLabel = ROLE_LABELS[user?.role || ''] || user?.role || '';
   const magasins = user?.magasinIds || [];
@@ -95,7 +97,8 @@ export function AccueilPage() {
     // Admin ou aucun accès configuré → tout est visible (comportement du menu).
     if (isAdmin || menuAccess.length === 0) return list;
     return list.filter(l => {
-      const key = pathToButtonKey(l.to);
+      if (l.toujours) return true;
+      const key = pathToButtonKey(l.to.split('?')[0]);
       return !key || menuAccess.includes(key);
     });
   };
@@ -106,6 +109,12 @@ export function AccueilPage() {
         { title: 'Gestion Utilisateurs', desc: 'Comptes et accès', icon: <Users size={22} />, to: '/utilisateurs', color: '#7c3aed' },
         { title: 'Gestion Magasins', desc: 'Configurer les magasins', icon: <Store size={22} />, to: '/gestion-magasins', color: '#16a34a' },
         { title: 'Synchronisation', desc: 'État multi-appareils', icon: <RefreshCw size={22} />, to: '/synchronisation', color: '#d97706' },
+      ]
+    : estAssistante
+    ? [
+        { title: 'Tableau de Bord', desc: 'Vue globale des magasins', icon: <LayoutDashboard size={22} />, to: '/', color: '#2b8fb0' },
+        { title: 'Accès Magasins', desc: 'Ouvrir un magasin', icon: <Store size={22} />, to: '/espace-administrateur', color: '#16a34a', toujours: true },
+        { title: 'Commande de verre', desc: 'Réception des commandes des magasins', icon: <Glasses size={22} />, to: '/atelier?onglet=commande-verre', color: '#7c3aed', toujours: true },
       ]
     : [
         { title: 'Mon Tableau de Bord', desc: 'Statistiques du magasin', icon: <LayoutDashboard size={22} />, to: `/magasin/${magasinActuel}/dashboard`, color: '#2b8fb0' },
@@ -131,7 +140,7 @@ export function AccueilPage() {
                   {roleLabel}
                 </span>
               )}
-              {!isAdmin && magasinActuel && (
+              {!isAdmin && !estAssistante && magasinActuel && (
                 <span className="text-sm px-3 py-1 rounded-full" style={{ backgroundColor: 'rgba(255,255,255,0.2)' }}>
                   {getMagasinLabel(magasinActuel) || magasinActuel}
                 </span>

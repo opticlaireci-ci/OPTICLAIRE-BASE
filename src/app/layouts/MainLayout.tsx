@@ -602,6 +602,12 @@ const menuItems: MenuItemType[] = [
   },
 ];
 
+// Entrées du menu général de l'assistante administrative ; les trois dernières
+// lui restent toujours (accueil, entrée dans un magasin, réception des
+// commandes de verre), même si ses boutons cochés ne les contiennent pas.
+const TITRES_ASSISTANTE = ['Accueil', 'Tableau de Bord', 'Accès Magasins', 'Atelier'];
+const TITRES_ASSISTANTE_TOUJOURS = ['Accueil', 'Accès Magasins', 'Atelier'];
+
 // Filtrer les menus selon le rôle de l'utilisateur
 function getFilteredMenuItems(role: string | undefined): MenuItemType[] {
   if (!role) return [];
@@ -630,6 +636,12 @@ function getFilteredMenuItems(role: string | undefined): MenuItemType[] {
   // Administrateur : accès complet
   if (normalizedRole === 'administrateur') {
     return menuItems;
+  }
+
+  // Assistante administrative : travaille depuis le tableau de bord général
+  // (tous les magasins) ; elle entre dans un magasin par « Accès Magasins ».
+  if (normalizedRole === 'assistante_admin') {
+    return menuItems.filter(item => TITRES_ASSISTANTE.includes(item.title));
   }
 
   // Directeur : accès uniquement à "Accès Magasins" dans Espace Administrateur + Mouvements Entrées/Sorties
@@ -743,11 +755,16 @@ function NavigationMenu() {
   // Center / Call Center) : ses entrées n'existent pas dans le menu complet, un
   // filtrage par `menuAccess` le viderait entièrement.
   const isMenuFixeParRole = isAdminRole || user?.role === 'responsable_call_center';
-  const filteredMenuItems = isMenuFixeParRole
+  const menuParAcces = isMenuFixeParRole
     ? roleFilteredMenuItems
     : menuAccess.length > 0
       ? filterByAccess(menuItems, menuAccess)
       : roleFilteredMenuItems;
+  // Assistante administrative : jamais sans accueil, accès aux magasins ni Atelier.
+  const filteredMenuItems = user?.role === 'assistante_admin'
+    ? menuItems.filter(item => menuParAcces.some(m => m.title === item.title) || TITRES_ASSISTANTE_TOUJOURS.includes(item.title))
+      .map(item => menuParAcces.find(m => m.title === item.title) || item)
+    : menuParAcces;
 
   const handleDrawerToggle = () => {
     if (isMobile) {
