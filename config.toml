@@ -1,0 +1,13 @@
+project_id = "xdadapdfhaisstzkjhkp"
+
+# ⚠️ CORS / préflight OPTIONS
+# La fonction serveur fait sa PROPRE authentification (voir `requireUser` dans
+# functions/server/index.tsx) : chaque route exige un vrai jeton utilisateur.
+# On DÉSACTIVE donc la vérification JWT au niveau du gateway Supabase. Sinon le
+# gateway rejette la requête préflight CORS `OPTIONS` (qui, par nature, n'envoie
+# jamais d'en-tête Authorization) avec un statut 401 AVANT qu'elle n'atteigne le
+# code Hono → le navigateur affiche « Response to preflight request doesn't pass
+# access control check: It does not have HTTP ok status » puis « Failed to
+# fetch ». Désactiver ici est sûr : l'auth reste intégralement gérée dans le code.
+[functions.make-server-8ddbb853]
+verify_jwt = false
