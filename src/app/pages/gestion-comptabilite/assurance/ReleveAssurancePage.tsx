@@ -3,7 +3,8 @@ import { Search, X, Plus, Edit, Trash2, ChevronFirst, ChevronLast, ChevronLeft, 
 import { addCreateAudit, addUpdateAudit, formatDate, AuditInfo } from '../../../utils/auditUtils';
 import { useLiveData } from '../../../hooks/useLiveData';
 import { AddButton } from '../../../components/AddButton';
-import { libellesMagasins, TENANT } from '../../../config/tenant';
+import { useLibellesMagasins } from '../../../hooks/useMagasins';
+import { TENANT } from '../../../config/tenant';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 const genRef = () => String(Date.now()).slice(-5).padStart(5, '0');
@@ -12,7 +13,6 @@ const fmtMoney = (n: number) => `${n.toLocaleString('fr-FR')} F CFA`;
 
 const ASSURANCES = ['CNPS', 'MUGEFCI', 'PRIMA', 'NSIA', 'SUNU', 'AXA', 'Allianz'];
 // Tous les magasins configurés (voir src/app/config/tenant.ts).
-const OFFICINES = libellesMagasins();
 const TAXES = ['0%', '5%', '10%', '18%'];
 const ANNEES = ['2024', '2025', '2026'];
 
@@ -33,6 +33,7 @@ interface Releve extends AuditInfo {
 
 // ── Nouveau Relevé (Image 2) ──────────────────────────────────────────────────
 function NouveauReleve({ initial, onSave, onClose }: { initial?: Releve; onSave: (r: Releve) => void; onClose: () => void }) {
+  const OFFICINES = useLibellesMagasins();
   const [form, setForm] = useState<Releve>(initial ?? {
     id: Date.now().toString(),
     reference: genRef(),
@@ -194,6 +195,7 @@ function FilterBar({
   date: string; setDate: (v: string) => void;
   onSearch: () => void;
 }) {
+  const OFFICINES = useLibellesMagasins();
   const selCls = 'border border-gray-300 rounded px-2 py-1.5 text-sm outline-none focus:border-blue-400 bg-white';
   const iCls = 'border border-gray-300 rounded px-2 py-1.5 text-sm outline-none focus:border-blue-400 bg-white';
 
@@ -246,6 +248,7 @@ function FilterBar({
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 export function ReleveAssurancePage() {
+  const OFFICINES = useLibellesMagasins();
   const [releves, setReleves] = useLiveData<Releve>('leclaire_releves_assurance');
   const [officine, setOfficine] = useState('');
   const [assurance, setAssurance] = useState('');

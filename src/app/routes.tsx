@@ -110,6 +110,9 @@ export const router = createBrowserRouter([
 
       // Mouvements Caisse
       { path: "mouvements-caisse", lazy: lazyRoute(() => import("./pages/magasin/MouvementsCaissePage"), "MouvementsCaissePage") },
+
+      // Atelier du magasin (Commande de verre ; le reste selon les droits)
+      { path: "atelier", lazy: lazyRoute(() => import("./pages/AtelierPage"), "AtelierPage") },
     ],
   },
   {

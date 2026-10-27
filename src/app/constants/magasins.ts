@@ -42,54 +42,105 @@ const LEGACY_MAGASIN_IDS: Record<string, { id: string; label: string }> = {
   marcory: { id: 'yopougon-gandi', label: 'YOPOUGON GANDI' },
 };
 
-export function normalizeMagasins(input: unknown): Magasin[] {
-  if (!Array.isArray(input)) return [];
-  const byId = new Map<string, Magasin>();
-  for (const raw of input) {
-    if (!raw || typeof raw !== 'object') continue;
-    const m = raw as Magasin;
-    const originalId = String(m.id || '').trim().toLowerCase();
-    if (!originalId) continue;
-    const legacy = LEGACY_MAGASIN_IDS[originalId];
-    const id = legacy?.id || originalId;
-    // Les anciens magasins sont un renommage officiel : leur libellé est aussi
-    // remplacé, même si une vieille sauvegarde contient encore COCODY/MARCORY.
-    const label = legacy?.label || String(m.label || id.toUpperCase()).trim();
-    const normalized = { ...m, id, label } as Magasin;
-    // Un vrai nouveau magasin déjà présent avec le même ID est prioritaire.
-    if (!byId.has(id) || !legacy) byId.set(id, normalized);
+/** Clé du registre des magasins (copie locale de la liste partagée). */
+export const CLE_REGISTRE_MAGASINS = 'leclaire_magasins';
+/** Événement émis à chaque changement de la liste des magasins sur ce poste. */
+export const EVENEMENT_MAGASINS = 'leclaire-magasins-update';
+
+/**
+ * Entrée du registre. Un magasin supprimé reste dans le registre avec
+ * `supprime: true` (« pierre tombale ») : sans elle, la fusion des listes des
+ * différents appareils le ferait réapparaître.
+ */
+export type EntreeRegistreMagasin = Magasin & { supprime?: boolean; modifieLe?: string };
+
+/**
+ * FUSION SANS PERTE des listes de magasins (défauts du code, configuration de
+ * l'enseigne, copie locale, copie du serveur…), dans l'ordre donné.
+ *
+ * - Un magasin présent dans UNE seule liste est toujours gardé : un appareil
+ *   resté sur 9 magasins ne peut plus faire disparaître les 3 ajoutés ailleurs.
+ * - Même magasin dans deux listes : la modification la plus récente
+ *   (`modifieLe`) l'emporte ; à date égale, la liste donnée en dernier.
+ * - Les pierres tombales (`supprime`) sont conservées (filtrées à l'affichage).
+ */
+export function fusionnerMagasins(...listes: unknown[]): EntreeRegistreMagasin[] {
+  const parId = new Map<string, { m: EntreeRegistreMagasin; ancien: boolean }>();
+  for (const liste of listes) {
+    if (!Array.isArray(liste)) continue;
+    for (const raw of liste) {
+      if (!raw || typeof raw !== 'object') continue;
+      const brut = raw as EntreeRegistreMagasin;
+      const originalId = String(brut.id ?? '').trim().toLowerCase();
+      if (!originalId) continue;
+      const legacy = LEGACY_MAGASIN_IDS[originalId];
+      const id = legacy?.id || originalId;
+      // Les anciens magasins sont un renommage officiel : leur libellé est aussi
+      // remplacé, même si une vieille sauvegarde contient encore COCODY/MARCORY.
+      const label = legacy?.label || String(brut.label || id.toUpperCase()).trim();
+      const m: EntreeRegistreMagasin = { ...brut, id, label };
+      const actuel = parId.get(id);
+      if (!actuel) { parId.set(id, { m, ancien: !!legacy }); continue; }
+      // Un vrai magasin portant déjà ce nouvel identifiant est prioritaire sur
+      // l'ancienne écriture renommée.
+      if (legacy && !actuel.ancien) continue;
+      const plusRecent = String(m.modifieLe || '') >= String(actuel.m.modifieLe || '');
+      if (plusRecent || (actuel.ancien && !legacy)) parId.set(id, { m: { ...actuel.m, ...m }, ancien: !!legacy });
+    }
   }
-  return Array.from(byId.values());
+  return [...parId.values()].map(v => v.m);
+}
+
+export function normalizeMagasins(input: unknown): Magasin[] {
+  return fusionnerMagasins(input).filter(m => !m.supprime);
+}
+
+/** Registre local complet (pierres tombales comprises), tel qu'enregistré. */
+export function lireRegistreMagasins(): EntreeRegistreMagasin[] {
+  try {
+    const brut = localStorage.getItem(CLE_REGISTRE_MAGASINS);
+    const liste = brut ? JSON.parse(brut) : [];
+    return Array.isArray(liste) ? fusionnerMagasins(liste) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Magasins de la configuration de l'enseigne (code, puis réglage de l'application). */
+function magasinsDeConfiguration(): Magasin[] {
+  return [
+    ...MAGASINS,
+    ...TENANT.magasins.map(m => ({ id: m.id, label: nomMagasin(m.label) })),
+  ];
 }
 
 /**
- * Récupère la liste des magasins depuis localStorage (dynamique).
- * Toute ancienne liste est automatiquement migrée et réécrite une seule fois.
+ * Liste des magasins : magasins de la configuration + registre (magasins ajoutés
+ * depuis l'application), sans les magasins supprimés. Lecture seule : rien
+ * n'est réécrit ni envoyé au serveur.
  */
 export function getMagasins(): Magasin[] {
   try {
-    const stored = localStorage.getItem('leclaire_magasins');
-    if (stored) {
-      const parsed = JSON.parse(stored);
-      const normalized = normalizeMagasins([...parsed, ...MAGASINS]);
-      const normalizedStr = JSON.stringify(normalized);
-      if (JSON.stringify(parsed) !== normalizedStr) {
-        localStorage.setItem('leclaire_magasins', normalizedStr);
-      }
-      return normalized;
-    }
+    return fusionnerMagasins(magasinsDeConfiguration(), lireRegistreMagasins())
+      .filter(m => !m.supprime)
+      .map(({ supprime: _s, modifieLe: _d, ...m }) => m as Magasin);
   } catch (error) {
     logger.error('Erreur lecture magasins:', error);
+    return MAGASINS;
   }
-  return MAGASINS;
 }
 
 /**
- * Sauvegarde la liste des magasins dans localStorage
+ * Enregistre le registre LOCAL. Les magasins déjà connus du registre et absents
+ * de `magasins` sont conservés (fusion) : une liste incomplète ne peut plus en
+ * effacer. Supprimer un magasin passe par `deleteMagasin`.
  */
-export function saveMagasins(magasins: Magasin[]): void {
+export function saveMagasins(magasins: EntreeRegistreMagasin[]): void {
   try {
-    localStorage.setItem('leclaire_magasins', JSON.stringify(normalizeMagasins(magasins)));
+    const avant = localStorage.getItem(CLE_REGISTRE_MAGASINS);
+    const apres = JSON.stringify(fusionnerMagasins(lireRegistreMagasins(), magasins));
+    if (avant === apres) return;
+    localStorage.setItem(CLE_REGISTRE_MAGASINS, apres);
   } catch (error) {
     // Ne PAS avaler l'erreur : sinon l'appelant croit avoir sauvegardé alors que
     // le magasin n'est jamais persisté (ex. quota localStorage saturé) → « succès
@@ -97,33 +148,16 @@ export function saveMagasins(magasins: Magasin[]): void {
     logger.error('Erreur sauvegarde magasins:', error);
     throw error;
   }
+  try { window.dispatchEvent(new CustomEvent(EVENEMENT_MAGASINS)); } catch { /* hors navigateur */ }
 }
 
 /**
- * Initialise les magasins par défaut dans localStorage.
- * Si des magasins par défaut sont absents (migration depuis une ancienne version),
- * ils sont ajoutés sans écraser les magasins existants ou ajoutés manuellement.
+ * Ancienne initialisation : elle écrivait les 9 magasins par défaut dans le
+ * registre au démarrage, et cette liste partait ensuite vers le serveur,
+ * écrasant les magasins ajoutés. Désormais les magasins de la configuration
+ * sont lus à la volée (getMagasins) : il n'y a plus rien à écrire.
  */
-export function initMagasins(): void {
-  const existing = localStorage.getItem('leclaire_magasins');
-  if (!existing) {
-    saveMagasins(MAGASINS);
-    return;
-  }
-  try {
-    const stored = normalizeMagasins([...JSON.parse(existing), ...MAGASINS]);
-    const storedIds = new Set(stored.map(m => m.id));
-    const missing = MAGASINS.filter(m => !storedIds.has(m.id));
-    const merged = normalizeMagasins([...stored, ...missing]);
-    // Réécrit également les migrations COCODY→BOUAKÉ et MARCORY→YOPOUGON GANDI.
-    saveMagasins(merged);
-    if (missing.length > 0) {
-      logger.log('✅ Magasins manquants ajoutés:', missing.map(m => m.id).join(', '));
-    }
-  } catch {
-    saveMagasins(MAGASINS);
-  }
-}
+export function initMagasins(): void { /* volontairement vide */ }
 
 /**
  * Identifiant d'un magasin (MAJUSCULES), quelle que soit la façon dont il a été
@@ -194,37 +228,30 @@ export function getActiveMagasins(): Magasin[] {
   return magasins.filter(magasin => magasin.actif !== false);
 }
 
+/** Horodatage d'une modification du registre (la plus récente l'emporte). */
+const maintenant = () => new Date().toISOString();
+
 /**
  * Ajoute un nouveau magasin
  */
 export function addMagasin(magasin: Magasin): void {
-  const magasins = getMagasins();
-  magasins.push({ ...magasin, actif: true });
-  saveMagasins(magasins);
+  saveMagasins([{ ...magasin, actif: magasin.actif !== false, supprime: false, modifieLe: maintenant() }]);
 }
 
 /**
  * Modifie un magasin existant
  */
 export function updateMagasin(id: string, updates: Partial<Magasin>): void {
-  const magasins = getMagasins();
-  const index = magasins.findIndex(magasin => magasin.id === id);
-  if (index !== -1) {
-    magasins[index] = { ...magasins[index], ...updates };
-    saveMagasins(magasins);
-  }
+  const actuel = getMagasinById(id);
+  if (!actuel) return;
+  saveMagasins([{ ...actuel, ...updates, id: actuel.id, supprime: false, modifieLe: maintenant() }]);
 }
 
 /**
- * Supprime un magasin
+ * Supprime un magasin (pierre tombale : il ne revient plus depuis un autre appareil).
  */
 export function deleteMagasin(id: string): void {
-  const magasins = getMagasins();
-  const filtered = magasins.filter(magasin => magasin.id !== id);
-  saveMagasins(filtered);
-}
-
-// Initialiser au chargement
-if (typeof window !== 'undefined') {
-  initMagasins();
+  const actuel = getMagasinById(id);
+  if (!actuel) return;
+  saveMagasins([{ ...actuel, supprime: true, modifieLe: maintenant() }]);
 }

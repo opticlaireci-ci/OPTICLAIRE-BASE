@@ -21,6 +21,8 @@ import {
 } from '../../config/tenant';
 import { reinitialiserDonnees, type ResetCible } from '../../services/resetService';
 import { supabase } from '../../utils/supabaseClient';
+import { getMagasinById, saveMagasins } from '../../constants/magasins';
+import { synchroniserMagasins } from '../../services/supabaseRealtime';
 
 /** Transforme un libellé de magasin en identifiant technique (minuscule, sans accent/espace). */
 function versId(label: string): string {
@@ -72,7 +74,7 @@ export function ConfigurationEnseignePage() {
     setMagasins(prev => [...prev, { id: '', label: '' }]);
   };
 
-  const enregistrer = () => {
+  const enregistrer = async () => {
     if (!nom.trim()) { alert("Le nom de l'enseigne est obligatoire."); return; }
     const magNettoyes = magasins
       .map(m => ({ label: m.label.trim(), id: (m.id || versId(m.label)).trim() }))
@@ -111,6 +113,13 @@ export function ConfigurationEnseignePage() {
     setSaving(true);
     try {
       enregistrerTenantConfig(cfg);
+      // Les magasins ajoutés ici rejoignent la liste partagée des magasins (tous
+      // les appareils), au même titre que ceux créés dans « Gestion des magasins ».
+      const nouveaux = magNettoyes.filter(m => !getMagasinById(m.id));
+      if (nouveaux.length > 0) {
+        saveMagasins(nouveaux.map(m => ({ ...m, actif: true, modifieLe: new Date().toISOString() })));
+        await synchroniserMagasins().catch(() => { /* renvoyée au prochain démarrage */ });
+      }
       alert(`✅ Enseigne enregistrée. L'application va se recharger sous le nom « ${cfg.nom} ».`);
       window.location.reload();
     } catch (e: any) {

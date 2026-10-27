@@ -10,6 +10,7 @@ import {
 } from '../utils/userAdminFallback';
 import { logger } from '../utils/logger';
 import { getMagasins } from '../constants/magasins';
+import { useMagasins } from '../hooks/useMagasins';
 import { APP_BUTTON_GROUPS } from '../constants/appButtons';
 import { ACTION_ADD_KEY, ACTION_EDIT_KEY, ACTION_DELETE_KEY, ADD_MODULES, addModuleKey, ACCES_CONSEILLERES_OPTICIENS, ROLES_ACCES_RESTREINT, DROITS_PARTICULIERS } from '../utils/actionRights';
 import { AddButton } from '../components/AddButton';
@@ -44,7 +45,6 @@ interface FormState {
   menuAccess: string[];
 }
 
-const MAGASINS = getMagasins();
 /** Valeur spéciale du sélecteur : assigne l'utilisateur à TOUS les magasins. */
 const ALL_MAGASINS = '__ALL__';
 
@@ -56,7 +56,7 @@ function expandAssignments(assignments: Assignment[]): Assignment[] {
   const out: Assignment[] = [];
   const seen = new Set<string>();
   for (const a of assignments) {
-    const targets = a.magasin_id === ALL_MAGASINS ? MAGASINS.map(m => m.id) : [a.magasin_id];
+    const targets = a.magasin_id === ALL_MAGASINS ? getMagasins().map(m => m.id) : [a.magasin_id];
     for (const id of targets) {
       if (!id || seen.has(id)) continue;
       seen.add(id);
@@ -231,6 +231,8 @@ function ModalUser({
   onSaved: () => void;
   onClose: () => void;
 }) {
+  // Liste à jour : un magasin ajouté peut aussitôt être attribué.
+  const MAGASINS = useMagasins();
   const [form, setForm] = useState<FormState>({
     id: initial?.id,
     email: initial?.email || '',

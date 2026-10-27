@@ -36,6 +36,7 @@ const FORMATS_NUMERO = {
   vente_flash:        { prefixe: 'VF-', chiffres: 4, cleLocale: 'leclaire_counter_vente_flash' },
   recu:               { prefixe: '',    chiffres: 5, cleLocale: 'leclaire_counter_recu' },
   bon_commande_verre: { prefixe: '',    chiffres: 5, cleLocale: 'leclaire_counter_bcv' },
+  commande_verre:     { prefixe: 'CV-', chiffres: 4, cleLocale: 'leclaire_counter_commande_verre' },
 } as const;
 export type TypeNumero = keyof typeof FORMATS_NUMERO;
 

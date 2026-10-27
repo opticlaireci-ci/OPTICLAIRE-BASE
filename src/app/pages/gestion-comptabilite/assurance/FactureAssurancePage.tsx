@@ -3,19 +3,17 @@ import { useNavigate, useParams } from 'react-router';
 import { ArrowLeft, Calendar, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, Edit, Search, Store, X } from 'lucide-react';
 import { abonnerVentesMagasin, chargerVentes, readVentesCache, VenteSupabase } from '../../../services/ventesService';
 import { normaliserTotauxVente } from '../../../utils/venteTotals';
-import { getMagasins } from '../../../constants/magasins';
+import type { Magasin } from '../../../constants/magasins';
+import { useMagasins } from '../../../hooks/useMagasins';
 import { TENANT } from '../../../config/tenant';
 
 const COLORS = ['#2563eb', '#16a34a', '#d97706', '#7c3aed', '#1a7a96', '#dc2626', '#ea580c', '#ca8a04'];
-const allMagasins = getMagasins();
-const MAGASINS = allMagasins.map((magasin, index) => ({
+/** Cartes des magasins (liste à jour : un magasin ajouté apparaît aussitôt). */
+const cartesMagasins = (liste: Magasin[]) => liste.map((magasin, index) => ({
   id: magasin.id,
   label: magasin.label.replace(`${TENANT.nom} `, ''),
   color: COLORS[index % COLORS.length],
 }));
-
-const MAGASIN_LABELS: Record<string, string> = Object.fromEntries(MAGASINS.map(m => [m.id, m.label]));
-const MAGASIN_COLORS: Record<string, string> = Object.fromEntries(MAGASINS.map(m => [m.id, m.color]));
 
 interface BonAssuranceRow {
   rowId: string;
@@ -86,6 +84,8 @@ function readCachedBons(magasinId: string): BonAssuranceRow[] {
 
 export function FactureAssurancePage() {
   const navigate = useNavigate();
+  const listeMagasins = useMagasins();
+  const MAGASINS = useMemo(() => cartesMagasins(listeMagasins), [listeMagasins]);
   const [counts, setCounts] = useState<Record<string, number>>(() =>
     Object.fromEntries(MAGASINS.map(m => [m.id, readCachedBons(m.id).length]))
   );
@@ -103,7 +103,7 @@ export function FactureAssurancePage() {
       if (!cancelled) setCounts(Object.fromEntries(values));
     });
     return () => { cancelled = true; };
-  }, []);
+  }, [MAGASINS]);
 
   return (
     <div className="flex flex-col gap-6 p-6" style={{ backgroundColor: '#f0f4f6', minHeight: '100vh' }}>
@@ -143,8 +143,9 @@ export function FactureAssurancePage() {
 export function FactureAssuranceMagasinPage() {
   const navigate = useNavigate();
   const { magasinId = '' } = useParams<{ magasinId: string }>();
-  const label = MAGASIN_LABELS[magasinId] ?? magasinId.toUpperCase();
-  const color = MAGASIN_COLORS[magasinId] ?? '#1a7a96';
+  const carte = cartesMagasins(useMagasins()).find(m => m.id === magasinId);
+  const label = carte?.label ?? magasinId.toUpperCase();
+  const color = carte?.color ?? '#1a7a96';
 
   const [ventes, setVentes] = useState<VenteSupabase[]>(() => readVentesCache(magasinId));
   const [search, setSearch] = useState('');

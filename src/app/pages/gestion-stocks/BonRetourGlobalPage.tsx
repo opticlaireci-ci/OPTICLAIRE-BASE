@@ -2,7 +2,6 @@ import { getMagasinLabel as libelleMagasin } from '../../constants/magasins';
 import { logger } from '../../utils/logger';
 import { useState } from 'react';
 import { Search, CheckCircle, XCircle, Eye } from 'lucide-react';
-import { getMagasins } from '../../constants/magasins';
 import { useAuth } from '../../contexts/AuthContext';
 import { useBons } from '../../hooks/useBons';
 import { appliquerRetour } from '../../services/bonsStock';
@@ -24,7 +23,6 @@ interface BonRetour {
   motifRejet?: string;
 }
 
-const MAGASINS = getMagasins().map(magasin => magasin.label);
 
 // Nom officiel depuis la liste des magasins (tous les magasins, y compris
 // BOUAKÉ et YOPOUGON GANDI — l'ancienne liste écrite ici les oubliait).

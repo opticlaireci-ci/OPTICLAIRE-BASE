@@ -153,7 +153,8 @@ function installStorageOverrides() {
     originalRemoveItem(key);
     // Ne jamais envoyer de suppression Firebase pour les clés de session :
     // current_user et magasin_actuel sont gérés localement uniquement.
-    if (key.startsWith('leclaire_') && !key.includes('current_user') && !key.includes('magasin_actuel') && !key.includes('session')) {
+    // Liste des magasins : jamais supprimée du serveur depuis un appareil.
+    if (key.startsWith('leclaire_') && key !== 'leclaire_magasins' && !key.includes('current_user') && !key.includes('magasin_actuel') && !key.includes('session')) {
       import('./supabaseRealtime').then(({ saveToSupabase }) => {
         saveToSupabase(key, null, true).catch(err => {
           logger.error(`❌ Erreur suppression auto ${key}:`, err);
@@ -220,6 +221,9 @@ function pushLeclaireKeyToCloud(key: string, value: string) {
 
   if (key.startsWith('leclaire_') &&
       !estCleLocaleAppareil(key) &&
+      // Liste des magasins : envoyée seulement par synchroniserMagasins, qui
+      // fusionne avec le serveur (une copie incomplète n'écrase plus rien).
+      key !== 'leclaire_magasins' &&
       // Copies de tables (règlements, ventes…) : jamais recopiées dans app_data.
       !isStructuredKey(key) &&
       !key.includes('session') &&

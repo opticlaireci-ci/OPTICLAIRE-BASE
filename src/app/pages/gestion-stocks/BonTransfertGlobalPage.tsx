@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useMagasins } from '../../hooks/useMagasins';
 import { Search } from 'lucide-react';
 import { getMagasins } from '../../constants/magasins';
 import { useBons } from '../../hooks/useBons';
@@ -15,7 +16,6 @@ interface BonTransfert {
   dateTransfert: string;
 }
 
-const MAGASINS = getMagasins().map(magasin => magasin.label);
 const MAGASIN_LABEL = (id: string) => getMagasins().find(m => m.id.toUpperCase() === String(id || '').toUpperCase())?.label || String(id || '');
 
 const getStatutColor = (statut: string) => {
@@ -28,6 +28,7 @@ const getStatutColor = (statut: string) => {
 };
 
 export function BonTransfertGlobalPage() {
+  const MAGASINS = useMagasins().map(magasin => magasin.label);
   // Table `bons` : tous les transferts, enregistrés un par un (aucun ne disparaît).
   const { bons: bonsBruts, sauver } = useBons<BonTransfert>('transfert');
   const bons = bonsBruts.map((b: any) => ({

@@ -1,10 +1,9 @@
 import { useState } from 'react';
-import { getMagasins } from '../constants/magasins';
+import { useMagasins } from '../hooks/useMagasins';
 import { useLiveData } from '../hooks/useLiveData';
 import { AddButton } from '../components/AddButton';
 import { TENANT } from '../config/tenant';
 
-const MAGASINS = getMagasins();
 
 const JOURS = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
 const MOIS_LABELS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
@@ -42,6 +41,7 @@ function getFirstDayOfWeek(year: number, month: number) {
 
 // ── Calendar View (Image 1) ───────────────────────────────────────────────────
 function CalendarView({ onAjouter, onEdit }: { onAjouter: () => void; onEdit: (magasinId: string) => void }) {
+  const MAGASINS = useMagasins();
   const today = new Date();
   const [viewYear, setViewYear] = useState(today.getFullYear());
   const [viewMonth, setViewMonth] = useState(today.getMonth());
@@ -252,6 +252,7 @@ function CalendarView({ onAjouter, onEdit }: { onAjouter: () => void; onEdit: (m
 
 // ── Ajouter / Modifier View (Image 2) ─────────────────────────────────────────
 function AjouterView({ editMagasinId, onBack }: { editMagasinId?: string; onBack: () => void }) {
+  const MAGASINS = useMagasins();
   const today = new Date();
   const [emplois, setEmplois] = useLiveData<EmploiDuTemps>(LS_KEY, []);
   const existing = editMagasinId ? emplois.find(e => e.magasinId === editMagasinId) : undefined;

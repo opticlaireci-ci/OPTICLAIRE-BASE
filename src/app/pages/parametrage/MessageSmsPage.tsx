@@ -13,7 +13,6 @@ import {
 } from '../../services/smsService';
 import { setVisibleInterval, PAGE_POLL_MS } from '../../utils/visibleInterval';
 
-const MAGASIN_IDS = getAllMagasinIds();
 
 interface Client {
   id: string;
@@ -29,7 +28,7 @@ interface Client {
 
 function loadAllClients(): Client[] {
   const all: Client[] = [];
-  MAGASIN_IDS.forEach(id => {
+  getAllMagasinIds().forEach(id => {
     ['leclaire_clients_' + id, 'leclaire_clients_magasin_' + id].forEach(key => {
       try {
         const data = JSON.parse(localStorage.getItem(key) || '[]');

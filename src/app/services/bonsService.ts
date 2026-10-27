@@ -29,14 +29,21 @@ export interface BonRow {
   updated_at?: string;
 }
 
+/**
+ * Types de bons gérés par les listes de bons (stock, commandes fournisseurs).
+ * Les commandes de verre et leurs ordonnances (photos, PDF) partagent la table
+ * `bons` : elles ne doivent jamais être téléchargées avec les autres bons.
+ */
+export const TYPES_BONS: BonType[] = ['distribution', 'transfert', 'retour', 'commande', 'livraison', 'peremption'];
+
 export async function chargerBons(magasinIds: string[]): Promise<BonRow[]> {
   if (!magasinIds.length) return [];
   const ids = magasinIds.map(s => s.toUpperCase());
   try {
     // Firestore ne supporte pas OR natif cross-champs — deux requêtes fusionnées
     const [snapSrc, snapDst] = await Promise.all([
-      getDocs(query(collection(db, 'bons'), where('magasin_source', 'in', ids))),
-      getDocs(query(collection(db, 'bons'), where('magasin_destination', 'in', ids))),
+      getDocs(query(collection(db, 'bons'), where('type', 'in', TYPES_BONS), where('magasin_source', 'in', ids))),
+      getDocs(query(collection(db, 'bons'), where('type', 'in', TYPES_BONS), where('magasin_destination', 'in', ids))),
     ]);
     const seen = new Set<string>();
     const results: BonRow[] = [];
@@ -66,8 +73,8 @@ export async function lireBonsTable(type: BonType, magasinIds?: string[]): Promi
   if (magasinIds && magasinIds.length) {
     const ids = magasinIds.map(s => s.toUpperCase());
     const [snapSrc, snapDst] = await Promise.all([
-      getDocs(query(collection(db, 'bons'), where('magasin_source', 'in', ids))),
-      getDocs(query(collection(db, 'bons'), where('magasin_destination', 'in', ids))),
+      getDocs(query(collection(db, 'bons'), where('type', '==', type), where('magasin_source', 'in', ids))),
+      getDocs(query(collection(db, 'bons'), where('type', '==', type), where('magasin_destination', 'in', ids))),
     ]);
     const parId = new Map<string, BonRow>();
     for (const snap of [snapSrc, snapDst]) snap.docs.forEach(d => parId.set(d.id, { id: d.id, ...d.data() } as BonRow));

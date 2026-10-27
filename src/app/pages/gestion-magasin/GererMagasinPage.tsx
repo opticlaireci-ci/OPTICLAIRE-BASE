@@ -1,9 +1,9 @@
 import { logger } from '../../utils/logger';
 import { useState, useEffect, useMemo } from 'react';
+import { useMagasins } from '../../hooks/useMagasins';
 import { useNavigate, useSearchParams } from 'react-router';
 import { Store, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, X } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { getMagasins } from '../../constants/magasins';
 import { chargerVentes, readVentesCache, type VenteSupabase } from '../../services/ventesService';
 import { setVisibleInterval, PAGE_POLL_MS } from '../../utils/visibleInterval';
 
@@ -35,7 +35,6 @@ interface Vente {
   restant?: number;
 }
 
-const MAGASINS = getMagasins();
 
 const MOIS = [
   { value: 'Janvier', label: 'Janvier' },
@@ -53,6 +52,7 @@ const MOIS = [
 ];
 
 export function GererMagasinPage() {
+  const MAGASINS = useMagasins();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const magasinId = searchParams.get('magasin') || 'abobo';

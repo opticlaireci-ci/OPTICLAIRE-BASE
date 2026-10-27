@@ -10,6 +10,18 @@ import { onAuthStateChanged } from '../utils/authCompat';
 import { logNetworkAware } from '../utils/networkErrors';
 import { isStructuredKey } from './structuredKeys';
 
+/**
+ * Liste des magasins : jamais recopiée telle quelle dans un sens ni dans
+ * l'autre (une copie incomplète remplaçait l'autre : « 12 magasins puis 9 »).
+ * Elle passe par synchroniserMagasins, qui fusionne sans rien perdre.
+ */
+const CLE_MAGASINS = 'leclaire_magasins';
+function synchroniserListeMagasins() {
+  import('./supabaseRealtime')
+    .then(({ synchroniserMagasins }) => synchroniserMagasins())
+    .catch(err => logNetworkAware('⚠️ Synchronisation des magasins', err));
+}
+
 export type SyncStatus = 'idle' | 'syncing' | 'synced' | 'error';
 
 const MIGRATION_KEY = 'leclaire_sync_v5_cloud_first_migrated';
@@ -29,6 +41,7 @@ export async function pushAllToCloud(): Promise<{ success: boolean; count: numbe
       const key = localStorage.key(i);
       if (!key?.startsWith('leclaire_')) continue;
       if (key.includes('session') || key.includes('current_user') || key === MIGRATION_KEY) continue;
+      if (key === CLE_MAGASINS) continue;
       // Caches de données vivant dans leurs propres tables (ventes, clients…) :
       // ne pas les recopier dans app_data (doublon inutile et volumineux).
       if (isStructuredKey(key)) continue;
@@ -44,6 +57,7 @@ export async function pushAllToCloud(): Promise<{ success: boolean; count: numbe
         count++;
       }
     }
+    synchroniserListeMagasins();
     logger.log(`✅ Push cloud: ${count} clés envoyées`);
     return { success: true, count };
   } catch (err) {
@@ -71,12 +85,14 @@ export async function pullFromCloud(): Promise<{ success: boolean; count: number
     const receivedKeys = new Set<string>();
     let count = 0;
     let skipped = 0;
+    let magasinsRecus = false;
 
     snap.docs.forEach(d => {
       const data = d.data();
       const key = data.key || d.id;
       if (!key) return;
       if (isStructuredKey(key)) { skipped++; return; }
+      if (key === CLE_MAGASINS) { magasinsRecus = true; return; }
       try {
         const newValue = JSON.stringify(data.value);
         if (localStorage.getItem(key) === newValue) return;
@@ -92,6 +108,7 @@ export async function pullFromCloud(): Promise<{ success: boolean; count: number
       }
     });
 
+    if (magasinsRecus) synchroniserListeMagasins();
     if (skipped > 0) logger.log(`🛡️ ${skipped} clés structurées préservées`);
     logger.log(`✅ Pull cloud: ${count} clés chargées`);
 
@@ -138,6 +155,7 @@ export function startAutoSync(
             if (key.includes('session') || key.includes('current_user')) continue;
             if (receivedKeys.has(key)) continue;
             if (isStructuredKey(key)) continue;
+            if (key === CLE_MAGASINS) continue;
             const raw = localStorage.getItem(key);
             if (!raw) continue;
             try {

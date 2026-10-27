@@ -1,14 +1,19 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useLibellesMagasins, useNomsCourtsMagasins } from '../hooks/useMagasins';
 import { Search, ChevronLeft, ChevronRight, X, Trash2, Pencil, Save, Download, Printer } from 'lucide-react';
-import { getMagasins } from '../constants/magasins';
 import { useLiveData } from '../hooks/useLiveData';
 import { pdfHeader } from '../utils/documentHeader';
 import { AtelierMontageTab } from './AtelierMontageTab';
 import type { SubTab } from './AtelierMontageTab';
-import { TENANT } from '../config/tenant';
 
 import { afficherPdfBlob } from '../utils/inAppViewer';
-type TabType = 'bon-verre' | 'fournisseur' | 'montage';
+import { useParams, useSearchParams } from 'react-router';
+import { useAuth } from '../contexts/AuthContext';
+import { CommandeVerreTab, type SousOngletVerre } from './CommandeVerreTab';
+type TabType = 'commande-verre' | 'bon-verre' | 'fournisseur' | 'montage';
+
+/** Atelier complet (bons de verre, fournisseurs, montage) : monteurs et administration. */
+const ROLES_ATELIER_COMPLET = ['super_admin', 'admin', 'administrateur', 'monteur', 'assistante_admin'];
 
 interface BonCommande {
   id: string;
@@ -36,9 +41,6 @@ interface BonCommande {
 }
 
 const LS_KEY = 'leclaire_bons_commande_verres';
-const allMagasins = getMagasins();
-const OFFICINES = allMagasins.map(magasin => magasin.label);
-const MAGASINS = allMagasins.map(magasin => magasin.label.replace(`${TENANT.nom} `, ''));
 const ANNEES = ['2024', '2025', '2026'];
 const ITEMS_PER_PAGE = 20;
 
@@ -65,7 +67,21 @@ const formatDate = (dateStr?: string): string => {
 };
 
 export function AtelierPage() {
-  const [activeTab, setActiveTab] = useState<TabType>('bon-verre');
+  const OFFICINES = useLibellesMagasins();
+  const MAGASINS = useNomsCourtsMagasins();
+  const { user } = useAuth();
+  // Atelier ouvert depuis un magasin (/magasin/:id/atelier) ou depuis le
+  // tableau de bord général (/atelier).
+  const { magasinId: magasinPage } = useParams();
+  const [searchParams] = useSearchParams();
+  // Conseillères, opticiens… : seulement « Commande de verre » dans l'Atelier
+  // d'un magasin ; le reste de l'Atelier reste réservé (montage, bons de verre).
+  const atelierComplet = !magasinPage
+    || ROLES_ATELIER_COMPLET.includes(user?.role || '')
+    || (user?.menuAccess || []).includes('/atelier');
+  const [activeTab, setActiveTab] = useState<TabType>(() =>
+    !atelierComplet || searchParams.get('onglet') === 'commande-verre' ? 'commande-verre' : 'bon-verre');
+  const sousOngletVerre = (['passer', 'reception'] as const).find(s => s === searchParams.get('sous')) as SousOngletVerre | undefined;
   const [montageSubTab, setMontageSubTab] = useState<SubTab>('dashboard');
   const [yearFilter, setYearFilter] = useState('2026');
   const [officineFilter, setOfficineFilter] = useState('');
@@ -290,6 +306,7 @@ export function AtelierPage() {
         {/* Left Sidebar - Tabs */}
         <div style={{ width: '300px' }}>
           <div style={{ backgroundColor: '#fff', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+            {activeTab !== 'commande-verre' && (<>
             <div style={{ padding: '12px', backgroundColor: '#f3f4f6', borderBottom: '1px solid #e5e7eb' }}>
               <select
                 value={officineFilter}
@@ -317,7 +334,27 @@ export function AtelierPage() {
               </select>
             </div>
 
-            <div style={{ display: 'flex', borderBottom: '1px solid #e5e7eb' }}>
+            </>)}
+
+            <div style={{ display: 'flex', flexWrap: 'wrap', borderBottom: '1px solid #e5e7eb' }}>
+              <button
+                onClick={() => setActiveTab('commande-verre')}
+                data-testid="onglet-commande-verre"
+                style={{
+                  flex: '1 1 100%',
+                  padding: '12px',
+                  border: 'none',
+                  backgroundColor: activeTab === 'commande-verre' ? '#fff' : '#eef2ff',
+                  borderBottom: activeTab === 'commande-verre' ? '2px solid #2563eb' : '1px solid #e5e7eb',
+                  fontWeight: 700,
+                  color: '#1e3a8a',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                }}
+              >
+                👓 Commande de verre
+              </button>
+              {atelierComplet && (<>
               <button
                 onClick={() => setActiveTab('bon-verre')}
                 style={{
@@ -363,8 +400,10 @@ export function AtelierPage() {
               >
                 Montage
               </button>
+              </>)}
             </div>
 
+            {activeTab !== 'commande-verre' && (
             <div style={{ padding: '20px' }}>
               {/* Total Commandes */}
               <div style={{ marginBottom: '20px', textAlign: 'center' }}>
@@ -433,11 +472,28 @@ export function AtelierPage() {
                 <div style={{ fontSize: '14px', color: '#6b7280' }}>15 Jour</div>
               </div>
             </div>
+            )}
           </div>
         </div>
 
+        {/* Commande de verre : les trois étapes, à droite des onglets */}
+        {activeTab === 'commande-verre' && (
+          <div style={{ flex: 1, minWidth: '260px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+            {[
+              ['1', 'Passer commande', 'Le magasin saisit les verres du client, joint son ordonnance et clique sur COMMANDER.', '#2563eb'],
+              ['2', 'Confirmation', "L'assistante administrative confirme dans « Réception commande » : le magasin voit « En attente ».", '#ea580c'],
+              ['3', 'Verre arrivé', "Elle clique sur VERRE ARRIVÉ : le magasin voit « Commande arrivée », reçoit un message et l'icône clignote en haut.", '#16a34a'],
+            ].map(([n, titre, texte, couleur]) => (
+              <div key={n} style={{ backgroundColor: '#fff', borderRadius: '8px', padding: '14px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', borderTop: `4px solid ${couleur}` }}>
+                <div style={{ fontWeight: 800, color: couleur, fontSize: '14px', marginBottom: '6px' }}>{n}. {titre}</div>
+                <div style={{ fontSize: '13px', color: '#374151', lineHeight: 1.45 }}>{texte}</div>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* Right Content - Statistics (masqué en mode Montage) */}
-        {activeTab !== 'montage' && (
+        {activeTab !== 'montage' && activeTab !== 'commande-verre' && (
         <div style={{ flex: 1 }}>
           {/* DATE ÉDITION < > DATE RÉCUPÉRATION */}
           <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '8px', marginBottom: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
@@ -536,6 +592,11 @@ export function AtelierPage() {
         )}
       </div>
 
+      {/* Commande de verre : passer commande / réception commande, en pleine largeur */}
+      {activeTab === 'commande-verre' && (
+        <CommandeVerreTab magasinId={magasinPage} sousOngletInitial={sousOngletVerre} />
+      )}
+
       {/* Sous-onglet MONTAGE — graphiques + tableaux en pleine largeur sous la barre latérale */}
       {activeTab === 'montage' && (
         <div style={{ marginTop: '16px' }}>
@@ -550,7 +611,7 @@ export function AtelierPage() {
       )}
 
       {/* Table Section (masquée en mode Montage) */}
-      {activeTab !== 'montage' && (
+      {activeTab !== 'montage' && activeTab !== 'commande-verre' && (
       <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
         <h2 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '16px' }}>
           Bons de Commande Verre ({filteredBons.length})

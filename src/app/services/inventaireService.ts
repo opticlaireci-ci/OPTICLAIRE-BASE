@@ -73,7 +73,8 @@ async function lireMouvementsEtBons(): Promise<{ mouvements: MouvementBrut[]; bo
   if (parFonction) return parFonction;
   const [snapM, bons] = await Promise.all([
     getDocs(collection(db, 'mouvements_stock')),
-    getDocs(collection(db, 'bons'))
+    // Seuls les bons qui touchent le stock (pas les commandes de verre ni leurs ordonnances).
+    getDocs(query(collection(db, 'bons'), where('type', 'in', ['distribution', 'transfert', 'retour'])))
       .then((snap: any) => snap.docs.map((d: any) => ({ id: d.id, ...(d.data() || {}) })))
       .catch((err: any) => { logger.warn('Impossible de lire les bons pour le stock:', err); return []; }),
   ]);

@@ -3,12 +3,12 @@ import { Search, X, Plus, Edit, Trash2, Calendar } from 'lucide-react';
 import { addCreateAudit, addUpdateAudit, formatDate, AuditInfo } from '../../../utils/auditUtils';
 import { useLiveData } from '../../../hooks/useLiveData';
 import { AddButton } from '../../../components/AddButton';
-import { TENANT, libellesMagasins } from '../../../config/tenant';
+import { useLibellesMagasins } from '../../../hooks/useMagasins';
+import { TENANT } from '../../../config/tenant';
 
 const genRef = () => String(Date.now()).slice(-5).padStart(5, '0');
 
 // Direction + tous les magasins configurés (voir src/app/config/tenant.ts).
-const OFFICINES = [TENANT.nom, ...libellesMagasins()];
 const FOURNISSEURS = ['BBGR', 'ESSILOR', 'HOYA', 'NIKON', 'ZEISS', 'RODENSTOCK'];
 const ANNEES = ['2024', '2025', '2026'];
 
@@ -19,6 +19,7 @@ interface Releve extends AuditInfo {
 }
 
 function NouveauReleve({ initial, onSave, onClose }: { initial?: Releve; onSave: (r: Releve) => void; onClose: () => void }) {
+  const OFFICINES = [TENANT.nom, ...useLibellesMagasins()];
   const [form, setForm] = useState<Releve>(initial ?? {
     id: Date.now().toString(), reference: genRef(), officine: TENANT.nom,
     fournisseur: '', edition: new Date().toISOString().slice(0, 10),
@@ -109,6 +110,7 @@ function FilterBar({ officine, setOfficine, fournisseur, setFournisseur, numRele
   officine: string; setOfficine: (v: string) => void; fournisseur: string; setFournisseur: (v: string) => void;
   numReleve: string; setNumReleve: (v: string) => void; date: string; setDate: (v: string) => void; onSearch: () => void;
 }) {
+  const OFFICINES = [TENANT.nom, ...useLibellesMagasins()];
   return (
     <div className="flex items-end gap-2 flex-wrap">
       <div className="flex flex-col gap-0.5">

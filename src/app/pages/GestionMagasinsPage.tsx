@@ -3,9 +3,9 @@ import { AddButton } from '../components/AddButton';
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { Plus, Edit2, Trash2, X, Save, ArrowLeft, Database } from 'lucide-react';
-import { getMagasins, saveMagasins, addMagasin, updateMagasin, deleteMagasin, type Magasin } from '../constants/magasins';
-import { TENANT, libellesMagasins } from '../config/tenant';
-import { subscribeToChanges, saveToSupabase } from '../services/supabaseRealtime';
+import { getMagasins, addMagasin, updateMagasin, deleteMagasin, EVENEMENT_MAGASINS, type Magasin } from '../constants/magasins';
+import { TENANT } from '../config/tenant';
+import { subscribeToChanges, synchroniserMagasins } from '../services/supabaseRealtime';
 import { getValidAccessToken } from '../utils/supabaseClient';
 
 export function GestionMagasinsPage() {
@@ -24,6 +24,8 @@ export function GestionMagasinsPage() {
 
   useEffect(() => {
     chargerMagasins();
+    // Liste du serveur fusionnée avec celle de ce poste (aucun magasin perdu).
+    synchroniserMagasins().catch(err => logger.warn('Synchronisation des magasins impossible:', err)).finally(chargerMagasins);
 
     // Rafraîchir la liste en temps réel : un magasin ajouté/modifié/supprimé sur
     // un AUTRE navigateur est poussé vers Supabase, puis récupéré par le polling.
@@ -37,8 +39,10 @@ export function GestionMagasinsPage() {
     window.addEventListener('storage', onStorage);
     window.addEventListener('leclaire-sync-update', onSync as EventListener);
     window.addEventListener('supabase-realtime-update', onSync as EventListener);
+    window.addEventListener(EVENEMENT_MAGASINS, onSync);
     return () => {
       unsub();
+      window.removeEventListener(EVENEMENT_MAGASINS, onSync);
       window.removeEventListener('storage', onStorage);
       window.removeEventListener('leclaire-sync-update', onSync as EventListener);
       window.removeEventListener('supabase-realtime-update', onSync as EventListener);
@@ -92,7 +96,7 @@ export function GestionMagasinsPage() {
     // durable sur tous les appareils et après reconnexion.
     try {
       const token = await getValidAccessToken();
-      if (token) await saveToSupabase('leclaire_magasins', getMagasins(), true);
+      if (token) await synchroniserMagasins();
     } catch (err) {
       logger.error('❌ Échec synchronisation après suppression magasin:', err);
       alert('⚠️ Magasin supprimé localement, mais la synchronisation cloud a échoué. La liste sera réessayée automatiquement.');
@@ -110,8 +114,18 @@ export function GestionMagasinsPage() {
       updateMagasin(editingId, form);
     } else {
       // Ajout
+      // Identifiant utilisable dans l'adresse : minuscules, sans accents ni espaces.
+      const fiche = {
+        ...form,
+        id: String(form.id).normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+          .trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''),
+      } as Magasin;
+      if (!fiche.id) {
+        alert('Identifiant du magasin invalide : utilisez des lettres et des chiffres.');
+        return;
+      }
       // Vérifier que l'ID n'existe pas déjà
-      if (magasins.some(magasin => magasin.id === form.id)) {
+      if (getMagasins().some(magasin => magasin.id.toLowerCase() === fiche.id)) {
         alert('Un magasin avec cet ID existe déjà !');
         return;
       }
@@ -119,7 +133,7 @@ export function GestionMagasinsPage() {
       // Ajouter le magasin. Si la persistance échoue (ex. quota localStorage
       // saturé), on remonte une VRAIE erreur au lieu d'un faux « succès ».
       try {
-        addMagasin(form as Magasin);
+        addMagasin(fiche);
       } catch (err) {
         logger.error('❌ Échec sauvegarde magasin:', err);
         alert(
@@ -132,7 +146,7 @@ export function GestionMagasinsPage() {
       }
 
       // Initialiser les clés localStorage pour ce nouveau magasin
-      const magasinId = form.id;
+      const magasinId = fiche.id;
 
       // 1. Créer les clés vides pour données spécifiques au magasin
       const clesVides = [
@@ -210,8 +224,9 @@ export function GestionMagasinsPage() {
     }
 
     try {
-      // Push explicite de la liste complète + attente de la réponse serveur.
-      await saveToSupabase('leclaire_magasins', getMagasins(), true);
+      // Liste du serveur relue et fusionnée avec celle de ce poste, puis
+      // enregistrée : un magasin ajouté ailleurs n'est jamais écrasé.
+      await synchroniserMagasins();
       alert(`✅ Magasin "${nomMag}" ${etaitModif ? 'modifié' : 'créé'} et synchronisé sur tous les appareils.`);
     } catch (err) {
       logger.error('❌ Échec synchronisation cloud du magasin:', err);
@@ -291,7 +306,7 @@ export function GestionMagasinsPage() {
                   type="text"
                   value={form.label}
                   onChange={(e) => setForm({ ...form, label: e.target.value })}
-                  placeholder={`ex: ${libellesMagasins()[0] ?? TENANT.nom}`}
+                  placeholder={`ex: ${magasins[0]?.label ?? TENANT.nom}`}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
@@ -452,7 +467,8 @@ export function GestionMagasinsPage() {
       </div>
 
       {/* Mobile cards */}
-      <div className="md:hidden" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {/* `display` en style écrasait `md:hidden` : les fiches s'affichaient aussi sur ordinateur. */}
+      <div className="md:hidden flex flex-col gap-2">
         {magasins.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '48px 0', color: '#6b7280', background: 'white', borderRadius: 8 }}>
             Aucun magasin enregistré
@@ -501,7 +517,7 @@ export function GestionMagasinsPage() {
       <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
         <h3 className="font-semibold text-blue-900 mb-2">💡 Information</h3>
         <ul className="text-sm text-blue-800 space-y-1">
-          <li>• Les magasins sont stockés dans le navigateur (localStorage)</li>
+          <li>• La liste des magasins est enregistrée sur le serveur et partagée par tous les appareils ; un magasin ajouté n'en disparaît plus (seule une suppression ici le retire)</li>
           <li>• L'ID du magasin est utilisé dans les URLs et ne peut pas être modifié après création</li>
           <li>• Le nom du magasin s'affiche dans l'interface</li>
           <li>• Les magasins actifs sont visibles dans l'espace administrateur</li>

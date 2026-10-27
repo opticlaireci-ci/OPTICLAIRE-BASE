@@ -1,5 +1,5 @@
 import { logger } from '../../utils/logger';
-import { useState, useEffect } from 'react';
+import { useEffect } from 'react';
 import {
   Box,
   Typography,
@@ -7,90 +7,26 @@ import {
   Card,
   CardContent,
   CardActionArea,
-  CircularProgress,
 } from '@mui/material';
 import { Store } from '@mui/icons-material';
 import { useNavigate } from 'react-router';
-import { getMagasins, saveMagasins, type Magasin } from '../../constants/magasins';
-import { loadFromSupabase, subscribeToChanges } from '../../services/supabaseRealtime';
+import { synchroniserMagasins } from '../../services/supabaseRealtime';
+import { useMagasins } from '../../hooks/useMagasins';
 const GridAny = Grid as any;
 
 export function SelectMagasinPage() {
   const navigate = useNavigate();
-  const [magasins, setMagasins] = useState<Magasin[]>(() => getMagasins());
-  const [loading, setLoading] = useState<boolean>(false);
+  // Une seule source : le registre des magasins (copie locale fusionnée avec le
+  // serveur, sans jamais perdre un magasin), tenu à jour par useMagasins.
+  const magasins = useMagasins();
 
   useEffect(() => {
-    let mounted = true;
-
-    const appliquerMagasins = (liste: Magasin[]) => {
-      // Une seule source logique : le registre local enrichi par le cloud.
-      // Toujours fusionner avec les magasins par défaut : un snapshot cloud
-      // ancien/incomplet ne doit jamais faire disparaître des magasins.
-      const local = getMagasins();
-      const sources = [local, Array.isArray(liste) ? liste : []];
-      const uniques = Array.from(
-        new Map(
-          sources.flat()
-            .filter(m => m && m.id)
-            .map(m => [String(m.id).trim().toLowerCase(), m]),
-        ).values(),
-      );
-      if (mounted) setMagasins(uniques);
-      if (uniques.length > 0) {
-        try { saveMagasins(uniques); } catch { /* cache local non bloquant */ }
-      }
-    };
-
-    const chargerDepuisCloud = async () => {
-      try {
-        // IMPORTANT : ne plus lire la collection `magasins`, qui était différente
-        // du registre utilisé par GestionMagasinsPage. Cette double source causait
-        // l'affichage intermittent de 7 ou 9 magasins selon le navigateur.
-        const cloud = await loadFromSupabase<Magasin>('leclaire_magasins', []);
-        const local = getMagasins();
-        const parId = new Map<string, Magasin>();
-        for (const m of local) if (m?.id) parId.set(String(m.id).trim().toLowerCase(), m);
-        for (const m of cloud) if (m?.id) parId.set(String(m.id).trim().toLowerCase(), m);
-        appliquerMagasins(Array.from(parId.values()));
-      } catch (error) {
-        logger.error('Erreur chargement magasins cloud:', error);
-        if (mounted) appliquerMagasins(getMagasins());
-      }
-    };
-
-    chargerDepuisCloud();
-    const unsub = subscribeToChanges('leclaire_magasins', (value) => {
-      if (Array.isArray(value)) appliquerMagasins(value);
-    });
-    const onStorage = (e: StorageEvent) => {
-      if (e.key === 'leclaire_magasins') appliquerMagasins(getMagasins());
-    };
-    const onSync = () => appliquerMagasins(getMagasins());
-    window.addEventListener('storage', onStorage);
-    window.addEventListener('supabase-realtime-update', onSync as EventListener);
-    window.addEventListener('leclaire-sync-update', onSync as EventListener);
-
-    return () => {
-      mounted = false;
-      unsub();
-      window.removeEventListener('storage', onStorage);
-      window.removeEventListener('supabase-realtime-update', onSync as EventListener);
-      window.removeEventListener('leclaire-sync-update', onSync as EventListener);
-    };
+    synchroniserMagasins().catch(error => logger.warn('Synchronisation des magasins impossible:', error));
   }, []);
 
   const handleSelectMagasin = (magasinId: string) => {
     navigate(`/magasin/${magasinId}/dashboard`);
   };
-
-  if (loading) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
-        <CircularProgress />
-      </Box>
-    );
-  }
 
   return (
     <Box>

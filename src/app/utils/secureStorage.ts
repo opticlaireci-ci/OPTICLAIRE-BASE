@@ -17,11 +17,15 @@ import { clesCacheSecours } from './cacheSecours';
  */
 /**
  * Jamais purgé à la déconnexion : les écritures pas encore envoyées au serveur
- * (une vente saisie hors ligne serait perdue si la session expire) et les
- * compteurs de numérotation (n° de reçu).
+ * (une vente saisie hors ligne serait perdue si la session expire), les
+ * compteurs de numérotation (n° de reçu), la liste des magasins et l'identité
+ * de l'enseigne.
  */
 function aConserver(cle: string): boolean {
-  return cle === 'leclaire_pending_cloud_writes_v2' || cle.startsWith('leclaire_counter_');
+  return cle === 'leclaire_pending_cloud_writes_v2' || cle.startsWith('leclaire_counter_')
+    // Liste des magasins et identité de l'enseigne : aucune donnée personnelle.
+    // Effacées, l'application repartait sur les 9 magasins de départ.
+    || cle === 'leclaire_magasins' || cle === 'leclaire_tenant_config';
 }
 
 export function purgeBusinessCaches(): void {

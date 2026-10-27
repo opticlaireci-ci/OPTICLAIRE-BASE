@@ -1,6 +1,7 @@
 import { logger } from '../../utils/logger';
 import { AddButton } from '../../components/AddButton';
 import { useEffect, useState } from 'react';
+import { useMagasins } from '../../hooks/useMagasins';
 import { Search, Trash2, Edit2 } from 'lucide-react';
 import { addCreateAudit, addUpdateAudit, formatDate, resolveUserName, AuditInfo } from '../../utils/auditUtils';
 import { getMagasins } from '../../constants/magasins';
@@ -31,7 +32,6 @@ interface BonDistribution extends AuditInfo {
   dateCreation: string;
 }
 
-const MAGASINS = getMagasins().map(magasin => magasin.label);
 const MAGASIN_LABEL = (id: string) => getMagasins().find(m => m.id.toUpperCase() === String(id || '').toUpperCase())?.label || String(id || '');
 
 /** Numéro suivant (00001, 00002…) : deux bons ne portent plus le même numéro. */
@@ -53,6 +53,7 @@ const getStatutColor = (statut: string) => {
 };
 
 export function BonDistributionGlobalPage() {
+  const MAGASINS = useMagasins().map(magasin => magasin.label);
   // Table `bons` : chaque bon est lu et enregistré séparément (plus jamais de
   // liste écrasée : toutes les distributions restent visibles).
   const { bons: bonsBruts, sauver, supprimer } = useBons<BonDistribution>('distribution');

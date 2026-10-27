@@ -1,9 +1,9 @@
 import { logger } from '../../utils/logger';
 import { AddButton } from '../../components/AddButton';
 import { useState, useEffect, useRef } from 'react';
+import { useMagasins } from '../../hooks/useMagasins';
 import { Search, Save, ChevronDown, X, Pencil, Printer, Package, Trash2 } from 'lucide-react';
 import { addCreateAudit, addUpdateAudit, formatDate, formatAuditInfo, logDeletion, showAuditNotification, AuditInfo } from '../../utils/auditUtils';
-import { getMagasins } from '../../constants/magasins';
 import { replaceInventaires, chargerInventaires, rowToInventaire } from '../../services/inventairesService';
 import { loadStockMagasin, readStockCache, enregistrerInventaire, annulerInventaire, type StockMagasin } from '../../services/inventaireService';
 import { safeUuid } from '../../utils/safeId';
@@ -30,7 +30,6 @@ interface Inventaire extends AuditInfo {
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
-const ALL_MAGASINS = getMagasins();
 
 function magasinLabel(label: string) {
   return nomMagasin(label);
@@ -49,6 +48,7 @@ function formatDateFR(iso: string) {
 // ─── main component ──────────────────────────────────────────────────────────
 
 export function InventairePage() {
+  const ALL_MAGASINS = useMagasins();
   const [inventaires, setInventaires] = useState<Inventaire[]>([]);
 
   // Garde-fous contre la boucle de chargement (anti-rafale + anti-concurrence)

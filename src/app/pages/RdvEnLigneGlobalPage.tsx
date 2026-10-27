@@ -6,7 +6,7 @@ import { addUpdateAudit, formatDate, AuditInfo } from '../utils/auditUtils';
 import { doc, onSnapshot, setDoc } from '../utils/firestoreCompat';
 import { db } from '../utils/firebaseClient';
 import { TENANT } from '../config/tenant';
-import { getAllMagasinIds } from '../constants/magasins';
+import { useMagasins } from '../hooks/useMagasins';
 
 // ── types ─────────────────────────────────────────────────────────────────────
 interface RdvEnLigne extends AuditInfo {
@@ -22,7 +22,6 @@ interface RdvEnLigne extends AuditInfo {
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
-const MAGASIN_IDS = getAllMagasinIds();
 const LS_KEY = (id: string) => `leclaire_rdv_enligne_${id}`;
 const genRef = () => `RDV-${Date.now().toString().slice(-5)}`;
 
@@ -164,6 +163,9 @@ function FilterBar({
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 export function RdvEnLigneGlobalPage() {
+  // Magasins à jour : un magasin ajouté est suivi sans recharger l'application.
+  const magasins = useMagasins();
+  const MAGASIN_IDS = useMemo(() => magasins.map(m => m.id), [magasins]);
   // Données live par magasin (source de vérité Firestore, partagée entre navigateurs).
   const [byMagasin, setByMagasin] = useState<Record<string, RdvEnLigne[]>>({});
 
@@ -179,7 +181,7 @@ export function RdvEnLigneGlobalPage() {
       ),
     );
     return () => unsubs.forEach(u => u());
-  }, []);
+  }, [MAGASIN_IDS]);
 
   // Aplatit + ajoute le libellé magasin pour l'affichage.
   const rdvs = useMemo(() => {
@@ -190,7 +192,7 @@ export function RdvEnLigneGlobalPage() {
       });
     });
     return list;
-  }, [byMagasin]);
+  }, [byMagasin, MAGASIN_IDS]);
 
   const [infos, setInfos] = useState('');
   const [date, setDate] = useState('');

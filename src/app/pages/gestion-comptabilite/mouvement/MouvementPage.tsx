@@ -2,8 +2,9 @@ import { logger } from '../../../utils/logger';
 import { useState, useEffect } from 'react';
 import { Search, X, Edit, Trash2, Calendar, Download } from 'lucide-react';
 import { addCreateAudit, addUpdateAudit, formatDate, AuditInfo } from '../../../utils/auditUtils';
-import { getMagasins } from '../../../constants/magasins';
 import { useLiveData } from '../../../hooks/useLiveData';
+import { useNomsCourtsMagasins } from '../../../hooks/useMagasins';
+import { getMagasins } from '../../../constants/magasins';
 import { AddButton } from '../../../components/AddButton';
 import { useAuth } from '../../../contexts/AuthContext';
 import { hasPermission } from '../../../utils/permissions';
@@ -13,7 +14,6 @@ import { setVisibleInterval, PAGE_POLL_MS } from '../../../utils/visibleInterval
 
 const genRef = () => String(Date.now()).slice(-5).padStart(5, '0');
 
-const MAGASINS = getMagasins().map(magasin => magasin.label.replace(`${TENANT.nom} `, ''));
 const BENEFICIAIRES = ['BÉNÉFICIAIRE A', 'BÉNÉFICIAIRE B', 'CAISSE', 'FOURNISSEUR', 'AUTRE'];
 const TYPES = ['Entrée', 'Sortie'];
 const NATURES = ['Vente', 'Achat', 'Remboursement', 'Avance', 'Règlement', 'Autre'];
@@ -39,6 +39,7 @@ function ordreArriveeMvt(list: Mouvement[]): Mouvement[] {
 
 // ── Ajouter Mouvement modal (Image 8) ─────────────────────────────────────────
 function AjouterMouvement({ initial, onSave, onClose }: { initial?: Mouvement; onSave: (m: Mouvement) => void; onClose: () => void }) {
+  const MAGASINS = useNomsCourtsMagasins();
   const now = new Date();
   const [form, setForm] = useState<Mouvement>(initial ?? {
     id: Date.now().toString(), reference: genRef(), magasin: '',

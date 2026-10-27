@@ -17,6 +17,7 @@ import { isStructuredKey } from './structuredKeys';
 import { logNetworkAware, isAuthError, isNoSessionError, isPermissionError } from '../utils/networkErrors';
 import { getValidAccessToken } from '../utils/supabaseClient';
 import { subscribeEntityChanges, onLiveStatusChange, isLive, SLOW_POLL_MS } from '../utils/supabaseLive';
+import { fusionnerMagasins, lireRegistreMagasins, saveMagasins, EVENEMENT_MAGASINS } from '../constants/magasins';
 
 const APP_DATA = 'app_data';
 
@@ -27,12 +28,17 @@ const deleteDeniedWarned = new Set<string>();
 /** Cadence de repli quand le canal temps réel `app_data` n'est pas connecté. */
 const FAST_POLL_MS = 15_000;
 
-// Clé de la liste des magasins : cas particulier. Elle est modifiable hors-ligne
-// (ajout d'un magasin) et son push cloud peut échouer/traîner. Un simple écrasement
-// par la copie cloud (potentiellement périmée) ferait DISPARAÎTRE au rechargement
-// un magasin ajouté localement. On FUSIONNE donc cloud + local (union par id) :
-// - un magasin ajouté localement (pas encore poussé) est conservé ;
-// - un magasin ajouté sur un autre appareil apparaît aussi.
+// Clé de la liste des magasins : cas particulier. La liste est la même pour
+// tout le réseau, mais chaque appareil en garde une copie. Avant, la copie d'un
+// appareil remplaçait celle du serveur à chaque écriture : un appareil resté sur
+// les 9 magasins de départ (cache vidé à la déconnexion, puis réécrit avec les
+// valeurs par défaut) effaçait les magasins ajoutés ailleurs — « 12 puis 9 ».
+// Désormais :
+// - la liste n'est JAMAIS envoyée automatiquement : seulement par
+//   `synchroniserMagasins`, qui relit le serveur et FUSIONNE avant d'écrire ;
+// - toute lecture du serveur est fusionnée avec la copie locale (aucun magasin
+//   perdu ; la modification la plus récente l'emporte ; suppression explicite) ;
+// - la base refuse elle-même de perdre un magasin (PROTECTION_LISTE_MAGASINS).
 const MAGASINS_KEY = 'leclaire_magasins';
 
 /**
@@ -43,30 +49,56 @@ function reconcilePulledValue(key: string, cloudValueStr: string): string {
   if (key !== MAGASINS_KEY) return cloudValueStr;
   try {
     const cloud = JSON.parse(cloudValueStr);
-    const localStr = localStorage.getItem(MAGASINS_KEY);
-    const local = localStr ? JSON.parse(localStr) : [];
-    if (!Array.isArray(cloud) || !Array.isArray(local)) return cloudValueStr;
-    const canonical = (m: any) => {
-      const oldId = String(m?.id || '').trim().toLowerCase();
-      if (oldId === 'cocody') return { ...m, id: 'bouake', label: 'BOUAKÉ' };
-      if (oldId === 'marcory') return { ...m, id: 'yopougon-gandi', label: 'YOPOUGON GANDI' };
-      return { ...m, id: oldId };
-    };
-    const parId = new Map<string, any>();
-    // Base = cloud, puis on complète avec les magasins locaux absents du cloud.
-    // Les deux anciennes entrées sont normalisées avant fusion : elles ne peuvent
-    // donc plus réapparaître depuis un ancien snapshot Supabase.
-    for (const raw of cloud) {
-      if (!raw?.id) continue;
-      const m = canonical(raw); if (m.id) parId.set(m.id, m);
-    }
-    for (const raw of local) {
-      if (!raw?.id) continue;
-      const m = canonical(raw); if (m.id && !parId.has(m.id)) parId.set(m.id, m);
-    }
-    return JSON.stringify(Array.from(parId.values()));
+    if (!Array.isArray(cloud)) return JSON.stringify(lireRegistreMagasins());
+    return JSON.stringify(fusionnerMagasins(lireRegistreMagasins(), cloud));
   } catch {
     return cloudValueStr;
+  }
+}
+
+/** Empreinte d'une liste de magasins, indépendante de l'ordre. */
+function empreinteMagasins(liste: unknown): string {
+  return JSON.stringify(fusionnerMagasins(liste)
+    .map(m => JSON.stringify(Object.keys(m).sort().map(k => [k, (m as any)[k]])))
+    .sort());
+}
+
+/** La copie locale contient-elle quelque chose que le serveur n'a pas ? */
+function magasinsEnAvanceSurServeur(cloudValueStr: string, fusionStr: string): boolean {
+  try {
+    return empreinteMagasins(JSON.parse(cloudValueStr)) !== empreinteMagasins(JSON.parse(fusionStr));
+  } catch {
+    return true;
+  }
+}
+
+let synchroMagasinsEnCours: Promise<boolean> | null = null;
+
+/**
+ * Synchronise la liste des magasins SANS PERTE : relit la liste du serveur, la
+ * fusionne avec celle de cet appareil, enregistre le résultat ici puis sur le
+ * serveur s'il lui manque quelque chose. Renvoie true si le serveur est à jour.
+ * Lève une erreur si le serveur n'a pas pu être lu ou écrit.
+ */
+export async function synchroniserMagasins(): Promise<boolean> {
+  if (!FIREBASE_DATA_ENABLED) return true;
+  if (synchroMagasinsEnCours) return synchroMagasinsEnCours;
+  synchroMagasinsEnCours = (async () => {
+    const doc = await kvGetDoc<{ value: unknown }>(APP_DATA, MAGASINS_KEY);
+    const cloud = Array.isArray(doc?.value) ? doc!.value as unknown[] : [];
+    const fusion = fusionnerMagasins(lireRegistreMagasins(), cloud);
+    saveMagasins(fusion);
+    const fusionStr = JSON.stringify(fusion);
+    if (fusion.length > 0 && magasinsEnAvanceSurServeur(JSON.stringify(cloud), fusionStr)) {
+      await saveToSupabase(MAGASINS_KEY, fusion, true);
+    }
+    lastSnapshot.set(MAGASINS_KEY, fusionStr);
+    return true;
+  })();
+  try {
+    return await synchroMagasinsEnCours;
+  } finally {
+    synchroMagasinsEnCours = null;
   }
 }
 
@@ -190,6 +222,12 @@ function ensurePolling() {
         const valueStr = reconcilePulledValue(key, rawStr);
         const oldValue = localStorage.getItem(key);
         setItemWithoutSync(key, valueStr);
+        if (key === MAGASINS_KEY) {
+          window.dispatchEvent(new CustomEvent(EVENEMENT_MAGASINS));
+          // Le serveur a reçu une liste incomplète (ancien appareil) : on lui
+          // renvoie la liste complète.
+          if (magasinsEnAvanceSurServeur(rawStr, valueStr)) synchroniserMagasins().catch(() => {});
+        }
         const emitted = key === MAGASINS_KEY ? JSON.parse(valueStr) : d.value;
         listeners.get(key)?.forEach(cb => cb(emitted));
         listeners.get('*')?.forEach(cb => cb({ key, value: emitted }));
@@ -273,7 +311,7 @@ export async function syncAllToSupabase(): Promise<{ success: number; errors: nu
   const keys: string[] = [];
   for (let i = 0; i < localStorage.length; i++) {
     const key = localStorage.key(i);
-    if (key?.startsWith('leclaire_') &&
+    if (key?.startsWith('leclaire_') && key !== MAGASINS_KEY &&
         !key.includes('session') && !key.includes('current_user') &&
         !key.includes('sync_registry') && !key.includes('migrated') &&
         !isStructuredKey(key)) {
@@ -286,6 +324,8 @@ export async function syncAllToSupabase(): Promise<{ success: number; errors: nu
       if (value) { await saveToSupabase(key, JSON.parse(value)); success++; }
     } catch (err) { logger.error(`Erreur sync ${key}:`, err); errors++; }
   }
+  // Liste des magasins : fusionnée avec le serveur, jamais écrasée.
+  try { await synchroniserMagasins(); success++; } catch { errors++; }
   logger.log(`✅ Synchronisation: ${success} réussies, ${errors} erreurs`);
   return { success, errors };
 }
@@ -322,13 +362,11 @@ export async function loadAllFromSupabase(): Promise<number> {
       setItemWithoutSync(key, mergedStr);
       lastSnapshot.set(key, rawStr);
       // Si la fusion a fait apparaître des magasins locaux absents du cloud,
-      // on repousse la liste fusionnée pour que le cloud (et les autres appareils)
+      // on renvoie la liste fusionnée pour que le cloud (et les autres appareils)
       // convergent — sinon l'ajout resterait bloqué sur ce seul navigateur.
-      if (key === MAGASINS_KEY && mergedStr !== rawStr) {
-        try {
-          const merged = JSON.parse(mergedStr);
-          saveToSupabase(MAGASINS_KEY, merged, true).catch(() => {});
-        } catch {}
+      if (key === MAGASINS_KEY) {
+        window.dispatchEvent(new CustomEvent(EVENEMENT_MAGASINS));
+        if (magasinsEnAvanceSurServeur(rawStr, mergedStr)) synchroniserMagasins().catch(() => {});
       }
       count++;
     }

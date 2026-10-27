@@ -1,13 +1,9 @@
 import { useState, useMemo } from 'react';
 import { Search, X, Edit, Calendar } from 'lucide-react';
 import { useLiveData } from '../../../hooks/useLiveData';
+import { useLibellesMagasins, useNomsCourtsMagasins } from '../../../hooks/useMagasins';
 
-import { getMagasins } from '../../../constants/magasins';
-import { TENANT } from '../../../config/tenant';
 
-const allMagasins = getMagasins();
-const OFFICINES = allMagasins.map(magasin => magasin.label);
-const MAGASINS = allMagasins.map(magasin => magasin.label.replace(`${TENANT.nom} `, ''));
 const FOURNISSEURS = ['BBGR', 'ESSILOR', 'HOYA', 'NIKON', 'ZEISS', 'RODENSTOCK'];
 const STATUTS = ['En attente', 'Réglé', 'Partiellement réglé'];
 const ANNEES = ['2024', '2025', '2026'];
@@ -25,6 +21,8 @@ function FilterBar({ officine, setOfficine, magasin, setMagasin, search, setSear
   date: string; setDate: (v: string) => void;
   onSearch: () => void;
 }) {
+  const OFFICINES = useLibellesMagasins();
+  const MAGASINS = useNomsCourtsMagasins();
   return (
     <div className="flex items-end gap-2 flex-wrap">
       <div className="flex flex-col gap-0.5">

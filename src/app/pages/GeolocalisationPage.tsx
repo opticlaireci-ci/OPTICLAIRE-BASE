@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { MapPin, Phone, Mail, Navigation, Copy, ExternalLink } from 'lucide-react';
-import { getMagasins } from '../constants/magasins';
+import type { Magasin } from '../constants/magasins';
+import { useMagasins } from '../hooks/useMagasins';
 import { TENANT } from '../config/tenant';
 
 interface MagasinGeo {
@@ -28,8 +29,7 @@ const COORDS_GPS: Record<string, { lat: number; lng: number; ville: string }> = 
 };
 
 // Créer la liste des magasins avec coordonnées
-const allMagasins = getMagasins();
-const MAGASINS: MagasinGeo[] = allMagasins.map(magasin => {
+const versGeo = (magasin: Magasin): MagasinGeo => {
   const coords = COORDS_GPS[magasin.id] || { lat: 5.3600, lng: -4.0083, ville: 'Abidjan' };
   return {
     id: magasin.id,
@@ -41,9 +41,11 @@ const MAGASINS: MagasinGeo[] = allMagasins.map(magasin => {
     latitude: magasin.latitude || coords.lat,
     longitude: magasin.longitude || coords.lng,
   };
-});
+};
 
 export function GeolocalisationPage() {
+  // Liste à jour : un magasin ajouté apparaît sans recharger l'application.
+  const MAGASINS: MagasinGeo[] = useMagasins().map(versGeo);
   const [selectedMagasin, setSelectedMagasin] = useState<MagasinGeo | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 

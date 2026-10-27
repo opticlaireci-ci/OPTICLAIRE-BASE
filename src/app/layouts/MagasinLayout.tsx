@@ -45,6 +45,7 @@ import {
   ExpandMore,
   ExpandLess,
   AccountBalance,
+  Inventory2,
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
 import { SessionIndicator } from '../components/SessionIndicator';
@@ -52,6 +53,40 @@ import { SeasonLogo } from '../components/SeasonLogo';
 import { pathToButtonKey } from '../constants/appButtons';
 import { TENANT } from '../config/tenant';
 import { loadCreditsSms, etatCreditSms, SMS_CREDITS_EVENT } from '../services/smsService';
+import { useCommandesVerre } from '../hooks/useCommandesVerre';
+import { arriveesNonVues, type CommandeVerre } from '../services/commandesVerreService';
+
+/** Page des commandes de verre du magasin (Atelier → Commande de verre → Passer commande). */
+const cheminCommandesVerre = (magasinId: string | undefined) =>
+  `/magasin/${magasinId}/atelier?onglet=commande-verre&sous=passer`;
+
+/**
+ * Message affiché au magasin quand l'assistante administrative signale qu'un
+ * verre commandé est arrivé ; il disparaît quand le magasin ouvre ses commandes.
+ */
+function MessageCommandesVerre({ magasinId, arrivees }: { magasinId: string | undefined; arrivees: CommandeVerre[] }) {
+  const navigate = useNavigate();
+  if (!arrivees.length) return null;
+  const detail = arrivees.slice(0, 3).map(c => `${c.numero} (${c.client})`).join(', ') + (arrivees.length > 3 ? '…' : '');
+  return (
+    <div
+      role="alert"
+      data-testid="message-commande-verre"
+      onClick={() => navigate(cheminCommandesVerre(magasinId))}
+      className="montage-blink-doux"
+      style={{
+        display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', cursor: 'pointer',
+        margin: '0 0 12px', padding: '10px 14px', borderRadius: 8,
+        background: '#ecfdf5', border: '2px solid #10b981', color: '#065f46', fontSize: 14,
+      }}
+    >
+      <Inventory2 sx={{ color: '#059669' }} />
+      <strong>{arrivees.length > 1 ? `${arrivees.length} commandes de verre sont arrivées` : 'Votre commande de verre est arrivée'}</strong>
+      <span>: {detail}</span>
+      <span style={{ marginLeft: 'auto', fontWeight: 700, textDecoration: 'underline' }}>Voir les commandes</span>
+    </div>
+  );
+}
 
 const drawerWidth = 280;
 
@@ -175,7 +210,7 @@ function ShortcutBadge({ count, icon, label, onClick, blink }: { count: number; 
   );
 }
 
-function ShortcutBarMagasin({ magasinId }: { magasinId: string | undefined }) {
+function ShortcutBarMagasin({ magasinId, arriveesVerre }: { magasinId: string | undefined; arriveesVerre: CommandeVerre[] }) {
   const compteurs = useLiveShortcutsMagasin(magasinId);
   const navigate = useNavigate();
   const [smsCredits, setSmsCredits] = useState(loadCreditsSms());
@@ -259,6 +294,15 @@ function ShortcutBarMagasin({ magasinId }: { magasinId: string | undefined }) {
       // → le badge cesse de clignoter tant qu'aucune nouvelle validation n'arrive.
       onClickExtra: () => marquerMontagesVus(magasinId, compteurs.montagesValidesIds),
     },
+    {
+      // Commande de verre arrivée (signalée par l'assistante administrative) :
+      // clignote jusqu'à ce que le magasin ouvre ses commandes de verre.
+      icon: <Inventory2 sx={{ fontSize: 22, color: '#fff', backgroundColor: '#0d9488', padding: '4px', borderRadius: '5px' }} />,
+      count: arriveesVerre.length,
+      label: 'Commande de verre arrivée',
+      path: cheminCommandesVerre(magasinId),
+      blink: true,
+    },
   ];
 
   const smsEtat = etatCreditSms();
@@ -274,6 +318,8 @@ function ShortcutBarMagasin({ magasinId }: { magasinId: string | undefined }) {
       <style>{`
         @keyframes montageBlink { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.35; transform: scale(1.18); } }
         .montage-blink { animation: montageBlink 0.8s ease-in-out infinite; }
+        @keyframes montageBlinkDoux { 0%,100% { box-shadow: 0 0 0 0 rgba(16,185,129,0.5); } 50% { box-shadow: 0 0 0 6px rgba(16,185,129,0); } }
+        .montage-blink-doux { animation: montageBlinkDoux 1.2s ease-in-out infinite; }
       `}</style>
       <div
         title={smsCredits.total > 0 ? `${smsCredits.restant} / ${smsCredits.total} SMS restants` : 'Crédit SMS non configuré — cliquez pour le définir'}
@@ -344,6 +390,9 @@ export function MagasinLayout() {
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  // Commandes de verre du magasin : arrivées pas encore vues (icône + message).
+  const { commandes: commandesVerre } = useCommandesVerre(magasinId, !!magasinId && isAuthenticated);
+  const arriveesVerre = useMemo(() => arriveesNonVues(commandesVerre), [commandesVerre]);
 
   useEffect(() => {
     if (isLoading) return;
@@ -395,6 +444,9 @@ export function MagasinLayout() {
       || access.includes('magasin:commercial/vente-facture') || access.includes('commercial/vente-facture')
       || access.includes('magasin:commercial/recouvrement'))) return;
     if (path.endsWith('/accueil') || /\/magasin\/[^/]+\/?$/.test(path)) return;
+    // Atelier du magasin : « Commande de verre » est ouverte à tout le magasin ;
+    // la page elle-même réserve le reste de l'Atelier aux droits concernés.
+    if (/\/magasin\/[^/]+\/atelier\/?$/.test(path)) return;
     const key = pathToButtonKey(path);
     // Compatibilité avec les anciens profils : certaines anciennes versions
     // enregistraient les droits des pages de stock sans le préfixe
@@ -430,11 +482,6 @@ export function MagasinLayout() {
   const ROLES_FICHE_MONTAGE = ['super_admin', 'admin', 'administrateur', 'directeur', 'comptable', 'opticien', 'monteur'];
   const peutVoirFicheMontage = ROLES_FICHE_MONTAGE.includes(user?.role || '')
     || accesAttribues.includes('magasin:commercial/fiche-montage');
-  // Atelier : réservé aux monteurs et administrateurs (PAS aux opticiens) — OU si
-  // l'admin a coché la case Atelier pour cet utilisateur.
-  const ROLES_ATELIER = ['super_admin', 'admin', 'administrateur', 'monteur'];
-  const peutVoirAtelier = ROLES_ATELIER.includes(user?.role || '')
-    || accesAttribues.includes('/atelier');
 
   const commercialChildren: MenuItemType[] = [
     { title: 'Devis/Proforma', icon: <Description />, path: `/magasin/${magasinId}/commercial/devis-proforma` },
@@ -488,11 +535,10 @@ export function MagasinLayout() {
       icon: <AccountBalance />,
       path: `/magasin/${magasinId}/mouvements-caisse`,
     },
-    // Atelier (montage) : réservé aux monteurs (et administrateurs) qui valident
-    // les montages — les opticiens n'y ont PAS accès.
-    ...(peutVoirAtelier
-      ? [{ title: 'Atelier', icon: <Build />, path: '/atelier' }]
-      : []),
+    // Atelier du magasin : tout le magasin y passe ses commandes de verre
+    // (« Commande de verre »). Bons de verre, fournisseurs et montage restent
+    // réservés aux monteurs et à l'administration (voir AtelierPage).
+    { title: 'Atelier', icon: <Build />, path: `/magasin/${magasinId}/atelier` },
   ];
 
   const isAdminRole = user?.role === 'super_admin' || user?.role === 'admin' || user?.role === 'administrateur';
@@ -508,6 +554,8 @@ export function MagasinLayout() {
         [
           ...(roleLectureVenteFacture ? ['/commercial/vente-facture'] : []),
           ...(accesVenteFacture ? ['/commercial/recouvrement'] : []),
+          // Commandes de verre : ouvertes à tout le magasin.
+          `/magasin/${magasinId}/atelier`,
         ],
       );
 
@@ -655,7 +703,7 @@ export function MagasinLayout() {
           {!isMobile && (
             <>
               <Box sx={{ flexGrow: 1 }} />
-              <ShortcutBarMagasin magasinId={magasinId} />
+              <ShortcutBarMagasin magasinId={magasinId} arriveesVerre={arriveesVerre} />
             </>
           )}
           {isMobile && (
@@ -710,7 +758,7 @@ export function MagasinLayout() {
         {isMobile && shortcutsOpen && (
           <Box sx={{ backgroundColor: '#111', overflowX: 'auto', px: 2, py: 1, borderTop: '1px solid rgba(255,255,255,0.1)' }}>
             <Box sx={{ display: 'flex', gap: 2, minWidth: 'max-content' }}>
-              <ShortcutBarMagasin magasinId={magasinId} />
+              <ShortcutBarMagasin magasinId={magasinId} arriveesVerre={arriveesVerre} />
             </Box>
           </Box>
         )}
@@ -755,6 +803,7 @@ export function MagasinLayout() {
           key={`${location.pathname}${location.search}`}
           sx={{ width: '100%', maxWidth: { xs: '100%', lg: 1600 }, mx: 'auto', animation: 'pageFadeIn 0.15s ease-out both', willChange: 'opacity' }}
         >
+          <MessageCommandesVerre magasinId={magasinId} arrivees={arriveesVerre} />
           <Outlet />
         </Box>
       </Box>

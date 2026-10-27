@@ -80,6 +80,8 @@ import { loadCreditsSms, etatCreditSms, SMS_CREDITS_EVENT } from '../services/sm
 import { afficherHtml } from '../utils/inAppViewer';
 import { doc, onSnapshot } from '../utils/firestoreCompat';
 import { db } from '../utils/firebaseClient';
+import { useCommandesVerre } from '../hooks/useCommandesVerre';
+import { ROLES_RECEPTION_VERRE, STATUT_ENVOYEE } from '../services/commandesVerreService';
 
 // Suit en direct le crédit de SMS restant + son état (couleur).
 function useSmsCredits() {
@@ -243,11 +245,12 @@ function useCallCenterTodayAppointments() {
   return count;
 }
 
-function ShortcutBadge({ count, icon, label, onClick }: { count: number; icon: React.ReactNode; label: string; onClick?: () => void }) {
+function ShortcutBadge({ count, icon, label, onClick, blink }: { count: number; icon: React.ReactNode; label: string; onClick?: () => void; blink?: boolean }) {
   return (
     <div
       title={label}
       onClick={onClick}
+      className={blink && count > 0 ? 'raccourci-clignote' : undefined}
       style={{
         display: 'flex', flexDirection: 'column', alignItems: 'center',
         gap: 1, cursor: onClick ? 'pointer' : 'default', userSelect: 'none',
@@ -283,6 +286,11 @@ function ShortcutBar() {
   const isResponsableCallCenter = user?.role === 'responsable_call_center';
   const rdvAujourdHui = useCallCenterTodayAppointments();
   const c = useLiveShortcuts();
+  // Assistante administrative / administration : commandes de verre envoyées
+  // par les magasins et pas encore confirmées.
+  const recoitCommandesVerre = ROLES_RECEPTION_VERRE.includes(user?.role || '');
+  const { commandes: commandesVerre } = useCommandesVerre(undefined, recoitCommandesVerre);
+  const verresAConfirmer = commandesVerre.filter(cv => cv.statut === STATUT_ENVOYEE).length;
 
   if (isResponsableCallCenter) {
     return (
@@ -367,6 +375,13 @@ function ShortcutBar() {
       label: 'Demande devis en attente',
       path: '/clients'
     },
+    ...(recoitCommandesVerre ? [{
+      icon: <Inventory2 sx={{ fontSize: 22, color: '#fff', backgroundColor: '#0d9488', padding: '4px', borderRadius: '5px' }} />,
+      count: verresAConfirmer,
+      label: 'Commandes de verre à confirmer',
+      path: '/atelier?onglet=commande-verre&sous=reception',
+      blink: true,
+    }] : []),
   ];
 
   const smsCredits = useSmsCredits();
@@ -408,6 +423,10 @@ function ShortcutBar() {
       {/* ── Icônes DROITE : badges + FR ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginRight: 10, flexShrink: 0 }}>
         <div style={{ width: '1px', height: '24px', backgroundColor: 'rgba(255,255,255,0.3)', marginRight: 4 }} />
+        <style>{`
+          @keyframes raccourciClignote { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.35; transform: scale(1.18); } }
+          .raccourci-clignote { animation: raccourciClignote 0.8s ease-in-out infinite; }
+        `}</style>
         {badges.map((badge, index) => <ShortcutBadge key={index} {...badge} onClick={() => handleBadgeClick(badge.path)} />)}
         <SyncIndicator />
         <div style={{ marginLeft: 4, padding: '3px 9px', borderRadius: 5, background: 'linear-gradient(135deg,#1d4ed8,#3b82f6)', color: '#fff', fontSize: 11, fontWeight: 800, cursor: 'default', letterSpacing: '0.08em', boxShadow: '0 1px 3px rgba(0,0,0,0.3)' }}>
