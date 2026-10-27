@@ -8,7 +8,8 @@
   restent réservés aux monteurs et à l'administration.
 - **Dans le tableau de bord général** : menu **Atelier** → **Commande de verre**.
 
-Deux sous-onglets : **Passer commande** et **Réception commande**.
+Deux sous-onglets : **Passer commande** et **Réception commande**. Chacun ne
+voit que sa partie (voir « Droits » ci-dessous).
 
 ## Le parcours
 
@@ -35,10 +36,24 @@ Deux sous-onglets : **Passer commande** et **Réception commande**.
   magasins (fonction de numérotation de NUMEROTATION_FACTURES.sql, compteur
   propre aux commandes de verre ; sans elle, compteur de chaque poste).
 
-## Droits
+## Droits (28/10/2026)
 
-- Peuvent **confirmer** et signaler **verre arrivé** : assistante
-  administrative, administrateurs, super administrateur.
+| Compte | Passer commande | Réception commande | Cases explicatives (1-2-3) |
+|---|---|---|---|
+| Conseillère, opticien et autres comptes de magasin | ✅ | — | — |
+| Assistante administrative | — | ✅ | — |
+| Administrateurs, super administrateur | ✅ | ✅ | ✅ |
+
+- **Donner la main plus tard** : Gestion des utilisateurs → modifier
+  l'utilisateur → onglet **Accès aux boutons** → bloc **« Atelier → Commande
+  de verre : ce que l'utilisateur voit »** → cocher « Passer commande »,
+  « Réception commande » et/ou « Les cases explicatives en haut » →
+  Enregistrer. La partie donnée par le rôle est cochée et grisée « (inclus dans
+  son rôle) ». L'utilisateur voit le changement à sa prochaine connexion.
+- Avec « Réception commande » cochée, l'utilisateur **confirme** et signale
+  **verre arrivé** (et voit l'icône « Commandes de verre à confirmer »), pour
+  les magasins rattachés à son compte.
+- Un lien vers une partie non permise (icône, message) ouvre l'autre partie.
 - Chaque magasin ne voit que **ses** commandes.
 - L'assistante administrative voit les commandes des magasins auxquels son
   compte est rattaché : dans **Gestion des utilisateurs**, choisissez **« Tous
@@ -93,5 +108,9 @@ reste légère et rapide, les fichiers ne sont téléchargés qu'à l'ouverture.
   l'administration, aucun accès sans connexion.
 - Navigateur, parcours complet à trois comptes (conseillère de BOUAKÉ,
   assistante administrative, conseillère d'ABOBO), avec stockage puis sans
-  stockage installé : 24/24.
+  stockage installé, plus les droits (conseillère : Passer commande seule ;
+  assistante : Réception seule, même par lien direct ; administrateur : tout ;
+  cases de Gestion des utilisateurs ; main donnée à une conseillère qui
+  confirme ; assistante avec Passer commande cochée) : 38/38.
+- Droits par rôle et par case : 15 tests.
 - Compilation de production et vérification des types : sans nouvelle erreur.

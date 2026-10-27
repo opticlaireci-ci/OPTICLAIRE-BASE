@@ -198,3 +198,43 @@ export function peutModifierReglement(user: (UserLike & { droitsVoir?: string[] 
   const droits = user.droitsVoir ?? clesVoir(user.menuAccess || []);
   return droits.includes(DROIT_MODIFIER_REGLEMENT_KEY);
 }
+
+/*
+ * COMMANDE DE VERRE (Atelier) : ce que chacun voit (clés `voir:` cochées dans
+ * Gestion des Utilisateurs, comme les accès ci-dessus).
+ *  - « Passer commande » : les magasins (conseillères, opticiens… tous les
+ *    rôles sauf l'assistante administrative) ;
+ *  - « Réception commande » (confirmer, verre arrivé) : l'assistante
+ *    administrative ;
+ *  - cases explicatives (étapes 1-2-3) : personne d'office.
+ * Administrateurs et super administrateur : tout. L'administrateur donne une
+ * partie à n'importe quel autre utilisateur en cochant sa case.
+ */
+export const VOIR_CV_PASSER_KEY = 'voir:commande-verre-passer';
+export const VOIR_CV_RECEPTION_KEY = 'voir:commande-verre-reception';
+export const VOIR_CV_EXPLICATIONS_KEY = 'voir:commande-verre-explications';
+
+/** Cases « Commande de verre » et rôles qui ont l'accès sans case cochée. */
+export const ACCES_COMMANDE_VERRE: { key: string; label: string; parRole: (role: string) => boolean }[] = [
+  { key: VOIR_CV_PASSER_KEY, label: '« Passer commande » (nouvelle commande de verre)', parRole: r => r !== 'assistante_admin' },
+  { key: VOIR_CV_RECEPTION_KEY, label: '« Réception commande » (confirmer la commande, verre arrivé)', parRole: r => r === 'assistante_admin' },
+  { key: VOIR_CV_EXPLICATIONS_KEY, label: 'Les cases explicatives en haut (1. Passer commande, 2. Confirmation, 3. Verre arrivé)', parRole: () => false },
+];
+
+/** Accès donné par le rôle seul (sans case cochée). */
+export function accesCommandeVerreParRole(key: string, role: string | undefined): boolean {
+  if (!role) return false;
+  if (ADMIN_ROLES.includes(role)) return true;
+  return !!ACCES_COMMANDE_VERRE.find(a => a.key === key)?.parRole(role);
+}
+
+/** Parties de la commande de verre visibles par l'utilisateur. */
+export function accesCommandeVerre(user: (UserLike & { droitsVoir?: string[] }) | null | undefined) {
+  const droits = user ? (user.droitsVoir ?? clesVoir(user.menuAccess || [])) : [];
+  const a = (key: string) => !!user && (accesCommandeVerreParRole(key, user.role) || droits.includes(key));
+  return {
+    passer: a(VOIR_CV_PASSER_KEY),
+    reception: a(VOIR_CV_RECEPTION_KEY),
+    explications: a(VOIR_CV_EXPLICATIONS_KEY),
+  };
+}

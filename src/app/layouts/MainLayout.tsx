@@ -81,7 +81,8 @@ import { afficherHtml } from '../utils/inAppViewer';
 import { doc, onSnapshot } from '../utils/firestoreCompat';
 import { db } from '../utils/firebaseClient';
 import { useCommandesVerre } from '../hooks/useCommandesVerre';
-import { ROLES_RECEPTION_VERRE, STATUT_ENVOYEE } from '../services/commandesVerreService';
+import { STATUT_ENVOYEE } from '../services/commandesVerreService';
+import { accesCommandeVerre } from '../utils/actionRights';
 
 // Suit en direct le crédit de SMS restant + son état (couleur).
 function useSmsCredits() {
@@ -286,9 +287,9 @@ function ShortcutBar() {
   const isResponsableCallCenter = user?.role === 'responsable_call_center';
   const rdvAujourdHui = useCallCenterTodayAppointments();
   const c = useLiveShortcuts();
-  // Assistante administrative / administration : commandes de verre envoyées
-  // par les magasins et pas encore confirmées.
-  const recoitCommandesVerre = ROLES_RECEPTION_VERRE.includes(user?.role || '');
+  // Assistante administrative / administration (ou « Réception commande »
+  // cochée) : commandes de verre envoyées par les magasins, pas encore confirmées.
+  const recoitCommandesVerre = accesCommandeVerre(user).reception;
   const { commandes: commandesVerre } = useCommandesVerre(undefined, recoitCommandesVerre);
   const verresAConfirmer = commandesVerre.filter(cv => cv.statut === STATUT_ENVOYEE).length;
 

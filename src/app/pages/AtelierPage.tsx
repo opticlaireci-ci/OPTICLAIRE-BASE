@@ -9,6 +9,7 @@ import type { SubTab } from './AtelierMontageTab';
 import { afficherPdfBlob } from '../utils/inAppViewer';
 import { useParams, useSearchParams } from 'react-router';
 import { useAuth } from '../contexts/AuthContext';
+import { accesCommandeVerre } from '../utils/actionRights';
 import { CommandeVerreTab, type SousOngletVerre } from './CommandeVerreTab';
 type TabType = 'commande-verre' | 'bon-verre' | 'fournisseur' | 'montage';
 
@@ -476,8 +477,9 @@ export function AtelierPage() {
           </div>
         </div>
 
-        {/* Commande de verre : les trois étapes, à droite des onglets */}
-        {activeTab === 'commande-verre' && (
+        {/* Commande de verre : les trois étapes, à droite des onglets
+            (administration, ou case cochée dans Gestion des utilisateurs) */}
+        {activeTab === 'commande-verre' && accesCommandeVerre(user).explications && (
           <div style={{ flex: 1, minWidth: '260px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
             {[
               ['1', 'Passer commande', 'Le magasin saisit les verres du client, joint son ordonnance et clique sur COMMANDER.', '#2563eb'],

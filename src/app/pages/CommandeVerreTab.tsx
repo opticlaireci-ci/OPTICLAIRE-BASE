@@ -11,6 +11,7 @@ import { useCommandesVerre } from '../hooks/useCommandesVerre';
 import { useTypesVerre, useVerresList, useTraitementOptions, useFournisseurs } from '../utils/venteLookups';
 import { getMagasinLabel, memeMagasin } from '../constants/magasins';
 import { afficherPdfBlob } from '../utils/inAppViewer';
+import { accesCommandeVerre } from '../utils/actionRights';
 import {
   ROLES_RECEPTION_VERRE, STATUT_ENVOYEE, STATUT_EN_ATTENTE, STATUT_ARRIVEE,
   libelleStatutMagasin, libelleStatutReception, passerCommandeVerre, confirmerCommandeVerre,
@@ -329,8 +330,18 @@ function FicheCommande({ c, onFermer, onOrdonnance }: { c: CommandeVerre; onFerm
  */
 export function CommandeVerreTab({ magasinId, sousOngletInitial }: { magasinId?: string; sousOngletInitial?: SousOngletVerre }) {
   const { user } = useAuth();
-  const estReception = ROLES_RECEPTION_VERRE.includes(user?.role || '');
-  const [sousOnglet, setSousOnglet] = useState<SousOngletVerre>(sousOngletInitial || (estReception ? 'reception' : 'passer'));
+  // Parties visibles : magasins → « Passer commande » ; assistante →
+  // « Réception commande » ; autres parties données par case cochée.
+  const acces = accesCommandeVerre(user);
+  const estReception = acces.reception;
+  const estAdministration = ROLES_RECEPTION_VERRE.includes(user?.role || '');
+  const ongletPermis = (s?: SousOngletVerre) => (s === 'passer' && acces.passer) || (s === 'reception' && acces.reception);
+  const [sousOngletChoisi, setSousOnglet] = useState<SousOngletVerre>(() =>
+    ongletPermis(sousOngletInitial) ? sousOngletInitial!
+      : acces.reception && (!acces.passer || estAdministration) ? 'reception' : 'passer');
+  // Un lien (icône, message) peut viser une partie non permise : on reste sur l'autre.
+  const sousOnglet: SousOngletVerre = ongletPermis(sousOngletChoisi) ? sousOngletChoisi
+    : sousOngletChoisi === 'passer' ? 'reception' : 'passer';
   const { commandes, chargement, erreur, recharger } = useCommandesVerre(magasinId);
   const [formulaire, setFormulaire] = useState(false);
   const [fiche, setFiche] = useState<CommandeVerre | null>(null);
@@ -343,9 +354,9 @@ export function CommandeVerreTab({ magasinId, sousOngletInitial }: { magasinId?:
   // Le magasin ouvre ses commandes : les arrivées sont « vues », l'icône cesse de clignoter.
   const estDuMagasin = !!magasinId && (user?.magasinIds || []).some(m => memeMagasin(m, magasinId));
   useEffect(() => {
-    if (!estDuMagasin || estReception || chargement) return;
+    if (!estDuMagasin || estAdministration || !acces.passer || chargement) return;
     marquerArriveesVues(commandes).catch(() => { /* réessayé au prochain affichage */ });
-  }, [commandes, chargement, estDuMagasin, estReception]);
+  }, [commandes, chargement, estDuMagasin, estAdministration, acces.passer]);
 
   const filtrees = useMemo(() => {
     const q = recherche.trim().toLowerCase();
@@ -397,11 +408,20 @@ export function CommandeVerreTab({ magasinId, sousOngletInitial }: { magasinId?:
     </button>
   );
 
+  if (!acces.passer && !acces.reception) {
+    return (
+      <div className="bg-white rounded-lg shadow-sm p-6 text-center text-gray-600 text-sm" data-testid="commande-verre">
+        La commande de verre ne vous est pas ouverte. Demandez à l'administrateur de cocher « Passer commande »
+        ou « Réception commande » pour votre compte (Gestion des utilisateurs).
+      </div>
+    );
+  }
+
   return (
     <div className="bg-white rounded-lg shadow-sm" data-testid="commande-verre">
       <div className="flex border-b bg-gray-50 rounded-t-lg overflow-x-auto">
-        {onglet('passer', 'Passer commande')}
-        {onglet('reception', 'Réception commande', estReception ? compte(STATUT_ENVOYEE) : undefined)}
+        {acces.passer && onglet('passer', 'Passer commande')}
+        {acces.reception && onglet('reception', 'Réception commande', compte(STATUT_ENVOYEE))}
       </div>
 
       <div className="p-4 space-y-3">
@@ -508,7 +528,7 @@ export function CommandeVerreTab({ magasinId, sousOngletInitial }: { magasinId?:
             setFormulaire(false);
             setMessage(`✅ Commande ${c.numero} envoyée : elle est dans « Réception commande » et attend la confirmation de l'assistante administrative.`
               // Administration : signale que le stockage des ordonnances n'est pas encore installé.
-              + (!c.ordonnance?.chemin && estReception ? " (Ordonnance rangée dans la base : exécutez STOCKAGE_ORDONNANCES_2026-10-28.sql pour utiliser le stockage de fichiers.)" : ''));
+              + (!c.ordonnance?.chemin && estAdministration ? " (Ordonnance rangée dans la base : exécutez STOCKAGE_ORDONNANCES_2026-10-28.sql pour utiliser le stockage de fichiers.)" : ''));
             recharger();
           }}
         />
