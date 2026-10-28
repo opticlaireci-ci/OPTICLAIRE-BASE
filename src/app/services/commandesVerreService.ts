@@ -105,7 +105,7 @@ export interface CommandeVerre {
 export function libelleStatutMagasin(statut: string): string {
   if (statut === STATUT_ARRIVEE) return 'Commande arrivée';
   if (statut === STATUT_EN_ATTENTE) return 'En attente';
-  return 'Envoyée (à confirmer)';
+  return 'Envoyée';
 }
 
 /** Libellé du statut tel que le voit la RÉCEPTION (assistante administrative). */
@@ -236,7 +236,21 @@ export interface FichierOrdonnance { nom: string; type: string; contenu: string 
 /** Ordonnance relue pour l'affichage. */
 export interface OrdonnanceLue { nom: string; type: string; blob: Blob }
 
-const versBlob = async (dataUrl: string) => (await fetch(dataUrl)).blob();
+/**
+ * Contenu `data:` → Blob, décodé sur place. Pas de fetch(dataUrl) : la
+ * politique de sécurité du site (vercel.json, connect-src) l'interdit et le
+ * navigateur répond « Failed to fetch ».
+ */
+function versBlob(dataUrl: string): Blob {
+  const m = /^data:([^;,]*)((?:;[^;,]*)*?)(;base64)?,(.*)$/s.exec(dataUrl);
+  if (!m) throw new Error('Ordonnance illisible (contenu inattendu).');
+  const type = m[1] || 'application/octet-stream';
+  if (!m[3]) return new Blob([decodeURIComponent(m[4])], { type });
+  const binaire = atob(m[4]);
+  const octets = new Uint8Array(binaire.length);
+  for (let i = 0; i < binaire.length; i++) octets[i] = binaire.charCodeAt(i);
+  return new Blob([octets], { type });
+}
 const extension = (type: string) => (type === 'application/pdf' ? 'pdf' : type === 'image/png' ? 'png' : type === 'image/webp' ? 'webp' : 'jpg');
 
 /**
@@ -250,7 +264,7 @@ async function deposerOrdonnance(magasinId: string, commandeId: string, f: Fichi
     const { supabase } = await import('../utils/supabaseClient');
     const chemin = `${magasinId}/${commandeId}/ordonnance.${extension(f.type)}`;
     const { error } = await supabase.storage.from(ESPACE_ORDONNANCES)
-      .upload(chemin, await versBlob(f.contenu), { contentType: f.type || 'application/octet-stream', upsert: true });
+      .upload(chemin, versBlob(f.contenu), { contentType: f.type || 'application/octet-stream', upsert: true });
     if (error) throw error;
     return chemin;
   } catch (err: any) {
@@ -394,7 +408,7 @@ export async function lireOrdonnance(c: Pick<CommandeVerre, 'id' | 'ordonnance'>
   const r: any = snap.data() || {};
   const d = r.data && typeof r.data === 'object' ? { ...r.data, ...r } : r;
   if (!d.contenu) return null;
-  return { nom: String(d.nom || 'ordonnance'), type: String(d.typeFichier || ''), blob: await versBlob(String(d.contenu)) };
+  return { nom: String(d.nom || 'ordonnance'), type: String(d.typeFichier || ''), blob: versBlob(String(d.contenu)) };
 }
 
 // ── Préparation du fichier d'ordonnance ─────────────────────────────────────
@@ -402,7 +416,8 @@ export async function lireOrdonnance(c: Pick<CommandeVerre, 'id' | 'ordonnance'>
 /** Taille maximale d'un PDF d'ordonnance (les photos sont, elles, réduites). */
 export const TAILLE_MAX_PDF = 1.5 * 1024 * 1024;
 
-const lireEnDataUrl = (f: Blob) => new Promise<string>((resolve, reject) => {
+/** Fichier → contenu `data:` (sans fetch ; sert aussi à afficher une photo d'ordonnance). */
+export const lireEnDataUrl = (f: Blob) => new Promise<string>((resolve, reject) => {
   const r = new FileReader();
   r.onload = () => resolve(String(r.result || ''));
   r.onerror = () => reject(r.error || new Error('Lecture du fichier impossible.'));

@@ -15,7 +15,7 @@ import { accesCommandeVerre } from '../utils/actionRights';
 import {
   ROLES_RECEPTION_VERRE, STATUT_ENVOYEE, STATUT_EN_ATTENTE, STATUT_ARRIVEE,
   libelleStatutMagasin, libelleStatutReception, passerCommandeVerre, confirmerCommandeVerre,
-  signalerArriveeVerre, marquerArriveesVues, marquerLigneVue, ligneAClignoter, lireOrdonnance, preparerOrdonnance,
+  signalerArriveeVerre, marquerArriveesVues, marquerLigneVue, ligneAClignoter, lireOrdonnance, preparerOrdonnance, lireEnDataUrl,
   type CommandeVerre, type LigneVerre, type FichierOrdonnance,
 } from '../services/commandesVerreService';
 
@@ -55,7 +55,8 @@ async function ouvrirOrdonnance(c: CommandeVerre, setImage: (src: string | null)
   if (f.type === 'application/pdf') {
     await afficherPdfBlob(f.blob, { titre: `Ordonnance — ${c.client} (${c.numero})`, nomFichier: f.nom });
   } else {
-    setImage(URL.createObjectURL(f.blob));
+    // Image affichée en `data:` : la politique de sécurité du site refuse les images `blob:`.
+    setImage(await lireEnDataUrl(f.blob));
   }
 }
 
@@ -565,7 +566,7 @@ export function CommandeVerreTab({ magasinId, sousOngletInitial }: { magasinId?:
       )}
       {fiche && <FicheCommande c={fiche} onFermer={() => setFiche(null)} onOrdonnance={() => voirOrdonnance(fiche)} />}
       {image && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4" style={{ zIndex: 1310 }} onClick={() => { URL.revokeObjectURL(image); setImage(null); }}>
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4" style={{ zIndex: 1310 }} onClick={() => setImage(null)}>
           <img src={image} alt="Ordonnance" className="max-h-full max-w-full rounded shadow-xl bg-white" />
           <button className="absolute top-4 right-4 text-white" title="Fermer"><X size={28} /></button>
         </div>

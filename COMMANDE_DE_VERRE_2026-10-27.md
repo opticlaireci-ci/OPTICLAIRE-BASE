@@ -15,7 +15,7 @@ voit que sa partie (voir « Droits » ci-dessous).
 
 | Étape | Qui | Ce qu'il fait | Ce que voit le magasin |
 |---|---|---|---|
-| 1 | Conseillère / opticien | Atelier → Commande de verre (arrive sur **Passer commande**) → **NOUVELLE COMMANDE** → verres (OD / OG : verre, type, traitement, matière, sphère, cylindre, axe, addition, diamètre, quantité), client, fournisseur, observations → **Télécharger l'ordonnance** → **COMMANDER** | « Envoyée (à confirmer) » ; la commande part dans **Gestion de commande** |
+| 1 | Conseillère / opticien | Atelier → Commande de verre (arrive sur **Passer commande**) → **NOUVELLE COMMANDE** → verres (OD / OG : verre, type, traitement, matière, sphère, cylindre, axe, addition, diamètre, quantité), client, fournisseur, observations → **Télécharger l'ordonnance** → **COMMANDER** | « Envoyée » ; la commande part dans **Gestion de commande** |
 | 2 | Assistante administrative | Atelier → Commande de verre (arrive directement sur **Gestion de commande → Commande**) → **CONFIRMER LA COMMANDE** : la commande passe dans **Suivi** | **« En attente »** |
 | 3 | Assistante administrative | **Suivi** → **VERRE ARRIVÉ** : la commande passe dans **Arrivage** | **« Commande arrivée »** + message en haut de l'écran du magasin + **icône qui clignote** dans la barre d'icônes (comme les bons de distribution) + **toute la ligne de la commande clignote en rouge** |
 | 4 | Magasin | Clique sur l'icône ou sur le message → ses commandes s'ouvrent | Le message disparaît et l'icône cesse de clignoter (pour tout le magasin) ; la ligne rouge continue de clignoter |
@@ -111,6 +111,14 @@ reste légère et rapide, les fichiers ne sont téléchargés qu'à l'ouverture.
   les consulte ; seule l'administration peut supprimer ; aucun accès sans
   connexion ni lien public.
 - Rangement : `<MAGASIN>/<commande>/ordonnance.jpg` (ou `.pdf`).
+- **Correction du 28/10/2026 (« Failed to fetch »)** : la politique de
+  sécurité du site (vercel.json) interdisait la conversion de la photo
+  utilisée par l'application. Résultat : l'envoi vers le stockage échouait
+  sans le dire (ordonnance rangée dans la base à la place), et « Voir
+  l'ordonnance » affichait « Failed to fetch ». La photo est maintenant
+  convertie et affichée sans ce blocage : les nouvelles ordonnances vont bien
+  dans le stockage (si le script est exécuté) et toutes s'ouvrent, y compris
+  celles déjà rangées dans la base.
 - **Tant que le script n'est pas exécuté**, rien n'est bloqué : l'ordonnance
   est gardée dans la base, comme avant (l'administration en est avertie après
   chaque commande). Les commandes passées avant l'installation gardent leur
@@ -159,6 +167,10 @@ reste légère et rapide, les fichiers ne sont téléchargés qu'à l'ouverture.
   l'ouverture des commandes, s'arrête au clic pour tout le magasin, rien de
   réécrit sur un double clic, anciennes commandes sans clignotement) ;
   navigateur, parcours complet : 50/50.
+- Ordonnances avec la politique de sécurité du site (même en-tête que
+  vercel.json) : problème reproduit sur l'ancienne version (ordonnance dans
+  la base, image illisible), puis parcours complet 50/50 sans aucun blocage
+  (photo dans le stockage et ouverte ; repli dans la base ouvert aussi).
 - Lignes rouges en haut : navigateur 7/7 (deux commandes arrivées en haut,
   la plus récemment arrivée d'abord ; chacune reprend sa place après le clic ;
   ancienne commande arrivée et listes de l'assistante non concernées).
