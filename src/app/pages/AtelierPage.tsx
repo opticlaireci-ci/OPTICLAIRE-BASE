@@ -492,8 +492,8 @@ export function AtelierPage() {
           <div style={{ flex: 1, minWidth: '260px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
             {[
               ['1', 'Passer commande', 'Le magasin saisit les verres du client, joint son ordonnance et clique sur COMMANDER.', '#2563eb'],
-              ['2', 'Confirmation', "L'assistante administrative confirme dans « Gestion de commande » : le magasin voit « En attente ».", '#ea580c'],
-              ['3', 'Verre arrivé', "Elle clique sur VERRE ARRIVÉ : le magasin voit « Commande arrivée », reçoit un message et l'icône clignote en haut.", '#16a34a'],
+              ['2', 'Confirmation', "L'assistante administrative clique sur CONFIRMER dans « Gestion de commande » : le magasin voit « En attente ».", '#ea580c'],
+              ['3', 'Verre arrivé', "Elle clique sur ARRIVÉ : le magasin voit « Commande arrivée », reçoit un message et l'icône clignote en haut.", '#16a34a'],
             ].map(([n, titre, texte, couleur]) => (
               <div key={n} style={{ backgroundColor: '#fff', borderRadius: '8px', padding: '14px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', borderTop: `4px solid ${couleur}` }}>
                 <div style={{ fontWeight: 800, color: couleur, fontSize: '14px', marginBottom: '6px' }}>{n}. {titre}</div>

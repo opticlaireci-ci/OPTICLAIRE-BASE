@@ -20,8 +20,8 @@ voit que sa partie (voir « Droits » ci-dessous).
 | Étape | Qui | Ce qu'il fait | Ce que voit le magasin |
 |---|---|---|---|
 | 1 | Conseillère / opticien | Atelier → Commande de verre (arrive sur **Gestion de commande** du magasin) → **NOUVELLE COMMANDE** → verres (OD / OG : verre, type, traitement, matière, sphère, cylindre, axe, addition, diamètre, quantité), client, fournisseur, observations → **Télécharger l'ordonnance** → **COMMANDER** | « Envoyée » ; la commande part dans **Gestion de commande** |
-| 2 | Assistante administrative | Atelier → Commande de verre (arrive directement sur **Gestion de commande → Commande**) → **CONFIRMER LA COMMANDE** : la commande passe dans **Suivi** | **« En attente »** |
-| 3 | Assistante administrative | **Suivi** → **VERRE ARRIVÉ** : la commande passe dans **Arrivage** | **« Commande arrivée »** + message en haut de l'écran du magasin + **icône qui clignote** dans la barre d'icônes (comme les bons de distribution) + **toute la ligne de la commande clignote en rouge** |
+| 2 | Assistante administrative | Atelier → Commande de verre (arrive directement sur **Gestion de commande → Commande**) → **CONFIRMER** : la commande passe dans **Suivi** | **« En attente »** |
+| 3 | Assistante administrative | **Suivi** → **ARRIVÉ** : la commande passe dans **Arrivage** | **« Commande arrivée »** + message en haut de l'écran du magasin + **icône qui clignote** dans la barre d'icônes (comme les bons de distribution) + **toute la ligne de la commande clignote en rouge** |
 | 4 | Magasin | Clique sur l'icône ou sur le message → ses commandes s'ouvrent | Le message disparaît et l'icône cesse de clignoter (pour tout le magasin) ; la ligne rouge continue de clignoter |
 | 5 | Conseillère / opticien | Clique sur la ligne rouge → les informations de la commande s'ouvrent | La ligne cesse de clignoter (pour tout le magasin) et reprend sa place normale dans la liste |
 
@@ -86,6 +86,19 @@ voit que sa partie (voir « Droits » ci-dessous).
   l'utilisateur → **Accès aux boutons** → bloc **« Atelier → autres boutons :
   ce que l'utilisateur voit »** → cocher « Bon Verre », « Fournisseur » et/ou
   « Montage » → Enregistrer (pris en compte à sa prochaine connexion).
+
+## Libellés côté administration et affichage sur téléphone (28/10/2026)
+
+- Gestion de commande (administration) : statuts **Nouveau** (commande
+  envoyée par le magasin), **En attente** (confirmée), **Arrivé** ; boutons
+  **CONFIRMER** et **ARRIVÉ**.
+- Sur téléphone et petite tablette (moins de 900 px de large), chaque
+  commande est une **carte** : N°, Date, Magasin, Client, Verres, Statut et
+  les boutons (Détail, Ordonnance, CONFIRMER / ARRIVÉ, Modifier / Supprimer
+  pour l'administration) sont tous visibles **sans glisser**. Un appui sur la
+  carte ouvre ses informations ; côté magasin, la carte d'une commande
+  arrivée clignote en rouge et reste en haut, comme la ligne sur ordinateur.
+  Sur ordinateur, le tableau est inchangé.
 
 ## Modifier ou supprimer une commande (administration, 28/10/2026)
 
@@ -195,6 +208,11 @@ reste légère et rapide, les fichiers ne sont téléchargés qu'à l'ouverture.
 - Sous-onglet du magasin renommé « Gestion de commande » (administration :
   « … (magasin) » et « … (administration) ») : parcours complet 52/52 avec la
   politique de sécurité du site.
+- Libellés et téléphone : navigateur 11/11 à 390 px de large avec la
+  politique de sécurité du site (assistante : Nouveau → CONFIRMER, En attente →
+  ARRIVÉ, Arrivé, rien ne dépasse de l'écran ; conseillère : cartes rouges en
+  haut, appui → informations ; administrateur : 4 boutons visibles ; grand
+  écran : tableau) ; parcours complet 55/55.
 - Modifier / supprimer : 16 tests du service (statut changé entre-temps
   conservé, ordonnance remplacée photo → PDF avec l'ancienne retirée,
   ordonnance de la base passée au stockage, suppression avec ordonnance,

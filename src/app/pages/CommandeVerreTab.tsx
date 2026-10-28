@@ -4,6 +4,7 @@
  * services/commandesVerreService.ts pour le parcours complet.
  */
 import { useEffect, useMemo, useState } from 'react';
+import { useMediaQuery } from '@mui/material';
 import { Plus, X, Eye, FileText, CheckCircle2, PackageCheck, Send, Clock, Camera, Pencil, Trash2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useMagasins } from '../hooks/useMagasins';
@@ -382,6 +383,8 @@ export function CommandeVerreTab({ magasinId, sousOngletInitial }: { magasinId?:
     : sousOngletChoisi === 'passer' ? 'reception' : 'passer';
   const { commandes, chargement, erreur, recharger } = useCommandesVerre(magasinId);
   const [formulaire, setFormulaire] = useState(false);
+  // Téléphone / tablette : une carte par commande (toutes les rubriques visibles sans glisser).
+  const enCartes = useMediaQuery('(max-width: 899px)');
   // Administration (administrateurs, super administrateur) : modifier / supprimer une commande.
   const peutGerer = ROLES_GESTION_COMPLETE_VERRE.includes(user?.role || '');
   const [edition, setEdition] = useState<CommandeVerre | null>(null);
@@ -467,6 +470,33 @@ export function CommandeVerreTab({ magasinId, sousOngletInitial }: { magasinId?:
   };
   const voirOrdonnance = (c: CommandeVerre) => { vue(c); ouvrirOrdonnance(c, setImage).catch(e => alert(`❌ ${e?.message || e}`)); };
 
+  const statutCommande = (c: CommandeVerre) => (
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-xs font-semibold whitespace-nowrap ${couleurStatut(c.statut)}`}>
+      {c.statut === STATUT_ARRIVEE ? <PackageCheck size={12} /> : c.statut === STATUT_EN_ATTENTE ? <Clock size={12} /> : <Send size={12} />}
+      {sousOnglet === 'reception' ? libelleStatutReception(c.statut) : libelleStatutMagasin(c.statut)}
+    </span>
+  );
+  const actionsCommande = (c: CommandeVerre) => (<>
+    <button onClick={() => ouvrirFiche(c)} title="Détail" className="p-1.5 rounded border text-gray-700 hover:bg-gray-100"><Eye size={15} /></button>
+    <button onClick={() => voirOrdonnance(c)} title="Ordonnance" className="p-1.5 rounded border text-amber-800 hover:bg-amber-50"><FileText size={15} /></button>
+    {peutGerer && (<>
+      <button onClick={() => setEdition(c)} title="Modifier la commande" className="p-1.5 rounded border text-blue-800 hover:bg-blue-50"><Pencil size={15} /></button>
+      <button onClick={() => supprimer(c)} disabled={enCours === c.id} title="Supprimer la commande" className="p-1.5 rounded border text-red-700 hover:bg-red-50 disabled:opacity-60"><Trash2 size={15} /></button>
+    </>)}
+    {sousOnglet === 'reception' && estReception && c.statut === STATUT_ENVOYEE && (
+      <button onClick={() => confirmer(c)} disabled={enCours === c.id}
+        className="inline-flex items-center gap-1 px-3 py-1.5 rounded bg-blue-700 text-white text-xs font-bold hover:bg-blue-800 disabled:opacity-60 whitespace-nowrap">
+        <CheckCircle2 size={14} /> CONFIRMER
+      </button>
+    )}
+    {sousOnglet === 'reception' && estReception && c.statut === STATUT_EN_ATTENTE && (
+      <button onClick={() => arrivee(c)} disabled={enCours === c.id}
+        className="inline-flex items-center gap-1 px-3 py-1.5 rounded bg-green-600 text-white text-xs font-bold hover:bg-green-700 disabled:opacity-60 whitespace-nowrap">
+        <PackageCheck size={14} /> ARRIVÉ
+      </button>
+    )}
+  </>);
+
   const onglet = (id: SousOngletVerre, libelle: string, nb?: number) => (
     <button
       onClick={() => setSousOnglet(id)}
@@ -491,7 +521,8 @@ export function CommandeVerreTab({ magasinId, sousOngletInitial }: { magasinId?:
       <style>{`
         @keyframes ligneCvArrivee { 0%, 100% { background-color: #fee2e2; } 50% { background-color: #fca5a5; } }
         .ligne-cv-arrivee > td { color: #7f1d1d; }
-        .ligne-cv-arrivee > td { animation: ligneCvArrivee 1s ease-in-out infinite; }
+        .ligne-cv-arrivee > td, .carte-cv-arrivee { animation: ligneCvArrivee 1s ease-in-out infinite; }
+        .carte-cv-arrivee { color: #7f1d1d; }
       `}</style>
       <div className="flex border-b bg-gray-50 rounded-t-lg overflow-x-auto">
         {/* Les deux parties s'appellent « Gestion de commande » ; précisées seulement
@@ -546,6 +577,34 @@ export function CommandeVerreTab({ magasinId, sousOngletInitial }: { magasinId?:
           <div className="py-10 text-center text-gray-500 text-sm">
             {sousOnglet === 'passer' ? 'Aucune commande de verre. Cliquez sur « NOUVELLE COMMANDE ».' : 'Aucune commande dans cette liste.'}
           </div>
+        ) : enCartes ? (
+          <div className="space-y-2" data-testid={`liste-${sousOnglet}`}>
+            {filtrees.map(c => {
+              const aSignaler = clignote(c);
+              const rubrique = (titre: string, valeur: React.ReactNode) => (<>
+                <span className="text-xs font-semibold text-gray-500 pt-0.5">{titre}</span>
+                <span className="min-w-0 break-words">{valeur}</span>
+              </>);
+              return (
+                <div key={c.id} onClick={() => ouvrirFiche(c)}
+                  className={`border rounded-lg p-3 cursor-pointer text-sm ${aSignaler ? 'carte-cv-arrivee border-red-300' : 'bg-white border-gray-200'}`}
+                  data-testid={aSignaler ? 'ligne-arrivee' : 'carte-commande'}>
+                  {/* Grille en style direct : la règle mobile globale force `.grid` sur une colonne. */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr)', columnGap: 12, rowGap: 4, alignItems: 'baseline' }}>
+                    {rubrique('N°', <span className="font-mono font-semibold">{c.numero}</span>)}
+                    {rubrique('Date', formatDate(c.date))}
+                    {!magasinId && rubrique('Magasin', c.magasinLabel)}
+                    {rubrique('Client', <span className="font-semibold">{c.client}</span>)}
+                    {rubrique('Verres', <span className="text-xs">{resumeVerres(c.verres)}</span>)}
+                    {rubrique('Statut', statutCommande(c))}
+                  </div>
+                  <div className="mt-2 pt-2 border-t flex flex-wrap justify-end items-center gap-1.5" onClick={e => e.stopPropagation()}>
+                    {actionsCommande(c)}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm" style={{ minWidth: 820 }} data-testid={`liste-${sousOnglet}`}>
@@ -572,32 +631,10 @@ export function CommandeVerreTab({ magasinId, sousOngletInitial }: { magasinId?:
                       {!magasinId && <td className="px-3 py-2 whitespace-nowrap">{c.magasinLabel}</td>}
                       <td className="px-3 py-2">{c.client}</td>
                       <td className="px-3 py-2 text-xs text-gray-700" style={{ maxWidth: 260 }}>{resumeVerres(c.verres)}</td>
-                      <td className="px-3 py-2">
-                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-xs font-semibold whitespace-nowrap ${couleurStatut(c.statut)}`}>
-                          {c.statut === STATUT_ARRIVEE ? <PackageCheck size={12} /> : c.statut === STATUT_EN_ATTENTE ? <Clock size={12} /> : <Send size={12} />}
-                          {sousOnglet === 'reception' ? libelleStatutReception(c.statut) : libelleStatutMagasin(c.statut)}
-                        </span>
-                      </td>
+                      <td className="px-3 py-2">{statutCommande(c)}</td>
                       <td className="px-3 py-2">
                         <div className="flex justify-end items-center gap-1.5" onClick={e => e.stopPropagation()}>
-                          <button onClick={() => ouvrirFiche(c)} title="Détail" className="p-1.5 rounded border text-gray-700 hover:bg-gray-100"><Eye size={15} /></button>
-                          <button onClick={() => voirOrdonnance(c)} title="Ordonnance" className="p-1.5 rounded border text-amber-800 hover:bg-amber-50"><FileText size={15} /></button>
-                          {peutGerer && (<>
-                            <button onClick={() => setEdition(c)} title="Modifier la commande" className="p-1.5 rounded border text-blue-800 hover:bg-blue-50"><Pencil size={15} /></button>
-                            <button onClick={() => supprimer(c)} disabled={enCours === c.id} title="Supprimer la commande" className="p-1.5 rounded border text-red-700 hover:bg-red-50 disabled:opacity-60"><Trash2 size={15} /></button>
-                          </>)}
-                          {sousOnglet === 'reception' && estReception && c.statut === STATUT_ENVOYEE && (
-                            <button onClick={() => confirmer(c)} disabled={enCours === c.id}
-                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded bg-blue-700 text-white text-xs font-bold hover:bg-blue-800 disabled:opacity-60 whitespace-nowrap">
-                              <CheckCircle2 size={14} /> CONFIRMER LA COMMANDE
-                            </button>
-                          )}
-                          {sousOnglet === 'reception' && estReception && c.statut === STATUT_EN_ATTENTE && (
-                            <button onClick={() => arrivee(c)} disabled={enCours === c.id}
-                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded bg-green-600 text-white text-xs font-bold hover:bg-green-700 disabled:opacity-60 whitespace-nowrap">
-                              <PackageCheck size={14} /> VERRE ARRIVÉ
-                            </button>
-                          )}
+                          {actionsCommande(c)}
                         </div>
                       </td>
                     </tr>

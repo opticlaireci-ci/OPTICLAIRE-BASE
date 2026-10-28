@@ -7,7 +7,7 @@
  *      commande » → « Commande » (assistante administrative).
  *   2. L'assistante la CONFIRME → statut « En attente » (chez elle : « Suivi ») :
  *      le magasin voit « En attente ».
- *   3. Elle clique sur « Verre arrivé » → statut « Arrivée » (chez elle :
+ *   3. Elle clique sur « Arrivé » → statut « Arrivée » (chez elle :
  *      « Arrivage ») : le magasin voit « Commande arrivée », reçoit un message,
  *      l'icône clignote dans la barre du haut jusqu'à ce qu'il ouvre ses
  *      commandes, et la LIGNE de la commande clignote en rouge jusqu'à ce
@@ -116,9 +116,9 @@ export function libelleStatutMagasin(statut: string): string {
 
 /** Libellé du statut tel que le voit la RÉCEPTION (assistante administrative). */
 export function libelleStatutReception(statut: string): string {
-  if (statut === STATUT_ARRIVEE) return 'Verre arrivé';
-  if (statut === STATUT_EN_ATTENTE) return 'Confirmée — en attente du verre';
-  return 'À confirmer';
+  if (statut === STATUT_ARRIVEE) return 'Arrivé';
+  if (statut === STATUT_EN_ATTENTE) return 'En attente';
+  return 'Nouveau';
 }
 
 // ── Conversion ligne `bons` ↔ commande ──────────────────────────────────────
