@@ -9,12 +9,11 @@ import type { SubTab } from './AtelierMontageTab';
 import { afficherPdfBlob } from '../utils/inAppViewer';
 import { useParams, useSearchParams } from 'react-router';
 import { useAuth } from '../contexts/AuthContext';
-import { accesCommandeVerre } from '../utils/actionRights';
+import { accesCommandeVerre, accesAtelier } from '../utils/actionRights';
 import { CommandeVerreTab, type SousOngletVerre } from './CommandeVerreTab';
 type TabType = 'commande-verre' | 'bon-verre' | 'fournisseur' | 'montage';
 
 /** Atelier complet (bons de verre, fournisseurs, montage) : monteurs et administration. */
-const ROLES_ATELIER_COMPLET = ['super_admin', 'admin', 'administrateur', 'monteur', 'assistante_admin'];
 
 interface BonCommande {
   id: string;
@@ -75,13 +74,19 @@ export function AtelierPage() {
   // tableau de bord général (/atelier).
   const { magasinId: magasinPage } = useParams();
   const [searchParams] = useSearchParams();
-  // Conseillères, opticiens… : seulement « Commande de verre » dans l'Atelier
-  // d'un magasin ; le reste de l'Atelier reste réservé (montage, bons de verre).
-  const atelierComplet = !magasinPage
-    || ROLES_ATELIER_COMPLET.includes(user?.role || '')
-    || (user?.menuAccess || []).includes('/atelier');
-  const [activeTab, setActiveTab] = useState<TabType>(() =>
-    !atelierComplet || searchParams.get('onglet') === 'commande-verre' ? 'commande-verre' : 'bon-verre');
+  // « Commande de verre » : tout le monde (sa partie). Bon Verre, Fournisseur,
+  // Montage : administration, monteur, bouton « Atelier » coché, ou case cochée
+  // (Gestion des utilisateurs) ; l'assistante administrative n'a d'office que
+  // la commande de verre.
+  const acces = accesAtelier(user);
+  const ongletPermis = (t: string | null): t is TabType =>
+    t === 'commande-verre' || (t === 'bon-verre' && acces.bonVerre)
+    || (t === 'fournisseur' && acces.fournisseur) || (t === 'montage' && acces.montage);
+  const [activeTab, setActiveTab] = useState<TabType>(() => {
+    const demande = searchParams.get('onglet');
+    if (ongletPermis(demande)) return demande;
+    return acces.bonVerre ? 'bon-verre' : 'commande-verre';
+  });
   const sousOngletVerre = (['passer', 'reception'] as const).find(s => s === searchParams.get('sous')) as SousOngletVerre | undefined;
   const [montageSubTab, setMontageSubTab] = useState<SubTab>('dashboard');
   const [yearFilter, setYearFilter] = useState('2026');
@@ -355,7 +360,7 @@ export function AtelierPage() {
               >
                 👓 Commande de verre
               </button>
-              {atelierComplet && (<>
+              {acces.bonVerre && (
               <button
                 onClick={() => setActiveTab('bon-verre')}
                 style={{
@@ -371,6 +376,8 @@ export function AtelierPage() {
               >
                 Bon Verre
               </button>
+              )}
+              {acces.fournisseur && (
               <button
                 onClick={() => setActiveTab('fournisseur')}
                 style={{
@@ -386,6 +393,8 @@ export function AtelierPage() {
               >
                 Fournisseur
               </button>
+              )}
+              {acces.montage && (
               <button
                 onClick={() => setActiveTab('montage')}
                 style={{
@@ -401,7 +410,7 @@ export function AtelierPage() {
               >
                 Montage
               </button>
-              </>)}
+              )}
             </div>
 
             {activeTab !== 'commande-verre' && (

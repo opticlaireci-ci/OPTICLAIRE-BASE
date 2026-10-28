@@ -238,3 +238,46 @@ export function accesCommandeVerre(user: (UserLike & { droitsVoir?: string[] }) 
     explications: a(VOIR_CV_EXPLICATIONS_KEY),
   };
 }
+
+/*
+ * ATELIER : autres boutons (Bon Verre, Fournisseur, Montage). D'office :
+ * administrateurs, super administrateur et monteur, ainsi que tout compte dont
+ * le bouton de menu « Atelier » est coché — sauf l'assistante administrative,
+ * qui n'a que la commande de verre. L'administrateur donne chaque bouton à
+ * n'importe quel utilisateur en cochant sa case (Gestion des Utilisateurs).
+ */
+export const VOIR_ATELIER_BON_VERRE_KEY = 'voir:atelier-bon-verre';
+export const VOIR_ATELIER_FOURNISSEUR_KEY = 'voir:atelier-fournisseur';
+export const VOIR_ATELIER_MONTAGE_KEY = 'voir:atelier-montage';
+const ROLES_ATELIER_COMPLET = ['super_admin', 'admin', 'administrateur', 'monteur'];
+/** Bouton de menu « Atelier » : donne tout l'Atelier (anciens profils), sauf à l'assistante. */
+export const MENU_ATELIER_KEY = '/atelier';
+
+/** Cases « Atelier » (autres boutons) proposées dans Gestion des Utilisateurs. */
+export const ACCES_ATELIER: { key: string; label: string }[] = [
+  { key: VOIR_ATELIER_BON_VERRE_KEY, label: '« Bon Verre » (bons de commande verre et délais)' },
+  { key: VOIR_ATELIER_FOURNISSEUR_KEY, label: '« Fournisseur »' },
+  { key: VOIR_ATELIER_MONTAGE_KEY, label: '« Montage » (suivi de montage)' },
+];
+
+/** Accès donné par le rôle seul (sans case cochée). */
+export function accesAtelierParRole(role: string | undefined): boolean {
+  return !!role && ROLES_ATELIER_COMPLET.includes(role);
+}
+
+/** Accès donné par le bouton de menu « Atelier » coché (jamais pour l'assistante). */
+export function accesAtelierParMenu(role: string | undefined, access: string[] = []): boolean {
+  return role !== 'assistante_admin' && access.includes(MENU_ATELIER_KEY);
+}
+
+/** Boutons de l'Atelier (hors commande de verre) visibles par l'utilisateur. */
+export function accesAtelier(user: (UserLike & { droitsVoir?: string[] }) | null | undefined) {
+  const droits = user ? (user.droitsVoir ?? clesVoir(user.menuAccess || [])) : [];
+  const toutes = !!user && (accesAtelierParRole(user.role) || accesAtelierParMenu(user.role, user.menuAccess || []));
+  const a = (key: string) => toutes || droits.includes(key);
+  return {
+    bonVerre: a(VOIR_ATELIER_BON_VERRE_KEY),
+    fournisseur: a(VOIR_ATELIER_FOURNISSEUR_KEY),
+    montage: a(VOIR_ATELIER_MONTAGE_KEY),
+  };
+}

@@ -12,7 +12,7 @@ import { logger } from '../utils/logger';
 import { getMagasins } from '../constants/magasins';
 import { useMagasins } from '../hooks/useMagasins';
 import { APP_BUTTON_GROUPS } from '../constants/appButtons';
-import { ACTION_ADD_KEY, ACTION_EDIT_KEY, ACTION_DELETE_KEY, ADD_MODULES, addModuleKey, ACCES_CONSEILLERES_OPTICIENS, ROLES_ACCES_RESTREINT, DROITS_PARTICULIERS, ACCES_COMMANDE_VERRE, accesCommandeVerreParRole } from '../utils/actionRights';
+import { ACTION_ADD_KEY, ACTION_EDIT_KEY, ACTION_DELETE_KEY, ADD_MODULES, addModuleKey, ACCES_CONSEILLERES_OPTICIENS, ROLES_ACCES_RESTREINT, DROITS_PARTICULIERS, ACCES_COMMANDE_VERRE, accesCommandeVerreParRole, ACCES_ATELIER, accesAtelierParRole, accesAtelierParMenu } from '../utils/actionRights';
 import { AddButton } from '../components/AddButton';
 
 // Les rôles intégrés + tout rôle personnalisé ajouté par l'administrateur.
@@ -583,6 +583,37 @@ function ModalUser({
               D'office : les magasins (conseillères, opticiens…) ne voient que « Passer commande », l'assistante
               administrative que « Réception commande », et personne ne voit les cases explicatives ; les administrateurs
               voient tout. Cochez une case pour donner cette partie à l'utilisateur ; décochez-la pour la lui retirer.
+            </div>
+          </div>
+          {/* Atelier : autres boutons (Bon Verre, Fournisseur, Montage). */}
+          <div className="border border-blue-200 rounded overflow-hidden" data-testid="acces-atelier">
+            <div className="bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-900">
+              Atelier → autres boutons : ce que l'utilisateur voit
+            </div>
+            <div className="grid grid-cols-1 gap-y-1 p-3">
+              {ACCES_ATELIER.map(a => {
+                const parLeRole = form.assignments.some(x => accesAtelierParRole(x.role));
+                const parLeMenu = !parLeRole && form.assignments.some(x => accesAtelierParMenu(x.role, form.menuAccess));
+                const inclus = parLeRole || parLeMenu;
+                return (
+                  <label key={a.key} className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="accent-blue-600"
+                      checked={inclus || form.menuAccess.includes(a.key)}
+                      disabled={inclus}
+                      onChange={() => toggleAccess(a.key)}
+                    />
+                    {a.label}
+                    {parLeRole && <span className="text-xs text-blue-700">(inclus dans son rôle)</span>}
+                    {parLeMenu && <span className="text-xs text-blue-700">(inclus : bouton « Atelier » coché)</span>}
+                  </label>
+                );
+              })}
+            </div>
+            <div className="px-3 pb-2 text-xs text-gray-500">
+              D'office : administrateurs, super administrateur et monteur. L'assistante administrative n'a que la commande
+              de verre (Réception commande) : cochez un bouton pour le lui donner ; décochez-le pour le lui retirer.
             </div>
           </div>
           {/* Accès particuliers des conseillères et opticiens : masqués par défaut,

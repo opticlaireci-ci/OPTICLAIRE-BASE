@@ -55,6 +55,24 @@ voit que sa partie (voir « Droits » ci-dessous).
   les magasins rattachés à son compte.
 - Un lien vers une partie non permise (icône, message) ouvre l'autre partie.
 
+### Autres boutons de l'Atelier (Bon Verre, Fournisseur, Montage) — 28/10/2026
+
+| Compte | Commande de verre | Bon Verre | Fournisseur | Montage |
+|---|---|---|---|---|
+| Assistante administrative | ✅ (Réception commande) | — | — | — |
+| Conseillère, opticien | ✅ (Passer commande) | — | — | — |
+| Monteur, administrateurs, super administrateur | ✅ | ✅ | ✅ | ✅ |
+| Autre compte dont le bouton de menu « Atelier » est coché | ✅ | ✅ | ✅ | ✅ |
+
+- L'assistante administrative ne voit dans l'Atelier que **Commande de
+  verre → Réception commande** : ni Bon Verre, Fournisseur, Montage, ni les
+  filtres (officine, année), compteurs et délais « DATE ÉDITION… ». Le bouton
+  de menu « Atelier » coché ne lui donne pas le reste de l'Atelier.
+- **Donner un bouton plus tard** : Gestion des utilisateurs → modifier
+  l'utilisateur → **Accès aux boutons** → bloc **« Atelier → autres boutons :
+  ce que l'utilisateur voit »** → cocher « Bon Verre », « Fournisseur » et/ou
+  « Montage » → Enregistrer (pris en compte à sa prochaine connexion).
+
 ## Connexion de l'assistante administrative (28/10/2026)
 
 L'assistante administrative est rattachée à tous les magasins : à la
@@ -127,4 +145,9 @@ reste légère et rapide, les fichiers ne sont téléchargés qu'à l'ouverture.
   général avec ou sans boutons cochés, menu, Commande de verre, Accès
   Magasins ; conseillère toujours dans son magasin ; administrateur inchangé :
   10/10 (l'ancienne version envoyait l'assistante sur /magasin/abobo).
+- Atelier : boutons par rôle et par case, 14 tests ; navigateur 16/16
+  (assistante : Commande de verre seule, même par lien direct ; avec Montage,
+  puis Bon Verre et Fournisseur cochés ; administrateur et monteur : tout ;
+  conseillère inchangée ; cases de Gestion des utilisateurs). L'ancienne
+  version montrait les 4 boutons à l'assistante.
 - Compilation de production et vérification des types : sans nouvelle erreur.
