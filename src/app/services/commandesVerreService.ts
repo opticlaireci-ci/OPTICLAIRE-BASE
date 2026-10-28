@@ -24,12 +24,13 @@
  * cas, les listes ne téléchargent jamais les fichiers, seulement à l'ouverture.
  */
 import {
-  collection, doc, getDoc, getDocs, query, setDoc, where,
+  collection, deleteDoc, doc, getDoc, getDocs, query, setDoc, where,
 } from '../utils/firestoreCompat';
 import { db } from '../utils/firebaseClient';
 import { attribuerNumero } from '../utils/autoNumbers';
 import { magasinCanonique } from '../constants/magasins';
 import { logger } from '../utils/logger';
+import { journaliserAction, journaliserSuppression } from './auditLogService';
 
 export const TYPE_COMMANDE_VERRE = 'commande_verre';
 export const TYPE_ORDONNANCE_VERRE = 'ordonnance_verre';
@@ -43,6 +44,8 @@ export type StatutCommandeVerre = typeof STATUT_ENVOYEE | typeof STATUT_EN_ATTEN
 
 /** Rôles qui reçoivent, confirment et signalent l'arrivée des commandes. */
 export const ROLES_RECEPTION_VERRE = ['super_admin', 'admin', 'administrateur', 'assistante_admin'];
+/** Rôles qui peuvent MODIFIER ou SUPPRIMER une commande (administration seulement). */
+export const ROLES_GESTION_COMPLETE_VERRE = ['super_admin', 'admin', 'administrateur'];
 
 export interface LigneVerre {
   oeil: 'OD' | 'OG';
@@ -99,6 +102,9 @@ export interface CommandeVerre {
    */
   ligneVue?: boolean;
   ligneVueLe?: string;
+  /** Dernière modification par l'administration. */
+  modifieeLe?: string;
+  modifieePar?: string;
 }
 
 /** Libellé du statut tel que le voit le MAGASIN demandeur. */
@@ -146,6 +152,8 @@ function versLigne(c: CommandeVerre) {
       arriveeVueLe: c.arriveeVueLe || null,
       ligneVue: typeof c.ligneVue === 'boolean' ? c.ligneVue : null,
       ligneVueLe: c.ligneVueLe || null,
+      modifieeLe: c.modifieeLe || null,
+      modifieePar: c.modifieePar || null,
     },
   };
 }
@@ -177,6 +185,8 @@ export function depuisLigne(r: any): CommandeVerre {
     arriveeVueLe: d.arriveeVueLe || undefined,
     ligneVue: typeof d.ligneVue === 'boolean' ? d.ligneVue : undefined,
     ligneVueLe: d.ligneVueLe || undefined,
+    modifieeLe: d.modifieeLe || undefined,
+    modifieePar: d.modifieePar || undefined,
   };
 }
 
@@ -325,18 +335,104 @@ export async function passerCommandeVerre(params: {
     fournisseur: (params.fournisseur || '').trim(),
     verres: params.verres,
     observations: (params.observations || '').trim(),
-    ordonnance: {
-      nom: params.ordonnance.nom,
-      type: params.ordonnance.type,
-      // Taille réelle du fichier (le contenu est en base64 : 4 caractères = 3 octets).
-      taille: Math.round(((params.ordonnance.contenu.split(',')[1] || '').length * 3) / 4),
-      ...(chemin ? { chemin } : {}),
-    },
+    ordonnance: infoOrdonnance(params.ordonnance, chemin),
     statut: STATUT_ENVOYEE,
     creePar: params.creePar,
   };
   await enregistrer(commande);
   return commande;
+}
+
+/** Informations d'ordonnance enregistrées avec la commande (sans le contenu). */
+function infoOrdonnance(f: FichierOrdonnance, chemin: string | null): OrdonnanceInfo {
+  return {
+    nom: f.nom,
+    type: f.type,
+    // Taille réelle du fichier (le contenu est en base64 : 4 caractères = 3 octets).
+    taille: Math.round(((f.contenu.split(',')[1] || '').length * 3) / 4),
+    ...(chemin ? { chemin } : {}),
+  };
+}
+
+/** Retire un fichier de l'espace « ordonnances » (sans bloquer : un reste n'empêche rien). */
+async function retirerFichierOrdonnance(chemin: string): Promise<void> {
+  try {
+    const { supabase } = await import('../utils/supabaseClient');
+    const { error } = await supabase.storage.from(ESPACE_ORDONNANCES).remove([chemin]);
+    if (error) throw error;
+  } catch (err: any) {
+    logger.warn(`Fichier d'ordonnance non retiré du stockage (${chemin}) :`, err?.message || err);
+  }
+}
+
+/**
+ * Administration : modifie une commande (client, verres, fournisseur,
+ * observations ; ordonnance remplacée seulement si une nouvelle est fournie).
+ * Numéro, magasin, statut et historique sont conservés.
+ */
+export async function modifierCommandeVerre(affichee: CommandeVerre, params: {
+  client: string;
+  telephone?: string;
+  numeroFacture?: string;
+  fournisseur?: string;
+  verres: LigneVerre[];
+  observations?: string;
+  ordonnance?: FichierOrdonnance | null;
+  par: string;
+}): Promise<CommandeVerre> {
+  if (!params.client.trim()) throw new Error('Le nom du client est obligatoire.');
+  if (!params.verres.length) throw new Error('Indiquez au moins un verre à commander.');
+  // Relue : un changement de statut fait entre-temps (confirmation, arrivée) est conservé.
+  const c = await relire(affichee);
+  let ordonnance = c.ordonnance;
+  if (params.ordonnance?.contenu) {
+    const ancienne = c.ordonnance;
+    const chemin = await deposerOrdonnance(c.magasinId, c.id, params.ordonnance);
+    if (chemin) {
+      if (ancienne?.chemin && ancienne.chemin !== chemin) await retirerFichierOrdonnance(ancienne.chemin);
+      if (!ancienne?.chemin) await deleteDoc(doc(db, 'bons', idOrdonnance(c.id))).catch(() => { /* pas de ligne */ });
+    } else {
+      if (ancienne?.chemin) await retirerFichierOrdonnance(ancienne.chemin);
+      await setDoc(doc(db, 'bons', idOrdonnance(c.id)), {
+        id: idOrdonnance(c.id), type: TYPE_ORDONNANCE_VERRE, numero: c.numero, date: c.date,
+        magasin_source: c.magasinId, magasin_destination: null, items: [], statut: null,
+        data: { commandeId: c.id, nom: params.ordonnance.nom, typeFichier: params.ordonnance.type, contenu: params.ordonnance.contenu },
+        updated_at: new Date().toISOString(),
+      });
+    }
+    ordonnance = infoOrdonnance(params.ordonnance, chemin);
+  }
+  const maj: CommandeVerre = {
+    ...c,
+    client: params.client.trim(),
+    telephone: (params.telephone || '').trim(),
+    numeroFacture: (params.numeroFacture || '').trim(),
+    fournisseur: (params.fournisseur || '').trim(),
+    verres: params.verres,
+    observations: (params.observations || '').trim(),
+    ordonnance,
+    modifieeLe: new Date().toISOString(),
+    modifieePar: params.par,
+  };
+  await enregistrer(maj);
+  journaliserAction({ action: 'update', module: 'Commandes de verre', magasinId: c.magasinId, user: params.par,
+    details: `Commande ${c.numero} modifiée (${maj.client}, ${c.magasinLabel})` });
+  return maj;
+}
+
+/**
+ * Administration : supprime une commande et son ordonnance (stockage ou base).
+ * Lève une erreur si la base a refusé la suppression.
+ */
+export async function supprimerCommandeVerre(c: CommandeVerre, par: string): Promise<void> {
+  await deleteDoc(doc(db, 'bons', c.id));
+  const reste: any = await getDoc(doc(db, 'bons', c.id)).catch(() => null);
+  if (reste?.exists?.()) throw new Error('La base a refusé la suppression (droits insuffisants).');
+  if (c.ordonnance?.chemin) await retirerFichierOrdonnance(c.ordonnance.chemin);
+  await deleteDoc(doc(db, 'bons', idOrdonnance(c.id))).catch(() => { /* pas de ligne */ });
+  journaliserSuppression('Commandes de verre',
+    `Commande ${c.numero} supprimée (${c.client}, ${c.magasinLabel}, statut ${c.statut}) par ${par}`, c.magasinId);
+  prevenir();
 }
 
 /** Assistante administrative : commande confirmée → le magasin voit « En attente ». */

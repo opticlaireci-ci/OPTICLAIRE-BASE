@@ -4,7 +4,7 @@
  * services/commandesVerreService.ts pour le parcours complet.
  */
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, X, Eye, FileText, CheckCircle2, PackageCheck, Send, Clock, Camera } from 'lucide-react';
+import { Plus, X, Eye, FileText, CheckCircle2, PackageCheck, Send, Clock, Camera, Pencil, Trash2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useMagasins } from '../hooks/useMagasins';
 import { useCommandesVerre } from '../hooks/useCommandesVerre';
@@ -13,7 +13,7 @@ import { getMagasinLabel, memeMagasin } from '../constants/magasins';
 import { afficherPdfBlob } from '../utils/inAppViewer';
 import { accesCommandeVerre } from '../utils/actionRights';
 import {
-  ROLES_RECEPTION_VERRE, STATUT_ENVOYEE, STATUT_EN_ATTENTE, STATUT_ARRIVEE,
+  ROLES_RECEPTION_VERRE, ROLES_GESTION_COMPLETE_VERRE, modifierCommandeVerre, supprimerCommandeVerre, STATUT_ENVOYEE, STATUT_EN_ATTENTE, STATUT_ARRIVEE,
   libelleStatutMagasin, libelleStatutReception, passerCommandeVerre, confirmerCommandeVerre,
   signalerArriveeVerre, marquerArriveesVues, marquerLigneVue, ligneAClignoter, lireOrdonnance, preparerOrdonnance, lireEnDataUrl,
   type CommandeVerre, type LigneVerre, type FichierOrdonnance,
@@ -62,8 +62,10 @@ async function ouvrirOrdonnance(c: CommandeVerre, setImage: (src: string | null)
 
 // ── Nouvelle commande ───────────────────────────────────────────────────────
 
-function NouvelleCommande({ magasinId, onFermer, onCommandee }: {
+/** Nouvelle commande, ou modification d'une commande existante (`commande`, administration). */
+function NouvelleCommande({ magasinId, commande, onFermer, onCommandee }: {
   magasinId?: string;
+  commande?: CommandeVerre;
   onFermer: () => void;
   onCommandee: (c: CommandeVerre) => void;
 }) {
@@ -73,14 +75,17 @@ function NouvelleCommande({ magasinId, onFermer, onCommandee }: {
   const verresCatalogue = useVerresList();
   const traitements = useTraitementOptions();
   const fournisseurs = useFournisseurs();
-  const [magasin, setMagasin] = useState(magasinId || user?.magasinActuel || user?.magasinIds?.[0] || '');
-  const [client, setClient] = useState('');
-  const [telephone, setTelephone] = useState('');
-  const [numeroFacture, setNumeroFacture] = useState('');
-  const [fournisseur, setFournisseur] = useState('');
-  const [observations, setObservations] = useState('');
-  const [lignes, setLignes] = useState<LigneVerre[]>([ligneVide('OD'), ligneVide('OG')]);
-  const [commanderOeil, setCommanderOeil] = useState<{ OD: boolean; OG: boolean }>({ OD: true, OG: true });
+  const [magasin, setMagasin] = useState(commande?.magasinId || magasinId || user?.magasinActuel || user?.magasinIds?.[0] || '');
+  const [client, setClient] = useState(commande?.client || '');
+  const [telephone, setTelephone] = useState(commande?.telephone || '');
+  const [numeroFacture, setNumeroFacture] = useState(commande?.numeroFacture || '');
+  const [fournisseur, setFournisseur] = useState(commande?.fournisseur || '');
+  const [observations, setObservations] = useState(commande?.observations || '');
+  const verreDe = (oeil: 'OD' | 'OG') => commande?.verres.find(v => v.oeil === oeil);
+  const [lignes, setLignes] = useState<LigneVerre[]>(() =>
+    (['OD', 'OG'] as const).map(oeil => ({ ...ligneVide(oeil), ...(verreDe(oeil) || {}), oeil })));
+  const [commanderOeil, setCommanderOeil] = useState<{ OD: boolean; OG: boolean }>(() =>
+    commande ? { OD: !!verreDe('OD'), OG: !!verreDe('OG') } : { OD: true, OG: true });
   const [ordonnance, setOrdonnance] = useState<FichierOrdonnance | null>(null);
   const [preparation, setPreparation] = useState(false);
   const [envoi, setEnvoi] = useState(false);
@@ -117,15 +122,25 @@ function NouvelleCommande({ magasinId, onFermer, onCommandee }: {
     if (verres.length === 0) { alert('Cochez au moins un œil (OD ou OG) à commander.'); return; }
     const sansVerre = verres.find(v => !v.verre.trim());
     if (sansVerre) { alert(`Indiquez le verre à commander pour l'œil ${sansVerre.oeil === 'OD' ? 'droit (OD)' : 'gauche (OG)'}.`); return; }
-    if (!ordonnance) { alert("Téléchargez l'ordonnance du client avant de commander."); return; }
+    if (!ordonnance && !commande) { alert("Téléchargez l'ordonnance du client avant de commander."); return; }
     setEnvoi(true);
     try {
+      if (commande) {
+        // Modification (administration) : ordonnance remplacée seulement si une nouvelle est choisie.
+        onCommandee(await modifierCommandeVerre(commande, {
+          client, telephone, numeroFacture, fournisseur, observations,
+          verres: verres.map(v => ({ ...v, verre: v.verre.trim() })),
+          ordonnance,
+          par: nomUtilisateur(user),
+        }));
+        return;
+      }
       const c = await passerCommandeVerre({
         magasinId: magasin,
         magasinLabel: getMagasinLabel(magasin),
         client, telephone, numeroFacture, fournisseur, observations,
         verres: verres.map(v => ({ ...v, verre: v.verre.trim() })),
-        ordonnance,
+        ordonnance: ordonnance!,
         creePar: nomUtilisateur(user),
       });
       onCommandee(c);
@@ -143,7 +158,7 @@ function NouvelleCommande({ magasinId, onFermer, onCommandee }: {
     <div className="fixed inset-0 bg-black/50 flex items-start justify-center overflow-y-auto p-3 sm:p-6" style={{ zIndex: 1300 }} data-testid="nouvelle-commande-verre">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl">
         <div className="flex items-center justify-between px-5 py-3 border-b">
-          <h2 className="text-lg font-bold text-gray-800">Nouvelle commande de verre</h2>
+          <h2 className="text-lg font-bold text-gray-800">{commande ? `Modifier la commande ${commande.numero}` : 'Nouvelle commande de verre'}</h2>
           <button onClick={onFermer} className="text-gray-500 hover:text-gray-800" title="Fermer"><X size={22} /></button>
         </div>
 
@@ -156,8 +171,8 @@ function NouvelleCommande({ magasinId, onFermer, onCommandee }: {
           <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <div>
               <label className={etiquette}>Magasin demandeur *</label>
-              {magasinId ? (
-                <div className={`${champ} bg-gray-50 font-semibold`}>{getMagasinLabel(magasinId)}</div>
+              {commande || magasinId ? (
+                <div className={`${champ} bg-gray-50 font-semibold`}>{commande ? (commande.magasinLabel || getMagasinLabel(commande.magasinId)) : getMagasinLabel(magasinId!)}</div>
               ) : (
                 <select className={champ} value={magasin} onChange={e => setMagasin(e.target.value)}>
                   <option value="">— Choisir —</option>
@@ -239,7 +254,7 @@ function NouvelleCommande({ magasinId, onFermer, onCommandee }: {
           </section>
 
           <section className="border-2 border-dashed border-gray-300 rounded-lg p-4">
-            <label className={etiquette}>Ordonnance du client * (photo ou PDF)</label>
+            <label className={etiquette}>{commande ? "Ordonnance du client (photo ou PDF) — choisissez un fichier seulement pour la remplacer" : 'Ordonnance du client * (photo ou PDF)'}</label>
             <div className="flex items-center gap-3 flex-wrap">
               {/* Téléphone / tablette : l'appareil photo s'ouvre directement. */}
               <label className="inline-flex items-center gap-2 px-4 py-2 rounded bg-blue-100 text-blue-900 font-semibold text-sm cursor-pointer hover:bg-blue-200">
@@ -253,6 +268,9 @@ function NouvelleCommande({ magasinId, onFermer, onCommandee }: {
                   onChange={e => { choisirFichier(e.target.files?.[0]); e.target.value = ''; }} />
               </label>
               {preparation && <span className="text-sm text-gray-500">Préparation du fichier…</span>}
+              {commande && !ordonnance && !preparation && (
+                <span className="text-sm text-gray-600" data-testid="ordonnance-conservee">Ordonnance actuelle conservée{commande.ordonnance?.nom ? ` : ${commande.ordonnance.nom}` : ''}</span>
+              )}
               {ordonnance && !preparation && (
                 <span className="flex items-center gap-2 text-sm text-green-700">
                   {ordonnance.type.startsWith('image/')
@@ -269,7 +287,9 @@ function NouvelleCommande({ magasinId, onFermer, onCommandee }: {
           <button onClick={onFermer} className="px-4 py-2 rounded border border-gray-300 text-gray-700 hover:bg-gray-100">Annuler</button>
           <button onClick={commander} disabled={envoi || preparation}
             className="inline-flex items-center gap-2 px-6 py-2 rounded bg-blue-700 text-white font-bold hover:bg-blue-800 disabled:opacity-60">
-            <Send size={16} /> {envoi ? 'Envoi…' : 'COMMANDER'}
+            {commande
+              ? <><Pencil size={16} /> {envoi ? 'Enregistrement…' : 'ENREGISTRER'}</>
+              : <><Send size={16} /> {envoi ? 'Envoi…' : 'COMMANDER'}</>}
           </button>
         </div>
       </div>
@@ -279,7 +299,11 @@ function NouvelleCommande({ magasinId, onFermer, onCommandee }: {
 
 // ── Fiche d'une commande ────────────────────────────────────────────────────
 
-function FicheCommande({ c, onFermer, onOrdonnance }: { c: CommandeVerre; onFermer: () => void; onOrdonnance: () => void }) {
+function FicheCommande({ c, onFermer, onOrdonnance, onModifier, onSupprimer }: {
+  c: CommandeVerre; onFermer: () => void; onOrdonnance: () => void;
+  /** Administration seulement. */
+  onModifier?: () => void; onSupprimer?: () => void;
+}) {
   return (
     <div className="fixed inset-0 bg-black/50 flex items-start justify-center overflow-y-auto p-3 sm:p-6" style={{ zIndex: 1300 }}>
       <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl">
@@ -313,10 +337,23 @@ function FicheCommande({ c, onFermer, onOrdonnance }: { c: CommandeVerre; onFerm
             <li>📝 Commandée le {formatDateHeure(c.date)} par {c.creePar || '-'}</li>
             <li>{c.dateConfirmation ? `✅ Confirmée le ${formatDateHeure(c.dateConfirmation)} par ${c.confirmePar || '-'}` : '⏳ Pas encore confirmée'}</li>
             <li>{c.dateArrivee ? `📦 Verre arrivé le ${formatDateHeure(c.dateArrivee)} (${c.arriveePar || '-'})` : '📦 Verre pas encore arrivé'}</li>
+            {c.modifieeLe && <li>✏️ Modifiée le {formatDateHeure(c.modifieeLe)} par {c.modifieePar || '-'}</li>}
           </ul>
-          <button onClick={onOrdonnance} className="inline-flex items-center gap-2 px-4 py-2 rounded bg-amber-100 text-amber-900 font-semibold hover:bg-amber-200">
-            <FileText size={16} /> Voir l'ordonnance
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button onClick={onOrdonnance} className="inline-flex items-center gap-2 px-4 py-2 rounded bg-amber-100 text-amber-900 font-semibold hover:bg-amber-200">
+              <FileText size={16} /> Voir l'ordonnance
+            </button>
+            {onModifier && (
+              <button onClick={onModifier} className="inline-flex items-center gap-2 px-4 py-2 rounded bg-blue-100 text-blue-900 font-semibold hover:bg-blue-200">
+                <Pencil size={16} /> Modifier
+              </button>
+            )}
+            {onSupprimer && (
+              <button onClick={onSupprimer} className="inline-flex items-center gap-2 px-4 py-2 rounded bg-red-100 text-red-800 font-semibold hover:bg-red-200">
+                <Trash2 size={16} /> Supprimer
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -345,6 +382,9 @@ export function CommandeVerreTab({ magasinId, sousOngletInitial }: { magasinId?:
     : sousOngletChoisi === 'passer' ? 'reception' : 'passer';
   const { commandes, chargement, erreur, recharger } = useCommandesVerre(magasinId);
   const [formulaire, setFormulaire] = useState(false);
+  // Administration (administrateurs, super administrateur) : modifier / supprimer une commande.
+  const peutGerer = ROLES_GESTION_COMPLETE_VERRE.includes(user?.role || '');
+  const [edition, setEdition] = useState<CommandeVerre | null>(null);
   const [fiche, setFiche] = useState<CommandeVerre | null>(null);
   const [image, setImage] = useState<string | null>(null);
   const [message, setMessage] = useState('');
@@ -411,6 +451,18 @@ export function CommandeVerreTab({ magasinId, sousOngletInitial }: { magasinId?:
       recharger();
     } catch (e: any) {
       alert(`❌ Enregistrement impossible : ${e?.message || e}`);
+    } finally { setEnCours(''); }
+  };
+  const supprimer = async (c: CommandeVerre) => {
+    if (!confirm(`Supprimer définitivement la commande ${c.numero} (${c.client}, ${c.magasinLabel}) ?\n\nSon ordonnance est supprimée aussi. Cette action est irréversible.`)) return;
+    setEnCours(c.id);
+    try {
+      await supprimerCommandeVerre(c, par);
+      setFiche(null);
+      setMessage(`🗑️ Commande ${c.numero} (${c.client}) supprimée.`);
+      recharger();
+    } catch (e: any) {
+      alert(`❌ Suppression impossible : ${e?.message || e}`);
     } finally { setEnCours(''); }
   };
   const voirOrdonnance = (c: CommandeVerre) => { vue(c); ouvrirOrdonnance(c, setImage).catch(e => alert(`❌ ${e?.message || e}`)); };
@@ -530,6 +582,10 @@ export function CommandeVerreTab({ magasinId, sousOngletInitial }: { magasinId?:
                         <div className="flex justify-end items-center gap-1.5" onClick={e => e.stopPropagation()}>
                           <button onClick={() => ouvrirFiche(c)} title="Détail" className="p-1.5 rounded border text-gray-700 hover:bg-gray-100"><Eye size={15} /></button>
                           <button onClick={() => voirOrdonnance(c)} title="Ordonnance" className="p-1.5 rounded border text-amber-800 hover:bg-amber-50"><FileText size={15} /></button>
+                          {peutGerer && (<>
+                            <button onClick={() => setEdition(c)} title="Modifier la commande" className="p-1.5 rounded border text-blue-800 hover:bg-blue-50"><Pencil size={15} /></button>
+                            <button onClick={() => supprimer(c)} disabled={enCours === c.id} title="Supprimer la commande" className="p-1.5 rounded border text-red-700 hover:bg-red-50 disabled:opacity-60"><Trash2 size={15} /></button>
+                          </>)}
                           {sousOnglet === 'reception' && estReception && c.statut === STATUT_ENVOYEE && (
                             <button onClick={() => confirmer(c)} disabled={enCours === c.id}
                               className="inline-flex items-center gap-1 px-3 py-1.5 rounded bg-blue-700 text-white text-xs font-bold hover:bg-blue-800 disabled:opacity-60 whitespace-nowrap">
@@ -566,7 +622,22 @@ export function CommandeVerreTab({ magasinId, sousOngletInitial }: { magasinId?:
           }}
         />
       )}
-      {fiche && <FicheCommande c={fiche} onFermer={() => setFiche(null)} onOrdonnance={() => voirOrdonnance(fiche)} />}
+      {edition && (
+        <NouvelleCommande
+          commande={edition}
+          onFermer={() => setEdition(null)}
+          onCommandee={c => {
+            setEdition(null);
+            setMessage(`✏️ Commande ${c.numero} modifiée.`);
+            recharger();
+          }}
+        />
+      )}
+      {fiche && (
+        <FicheCommande c={fiche} onFermer={() => setFiche(null)} onOrdonnance={() => voirOrdonnance(fiche)}
+          onModifier={peutGerer ? () => { setEdition(fiche); setFiche(null); } : undefined}
+          onSupprimer={peutGerer ? () => supprimer(fiche) : undefined} />
+      )}
       {image && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4" style={{ zIndex: 1310 }} onClick={() => setImage(null)}>
           <img src={image} alt="Ordonnance" className="max-h-full max-w-full rounded shadow-xl bg-white" />

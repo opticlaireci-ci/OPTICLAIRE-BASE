@@ -87,6 +87,22 @@ voit que sa partie (voir « Droits » ci-dessous).
   ce que l'utilisateur voit »** → cocher « Bon Verre », « Fournisseur » et/ou
   « Montage » → Enregistrer (pris en compte à sa prochaine connexion).
 
+## Modifier ou supprimer une commande (administration, 28/10/2026)
+
+Réservé aux **administrateurs** et au **super administrateur** (ni
+l'assistante administrative, ni les magasins) : boutons ✏️ **Modifier** et
+🗑️ **Supprimer** sur chaque ligne (les deux sous-onglets) et dans la fiche de
+la commande.
+
+- **Modifier** : le formulaire s'ouvre pré-rempli (client, téléphone, n° de
+  facture, verres OD / OG, fournisseur, observations) → **ENREGISTRER**. Le
+  numéro, le magasin, le statut et l'historique sont conservés ; l'ordonnance
+  aussi, sauf si vous en choisissez une nouvelle (l'ancienne est alors
+  retirée du stockage). La fiche indique « ✏️ Modifiée le … par … ».
+- **Supprimer** : confirmation demandée, puis la commande et son ordonnance
+  (stockage ou base) sont supprimées définitivement.
+- Chaque modification et suppression est notée dans le journal des actions.
+
 ## Connexion de l'assistante administrative (28/10/2026)
 
 L'assistante administrative est rattachée à tous les magasins : à la
@@ -179,6 +195,13 @@ reste légère et rapide, les fichiers ne sont téléchargés qu'à l'ouverture.
 - Sous-onglet du magasin renommé « Gestion de commande » (administration :
   « … (magasin) » et « … (administration) ») : parcours complet 52/52 avec la
   politique de sécurité du site.
+- Modifier / supprimer : 16 tests du service (statut changé entre-temps
+  conservé, ordonnance remplacée photo → PDF avec l'ancienne retirée,
+  ordonnance de la base passée au stockage, suppression avec ordonnance,
+  suppression refusée par la base sans rien retirer) ; navigateur 19/19 avec
+  la politique de sécurité du site (administrateur et super administrateur :
+  boutons ; assistante, conseillère : aucun ; modification, journal,
+  suppression depuis la fiche et depuis la liste).
 - Lignes rouges en haut : navigateur 7/7 (deux commandes arrivées en haut,
   la plus récemment arrivée d'abord ; chacune reprend sa place après le clic ;
   ancienne commande arrivée et listes de l'assistante non concernées).
