@@ -1,5 +1,5 @@
 /**
- * Atelier → « Commande de verre » : sous-onglets « Passer commande » (magasin)
+ * Atelier → « Commande de verre » : sous-onglets « Gestion de commande » du magasin
  * et « Gestion de commande » (assistante administrative). Voir
  * services/commandesVerreService.ts pour le parcours complet.
  */
@@ -331,7 +331,7 @@ function FicheCommande({ c, onFermer, onOrdonnance }: { c: CommandeVerre; onFerm
  */
 export function CommandeVerreTab({ magasinId, sousOngletInitial }: { magasinId?: string; sousOngletInitial?: SousOngletVerre }) {
   const { user } = useAuth();
-  // Parties visibles : magasins → « Passer commande » ; assistante →
+  // Parties visibles : magasins → leur « Gestion de commande » ; assistante →
   // « Gestion de commande » ; autres parties données par case cochée.
   const acces = accesCommandeVerre(user);
   const estReception = acces.reception;
@@ -428,8 +428,8 @@ export function CommandeVerreTab({ magasinId, sousOngletInitial }: { magasinId?:
   if (!acces.passer && !acces.reception) {
     return (
       <div className="bg-white rounded-lg shadow-sm p-6 text-center text-gray-600 text-sm" data-testid="commande-verre">
-        La commande de verre ne vous est pas ouverte. Demandez à l'administrateur de cocher « Passer commande »
-        ou « Gestion de commande » pour votre compte (Gestion des utilisateurs).
+        La commande de verre ne vous est pas ouverte. Demandez à l'administrateur de cocher « Gestion de commande »
+        (côté magasin ou côté administration) pour votre compte (Gestion des utilisateurs).
       </div>
     );
   }
@@ -442,8 +442,10 @@ export function CommandeVerreTab({ magasinId, sousOngletInitial }: { magasinId?:
         .ligne-cv-arrivee > td { animation: ligneCvArrivee 1s ease-in-out infinite; }
       `}</style>
       <div className="flex border-b bg-gray-50 rounded-t-lg overflow-x-auto">
-        {acces.passer && onglet('passer', 'Passer commande')}
-        {acces.reception && onglet('reception', 'Gestion de commande', compte(STATUT_ENVOYEE))}
+        {/* Les deux parties s'appellent « Gestion de commande » ; précisées seulement
+            pour un compte qui voit les deux (administration, main donnée). */}
+        {acces.passer && onglet('passer', acces.reception ? 'Gestion de commande (magasin)' : 'Gestion de commande')}
+        {acces.reception && onglet('reception', acces.passer ? 'Gestion de commande (administration)' : 'Gestion de commande', compte(STATUT_ENVOYEE))}
       </div>
 
       <div className="p-4 space-y-3">
@@ -557,7 +559,7 @@ export function CommandeVerreTab({ magasinId, sousOngletInitial }: { magasinId?:
           onFermer={() => setFormulaire(false)}
           onCommandee={c => {
             setFormulaire(false);
-            setMessage(`✅ Commande ${c.numero} envoyée : elle est dans « Gestion de commande » et attend la confirmation de l'assistante administrative.`
+            setMessage(`✅ Commande ${c.numero} envoyée : elle attend la confirmation de l'assistante administrative.`
               // Administration : signale que le stockage des ordonnances n'est pas encore installé.
               + (!c.ordonnance?.chemin && estAdministration ? " (Ordonnance rangée dans la base : exécutez STOCKAGE_ORDONNANCES_2026-10-28.sql pour utiliser le stockage de fichiers.)" : ''));
             recharger();

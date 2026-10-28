@@ -202,7 +202,8 @@ export function peutModifierReglement(user: (UserLike & { droitsVoir?: string[] 
 /*
  * COMMANDE DE VERRE (Atelier) : ce que chacun voit (clés `voir:` cochées dans
  * Gestion des Utilisateurs, comme les accès ci-dessus).
- *  - « Passer commande » : les magasins (conseillères, opticiens… tous les
+ *  - « Gestion de commande » côté magasin (passer commande, suivre ses
+ *    commandes) : les magasins (conseillères, opticiens… tous les
  *    rôles sauf l'assistante administrative) ;
  *  - « Gestion de commande » (confirmer, verre arrivé) : l'assistante
  *    administrative ;
@@ -216,8 +217,8 @@ export const VOIR_CV_EXPLICATIONS_KEY = 'voir:commande-verre-explications';
 
 /** Cases « Commande de verre » et rôles qui ont l'accès sans case cochée. */
 export const ACCES_COMMANDE_VERRE: { key: string; label: string; parRole: (role: string) => boolean }[] = [
-  { key: VOIR_CV_PASSER_KEY, label: '« Passer commande » (nouvelle commande de verre)', parRole: r => r !== 'assistante_admin' },
-  { key: VOIR_CV_RECEPTION_KEY, label: '« Gestion de commande » (confirmer la commande, verre arrivé)', parRole: r => r === 'assistante_admin' },
+  { key: VOIR_CV_PASSER_KEY, label: '« Gestion de commande » côté magasin (nouvelle commande, suivi des commandes du magasin)', parRole: r => r !== 'assistante_admin' },
+  { key: VOIR_CV_RECEPTION_KEY, label: '« Gestion de commande » côté administration (confirmer la commande, verre arrivé)', parRole: r => r === 'assistante_admin' },
   { key: VOIR_CV_EXPLICATIONS_KEY, label: 'Les cases explicatives en haut (1. Passer commande, 2. Confirmation, 3. Verre arrivé)', parRole: () => false },
 ];
 

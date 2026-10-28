@@ -56,7 +56,7 @@ import { loadCreditsSms, etatCreditSms, SMS_CREDITS_EVENT } from '../services/sm
 import { useCommandesVerre } from '../hooks/useCommandesVerre';
 import { arriveesNonVues, type CommandeVerre } from '../services/commandesVerreService';
 
-/** Page des commandes de verre du magasin (Atelier → Commande de verre → Passer commande). */
+/** Page des commandes de verre du magasin (Atelier → Commande de verre → Gestion de commande). */
 const cheminCommandesVerre = (magasinId: string | undefined) =>
   `/magasin/${magasinId}/atelier?onglet=commande-verre&sous=passer`;
 

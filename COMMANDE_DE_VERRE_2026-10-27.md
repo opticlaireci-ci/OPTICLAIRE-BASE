@@ -8,14 +8,18 @@
   restent réservés aux monteurs et à l'administration.
 - **Dans le tableau de bord général** : menu **Atelier** → **Commande de verre**.
 
-Deux sous-onglets : **Passer commande** et **Gestion de commande**. Chacun ne
+Deux sous-onglets, tous deux appelés **Gestion de commande** : celui du
+**magasin** (nouvelle commande, suivi de ses commandes) et celui de
+l'**administration** (confirmer, verre arrivé). Un compte qui voit les deux
+(administration) les lit « Gestion de commande (magasin) » et « Gestion de
+commande (administration) ». Chacun ne
 voit que sa partie (voir « Droits » ci-dessous).
 
 ## Le parcours
 
 | Étape | Qui | Ce qu'il fait | Ce que voit le magasin |
 |---|---|---|---|
-| 1 | Conseillère / opticien | Atelier → Commande de verre (arrive sur **Passer commande**) → **NOUVELLE COMMANDE** → verres (OD / OG : verre, type, traitement, matière, sphère, cylindre, axe, addition, diamètre, quantité), client, fournisseur, observations → **Télécharger l'ordonnance** → **COMMANDER** | « Envoyée » ; la commande part dans **Gestion de commande** |
+| 1 | Conseillère / opticien | Atelier → Commande de verre (arrive sur **Gestion de commande** du magasin) → **NOUVELLE COMMANDE** → verres (OD / OG : verre, type, traitement, matière, sphère, cylindre, axe, addition, diamètre, quantité), client, fournisseur, observations → **Télécharger l'ordonnance** → **COMMANDER** | « Envoyée » ; la commande part dans **Gestion de commande** |
 | 2 | Assistante administrative | Atelier → Commande de verre (arrive directement sur **Gestion de commande → Commande**) → **CONFIRMER LA COMMANDE** : la commande passe dans **Suivi** | **« En attente »** |
 | 3 | Assistante administrative | **Suivi** → **VERRE ARRIVÉ** : la commande passe dans **Arrivage** | **« Commande arrivée »** + message en haut de l'écran du magasin + **icône qui clignote** dans la barre d'icônes (comme les bons de distribution) + **toute la ligne de la commande clignote en rouge** |
 | 4 | Magasin | Clique sur l'icône ou sur le message → ses commandes s'ouvrent | Le message disparaît et l'icône cesse de clignoter (pour tout le magasin) ; la ligne rouge continue de clignoter |
@@ -47,7 +51,7 @@ voit que sa partie (voir « Droits » ci-dessous).
 
 ## Droits (28/10/2026)
 
-| Compte | Passer commande | Gestion de commande | Cases explicatives (1-2-3) |
+| Compte | Gestion de commande (magasin) | Gestion de commande (administration) | Cases explicatives (1-2-3) |
 |---|---|---|---|
 | Conseillère, opticien et autres comptes de magasin | ✅ | — | — |
 | Assistante administrative | — | ✅ | — |
@@ -55,11 +59,12 @@ voit que sa partie (voir « Droits » ci-dessous).
 
 - **Donner la main plus tard** : Gestion des utilisateurs → modifier
   l'utilisateur → onglet **Accès aux boutons** → bloc **« Atelier → Commande
-  de verre : ce que l'utilisateur voit »** → cocher « Passer commande »,
-  « Gestion de commande » et/ou « Les cases explicatives en haut » →
+  de verre : ce que l'utilisateur voit »** → cocher « Gestion de commande »
+  côté magasin, « Gestion de commande » côté administration et/ou « Les cases
+  explicatives en haut » →
   Enregistrer. La partie donnée par le rôle est cochée et grisée « (inclus dans
   son rôle) ». L'utilisateur voit le changement à sa prochaine connexion.
-- Avec « Gestion de commande » cochée, l'utilisateur **confirme** et signale
+- Avec « Gestion de commande » côté administration cochée, l'utilisateur **confirme** et signale
   **verre arrivé** (et voit l'icône « Commandes de verre à confirmer »), pour
   les magasins rattachés à son compte.
 - Un lien vers une partie non permise (icône, message) ouvre l'autre partie.
@@ -69,7 +74,7 @@ voit que sa partie (voir « Droits » ci-dessous).
 | Compte | Commande de verre | Bon Verre | Fournisseur | Montage |
 |---|---|---|---|---|
 | Assistante administrative | ✅ (Gestion de commande) | — | — | — |
-| Conseillère, opticien | ✅ (Passer commande) | — | — | — |
+| Conseillère, opticien | ✅ (Gestion de commande du magasin) | — | — | — |
 | Monteur, administrateurs, super administrateur | ✅ | ✅ | ✅ | ✅ |
 | Autre compte dont le bouton de menu « Atelier » est coché | ✅ | ✅ | ✅ | ✅ |
 
@@ -171,6 +176,9 @@ reste légère et rapide, les fichiers ne sont téléchargés qu'à l'ouverture.
   vercel.json) : problème reproduit sur l'ancienne version (ordonnance dans
   la base, image illisible), puis parcours complet 50/50 sans aucun blocage
   (photo dans le stockage et ouverte ; repli dans la base ouvert aussi).
+- Sous-onglet du magasin renommé « Gestion de commande » (administration :
+  « … (magasin) » et « … (administration) ») : parcours complet 52/52 avec la
+  politique de sécurité du site.
 - Lignes rouges en haut : navigateur 7/7 (deux commandes arrivées en haut,
   la plus récemment arrivée d'abord ; chacune reprend sa place après le clic ;
   ancienne commande arrivée et listes de l'assistante non concernées).

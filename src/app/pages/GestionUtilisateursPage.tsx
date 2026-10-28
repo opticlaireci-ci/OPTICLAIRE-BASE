@@ -580,8 +580,8 @@ function ModalUser({
               })}
             </div>
             <div className="px-3 pb-2 text-xs text-gray-500">
-              D'office : les magasins (conseillères, opticiens…) ne voient que « Passer commande », l'assistante
-              administrative que « Gestion de commande », et personne ne voit les cases explicatives ; les administrateurs
+              D'office : les magasins (conseillères, opticiens…) ne voient que leur « Gestion de commande » (côté magasin),
+              l'assistante administrative que « Gestion de commande » côté administration, et personne ne voit les cases explicatives ; les administrateurs
               voient tout. Cochez une case pour donner cette partie à l'utilisateur ; décochez-la pour la lui retirer.
             </div>
           </div>
