@@ -581,7 +581,7 @@ function ModalUser({
             </div>
             <div className="px-3 pb-2 text-xs text-gray-500">
               D'office : les magasins (conseillères, opticiens…) ne voient que « Passer commande », l'assistante
-              administrative que « Réception commande », et personne ne voit les cases explicatives ; les administrateurs
+              administrative que « Gestion de commande », et personne ne voit les cases explicatives ; les administrateurs
               voient tout. Cochez une case pour donner cette partie à l'utilisateur ; décochez-la pour la lui retirer.
             </div>
           </div>
@@ -613,7 +613,7 @@ function ModalUser({
             </div>
             <div className="px-3 pb-2 text-xs text-gray-500">
               D'office : administrateurs, super administrateur et monteur. L'assistante administrative n'a que la commande
-              de verre (Réception commande) : cochez un bouton pour le lui donner ; décochez-le pour le lui retirer.
+              de verre (Gestion de commande) : cochez un bouton pour le lui donner ; décochez-le pour le lui retirer.
             </div>
           </div>
           {/* Accès particuliers des conseillères et opticiens : masqués par défaut,

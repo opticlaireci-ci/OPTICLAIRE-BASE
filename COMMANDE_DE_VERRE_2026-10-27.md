@@ -8,17 +8,23 @@
   restent réservés aux monteurs et à l'administration.
 - **Dans le tableau de bord général** : menu **Atelier** → **Commande de verre**.
 
-Deux sous-onglets : **Passer commande** et **Réception commande**. Chacun ne
+Deux sous-onglets : **Passer commande** et **Gestion de commande**. Chacun ne
 voit que sa partie (voir « Droits » ci-dessous).
 
 ## Le parcours
 
 | Étape | Qui | Ce qu'il fait | Ce que voit le magasin |
 |---|---|---|---|
-| 1 | Conseillère / opticien | Atelier → Commande de verre (arrive sur **Passer commande**) → **NOUVELLE COMMANDE** → verres (OD / OG : verre, type, traitement, matière, sphère, cylindre, axe, addition, diamètre, quantité), client, fournisseur, observations → **Télécharger l'ordonnance** → **COMMANDER** | « Envoyée (à confirmer) » ; la commande part dans **Réception commande** |
-| 2 | Assistante administrative | Atelier → Commande de verre (arrive directement sur **Réception commande**) → **CONFIRMER LA COMMANDE** | **« En attente »** |
-| 3 | Assistante administrative | **VERRE ARRIVÉ** | **« Commande arrivée »** + message en haut de l'écran du magasin + **icône qui clignote** dans la barre d'icônes (comme les bons de distribution) |
-| 4 | Magasin | Clique sur l'icône ou sur le message → ses commandes s'ouvrent | Le message disparaît et l'icône cesse de clignoter (pour tout le magasin) |
+| 1 | Conseillère / opticien | Atelier → Commande de verre (arrive sur **Passer commande**) → **NOUVELLE COMMANDE** → verres (OD / OG : verre, type, traitement, matière, sphère, cylindre, axe, addition, diamètre, quantité), client, fournisseur, observations → **Télécharger l'ordonnance** → **COMMANDER** | « Envoyée (à confirmer) » ; la commande part dans **Gestion de commande** |
+| 2 | Assistante administrative | Atelier → Commande de verre (arrive directement sur **Gestion de commande → Commande**) → **CONFIRMER LA COMMANDE** : la commande passe dans **Suivi** | **« En attente »** |
+| 3 | Assistante administrative | **Suivi** → **VERRE ARRIVÉ** : la commande passe dans **Arrivage** | **« Commande arrivée »** + message en haut de l'écran du magasin + **icône qui clignote** dans la barre d'icônes (comme les bons de distribution) + **toute la ligne de la commande clignote en rouge** |
+| 4 | Magasin | Clique sur l'icône ou sur le message → ses commandes s'ouvrent | Le message disparaît et l'icône cesse de clignoter (pour tout le magasin) ; la ligne rouge continue de clignoter |
+| 5 | Conseillère / opticien | Clique sur la ligne rouge → les informations de la commande s'ouvrent | La ligne cesse de clignoter (pour tout le magasin) et reprend sa place normale dans la liste |
+
+- Chez le magasin, les commandes arrivées pas encore ouvertes (lignes rouges)
+  sont **toujours en haut** de la liste, la plus récemment arrivée d'abord.
+  Une fois ouvertes, elles reprennent leur place normale (la commande la plus
+  récente d'abord). Côté assistante, les listes restent par date.
 
 - Côté administration, une icône **« Commandes de verre à confirmer »**
   clignote aussi dans la barre du haut tant qu'une commande attend sa
@@ -30,15 +36,18 @@ voit que sa partie (voir « Droits » ci-dessous).
   s'ouvre depuis chaque commande (bouton ordonnance) ; la fiche détaillée
   reprend les verres et l'historique (commandée, confirmée, arrivée : date et
   personne).
-- Réception : filtres **À traiter / À confirmer / En attente / Arrivées /
-  Toutes** et recherche (client, numéro, magasin).
+- Gestion de commande (assistante) : trois boutons **Commande** (commandes
+  envoyées par les magasins, à confirmer), **Suivi** (confirmées, en attente
+  du verre) et **Arrivage** (verre arrivé), avec le nombre de commandes de
+  chacun, et une recherche (client, numéro, magasin). Un clic sur une ligne
+  ouvre les informations de la commande.
 - Numéro de commande : **CV-0001, CV-0002…**, suivi par la base pour tous les
   magasins (fonction de numérotation de NUMEROTATION_FACTURES.sql, compteur
   propre aux commandes de verre ; sans elle, compteur de chaque poste).
 
 ## Droits (28/10/2026)
 
-| Compte | Passer commande | Réception commande | Cases explicatives (1-2-3) |
+| Compte | Passer commande | Gestion de commande | Cases explicatives (1-2-3) |
 |---|---|---|---|
 | Conseillère, opticien et autres comptes de magasin | ✅ | — | — |
 | Assistante administrative | — | ✅ | — |
@@ -47,10 +56,10 @@ voit que sa partie (voir « Droits » ci-dessous).
 - **Donner la main plus tard** : Gestion des utilisateurs → modifier
   l'utilisateur → onglet **Accès aux boutons** → bloc **« Atelier → Commande
   de verre : ce que l'utilisateur voit »** → cocher « Passer commande »,
-  « Réception commande » et/ou « Les cases explicatives en haut » →
+  « Gestion de commande » et/ou « Les cases explicatives en haut » →
   Enregistrer. La partie donnée par le rôle est cochée et grisée « (inclus dans
   son rôle) ». L'utilisateur voit le changement à sa prochaine connexion.
-- Avec « Réception commande » cochée, l'utilisateur **confirme** et signale
+- Avec « Gestion de commande » cochée, l'utilisateur **confirme** et signale
   **verre arrivé** (et voit l'icône « Commandes de verre à confirmer »), pour
   les magasins rattachés à son compte.
 - Un lien vers une partie non permise (icône, message) ouvre l'autre partie.
@@ -59,13 +68,13 @@ voit que sa partie (voir « Droits » ci-dessous).
 
 | Compte | Commande de verre | Bon Verre | Fournisseur | Montage |
 |---|---|---|---|---|
-| Assistante administrative | ✅ (Réception commande) | — | — | — |
+| Assistante administrative | ✅ (Gestion de commande) | — | — | — |
 | Conseillère, opticien | ✅ (Passer commande) | — | — | — |
 | Monteur, administrateurs, super administrateur | ✅ | ✅ | ✅ | ✅ |
 | Autre compte dont le bouton de menu « Atelier » est coché | ✅ | ✅ | ✅ | ✅ |
 
 - L'assistante administrative ne voit dans l'Atelier que **Commande de
-  verre → Réception commande** : ni Bon Verre, Fournisseur, Montage, ni les
+  verre → Gestion de commande** : ni Bon Verre, Fournisseur, Montage, ni les
   filtres (officine, année), compteurs et délais « DATE ÉDITION… ». Le bouton
   de menu « Atelier » coché ne lui donne pas le reste de l'Atelier.
 - **Donner un bouton plus tard** : Gestion des utilisateurs → modifier
@@ -79,7 +88,7 @@ L'assistante administrative est rattachée à tous les magasins : à la
 connexion, elle arrive sur l'**accueil général** (et non plus dans le premier
 magasin de sa liste, ABOBO). Accès rapides : **Tableau de Bord**, **Accès
 Magasins** (pour ouvrir un magasin si besoin) et **Commande de verre**
-(Réception commande). Son menu garde toujours Accueil, Accès Magasins et
+(Gestion de commande). Son menu garde toujours Accueil, Accès Magasins et
 Atelier, même si ses boutons cochés ne les contiennent pas. Les conseillères
 et opticiens arrivent toujours dans leur magasin.
 - Chaque magasin ne voit que **ses** commandes.
@@ -145,6 +154,14 @@ reste légère et rapide, les fichiers ne sont téléchargés qu'à l'ouverture.
   général avec ou sans boutons cochés, menu, Commande de verre, Accès
   Magasins ; conseillère toujours dans son magasin ; administrateur inchangé :
   10/10 (l'ancienne version envoyait l'assistante sur /magasin/abobo).
+- Gestion de commande (Commande / Suivi / Arrivage) et ligne rouge du
+  magasin : 11 tests du service (clignote à l'arrivée, continue après
+  l'ouverture des commandes, s'arrête au clic pour tout le magasin, rien de
+  réécrit sur un double clic, anciennes commandes sans clignotement) ;
+  navigateur, parcours complet : 50/50.
+- Lignes rouges en haut : navigateur 7/7 (deux commandes arrivées en haut,
+  la plus récemment arrivée d'abord ; chacune reprend sa place après le clic ;
+  ancienne commande arrivée et listes de l'assistante non concernées).
 - Atelier : boutons par rôle et par case, 14 tests ; navigateur 16/16
   (assistante : Commande de verre seule, même par lien direct ; avec Montage,
   puis Bon Verre et Fournisseur cochés ; administrateur et monteur : tout ;

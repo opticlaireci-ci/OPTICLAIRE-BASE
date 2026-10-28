@@ -1,6 +1,6 @@
 /**
  * Atelier → « Commande de verre » : sous-onglets « Passer commande » (magasin)
- * et « Réception commande » (assistante administrative). Voir
+ * et « Gestion de commande » (assistante administrative). Voir
  * services/commandesVerreService.ts pour le parcours complet.
  */
 import { useEffect, useMemo, useState } from 'react';
@@ -15,7 +15,7 @@ import { accesCommandeVerre } from '../utils/actionRights';
 import {
   ROLES_RECEPTION_VERRE, STATUT_ENVOYEE, STATUT_EN_ATTENTE, STATUT_ARRIVEE,
   libelleStatutMagasin, libelleStatutReception, passerCommandeVerre, confirmerCommandeVerre,
-  signalerArriveeVerre, marquerArriveesVues, lireOrdonnance, preparerOrdonnance,
+  signalerArriveeVerre, marquerArriveesVues, marquerLigneVue, ligneAClignoter, lireOrdonnance, preparerOrdonnance,
   type CommandeVerre, type LigneVerre, type FichierOrdonnance,
 } from '../services/commandesVerreService';
 
@@ -331,7 +331,7 @@ function FicheCommande({ c, onFermer, onOrdonnance }: { c: CommandeVerre; onFerm
 export function CommandeVerreTab({ magasinId, sousOngletInitial }: { magasinId?: string; sousOngletInitial?: SousOngletVerre }) {
   const { user } = useAuth();
   // Parties visibles : magasins → « Passer commande » ; assistante →
-  // « Réception commande » ; autres parties données par case cochée.
+  // « Gestion de commande » ; autres parties données par case cochée.
   const acces = accesCommandeVerre(user);
   const estReception = acces.reception;
   const estAdministration = ROLES_RECEPTION_VERRE.includes(user?.role || '');
@@ -347,7 +347,8 @@ export function CommandeVerreTab({ magasinId, sousOngletInitial }: { magasinId?:
   const [fiche, setFiche] = useState<CommandeVerre | null>(null);
   const [image, setImage] = useState<string | null>(null);
   const [message, setMessage] = useState('');
-  const [filtre, setFiltre] = useState<'a-traiter' | 'envoyees' | 'attente' | 'arrivees' | 'toutes'>('a-traiter');
+  // Gestion de commande : Commande (à confirmer) → Suivi (en attente du verre) → Arrivage.
+  const [filtre, setFiltre] = useState<'commande' | 'suivi' | 'arrivage'>('commande');
   const [recherche, setRecherche] = useState('');
   const [enCours, setEnCours] = useState('');
 
@@ -358,19 +359,34 @@ export function CommandeVerreTab({ magasinId, sousOngletInitial }: { magasinId?:
     marquerArriveesVues(commandes).catch(() => { /* réessayé au prochain affichage */ });
   }, [commandes, chargement, estDuMagasin, estAdministration, acces.passer]);
 
+  // Commande arrivée : sa ligne clignote en rouge chez le magasin jusqu'à ce
+  // qu'une conseillère ou un opticien clique dessus (pour tout le magasin).
+  const [vuesIci, setVuesIci] = useState<Set<string>>(() => new Set());
+  const clignote = (c: CommandeVerre) => sousOnglet === 'passer' && ligneAClignoter(c) && !vuesIci.has(c.id);
+  const vue = (c: CommandeVerre) => {
+    if (!clignote(c) || !estDuMagasin || estAdministration) return;
+    setVuesIci(s => new Set(s).add(c.id));
+    marquerLigneVue(c).then(recharger).catch(() => { /* réessayé au prochain clic */ });
+  };
+  const ouvrirFiche = (c: CommandeVerre) => { vue(c); setFiche(c); };
+
   const filtrees = useMemo(() => {
     const q = recherche.trim().toLowerCase();
-    return commandes.filter(c => {
+    const liste = commandes.filter(c => {
       if (sousOnglet === 'reception') {
-        if (filtre === 'a-traiter' && c.statut === STATUT_ARRIVEE) return false;
-        if (filtre === 'envoyees' && c.statut !== STATUT_ENVOYEE) return false;
-        if (filtre === 'attente' && c.statut !== STATUT_EN_ATTENTE) return false;
-        if (filtre === 'arrivees' && c.statut !== STATUT_ARRIVEE) return false;
+        const statut = filtre === 'commande' ? STATUT_ENVOYEE : filtre === 'suivi' ? STATUT_EN_ATTENTE : STATUT_ARRIVEE;
+        if (c.statut !== statut) return false;
       }
       return !q || [c.numero, c.client, c.magasinLabel, c.telephone, c.numeroFacture, resumeVerres(c.verres)]
         .some(x => String(x || '').toLowerCase().includes(q));
     });
-  }, [commandes, sousOnglet, filtre, recherche]);
+    // Magasin : les commandes arrivées pas encore ouvertes (ligne rouge) restent
+    // en haut, la plus récemment arrivée d'abord ; une fois ouvertes, elles
+    // reprennent leur place (la plus récente commande d'abord).
+    const enHaut = liste.filter(clignote)
+      .sort((x, y) => String(y.dateArrivee || '').localeCompare(String(x.dateArrivee || '')));
+    return enHaut.length ? [...enHaut, ...liste.filter(c => !clignote(c))] : liste;
+  }, [commandes, sousOnglet, filtre, recherche, vuesIci]);
 
   const compte = (s: string) => commandes.filter(c => c.statut === s).length;
   const par = nomUtilisateur(user);
@@ -379,7 +395,7 @@ export function CommandeVerreTab({ magasinId, sousOngletInitial }: { magasinId?:
     setEnCours(c.id);
     try {
       await confirmerCommandeVerre(c, par);
-      setMessage(`✅ Commande ${c.numero} confirmée : le magasin ${c.magasinLabel} la voit « En attente ».`);
+      setMessage(`✅ Commande ${c.numero} confirmée : elle passe dans « Suivi » et le magasin ${c.magasinLabel} la voit « En attente ».`);
       recharger();
     } catch (e: any) {
       alert(`❌ Confirmation impossible : ${e?.message || e}`);
@@ -390,13 +406,13 @@ export function CommandeVerreTab({ magasinId, sousOngletInitial }: { magasinId?:
     setEnCours(c.id);
     try {
       await signalerArriveeVerre(c, par);
-      setMessage(`📦 Verre arrivé : le magasin ${c.magasinLabel} est prévenu (commande ${c.numero}).`);
+      setMessage(`📦 Verre arrivé : la commande ${c.numero} passe dans « Arrivage » et le magasin ${c.magasinLabel} est prévenu.`);
       recharger();
     } catch (e: any) {
       alert(`❌ Enregistrement impossible : ${e?.message || e}`);
     } finally { setEnCours(''); }
   };
-  const voirOrdonnance = (c: CommandeVerre) => ouvrirOrdonnance(c, setImage).catch(e => alert(`❌ ${e?.message || e}`));
+  const voirOrdonnance = (c: CommandeVerre) => { vue(c); ouvrirOrdonnance(c, setImage).catch(e => alert(`❌ ${e?.message || e}`)); };
 
   const onglet = (id: SousOngletVerre, libelle: string, nb?: number) => (
     <button
@@ -412,16 +428,21 @@ export function CommandeVerreTab({ magasinId, sousOngletInitial }: { magasinId?:
     return (
       <div className="bg-white rounded-lg shadow-sm p-6 text-center text-gray-600 text-sm" data-testid="commande-verre">
         La commande de verre ne vous est pas ouverte. Demandez à l'administrateur de cocher « Passer commande »
-        ou « Réception commande » pour votre compte (Gestion des utilisateurs).
+        ou « Gestion de commande » pour votre compte (Gestion des utilisateurs).
       </div>
     );
   }
 
   return (
     <div className="bg-white rounded-lg shadow-sm" data-testid="commande-verre">
+      <style>{`
+        @keyframes ligneCvArrivee { 0%, 100% { background-color: #fee2e2; } 50% { background-color: #fca5a5; } }
+        .ligne-cv-arrivee > td { color: #7f1d1d; }
+        .ligne-cv-arrivee > td { animation: ligneCvArrivee 1s ease-in-out infinite; }
+      `}</style>
       <div className="flex border-b bg-gray-50 rounded-t-lg overflow-x-auto">
         {acces.passer && onglet('passer', 'Passer commande')}
-        {acces.reception && onglet('reception', 'Réception commande', compte(STATUT_ENVOYEE))}
+        {acces.reception && onglet('reception', 'Gestion de commande', compte(STATUT_ENVOYEE))}
       </div>
 
       <div className="p-4 space-y-3">
@@ -443,10 +464,11 @@ export function CommandeVerreTab({ magasinId, sousOngletInitial }: { magasinId?:
           {sousOnglet === 'reception' && (
             <div className="flex gap-1 flex-wrap">
               {([
-                ['a-traiter', 'À traiter'], ['envoyees', `À confirmer (${compte(STATUT_ENVOYEE)})`],
-                ['attente', `En attente (${compte(STATUT_EN_ATTENTE)})`], ['arrivees', `Arrivées (${compte(STATUT_ARRIVEE)})`], ['toutes', 'Toutes'],
+                ['commande', `Commande (${compte(STATUT_ENVOYEE)})`],
+                ['suivi', `Suivi (${compte(STATUT_EN_ATTENTE)})`],
+                ['arrivage', `Arrivage (${compte(STATUT_ARRIVEE)})`],
               ] as const).map(([id, libelle]) => (
-                <button key={id} onClick={() => setFiltre(id)}
+                <button key={id} onClick={() => setFiltre(id)} data-testid={`filtre-${id}`}
                   className={`px-3 py-1.5 rounded-full text-xs font-semibold border ${filtre === id ? 'bg-blue-700 text-white border-blue-700' : 'bg-white text-gray-700 border-gray-300'}`}>
                   {libelle}
                 </button>
@@ -456,6 +478,12 @@ export function CommandeVerreTab({ magasinId, sousOngletInitial }: { magasinId?:
           <input value={recherche} onChange={e => setRecherche(e.target.value)} placeholder="Rechercher (client, n°, magasin…)"
             className="ml-auto w-full sm:w-64 px-3 py-2 border border-gray-300 rounded text-sm" />
         </div>
+
+        {sousOnglet === 'passer' && filtrees.some(clignote) && (
+          <div className="p-3 rounded bg-red-50 border border-red-300 text-red-800 text-sm font-semibold" data-testid="aide-ligne-arrivee">
+            📦 Commande arrivée : cliquez sur la ligne qui clignote en rouge pour voir ses informations.
+          </div>
+        )}
 
         {chargement && commandes.length === 0 ? (
           <div className="py-10 text-center text-gray-500 text-sm">Chargement des commandes…</div>
@@ -479,9 +507,11 @@ export function CommandeVerreTab({ magasinId, sousOngletInitial }: { magasinId?:
               </thead>
               <tbody className="divide-y">
                 {filtrees.map(c => {
-                  const nouvelleArrivee = sousOnglet === 'passer' && c.statut === STATUT_ARRIVEE && !c.arriveeVue;
+                  const aSignaler = clignote(c);
                   return (
-                    <tr key={c.id} className={nouvelleArrivee ? 'bg-green-50' : 'hover:bg-gray-50'}>
+                    <tr key={c.id} onClick={() => ouvrirFiche(c)} title="Voir les informations de la commande"
+                      className={`cursor-pointer ${aSignaler ? 'ligne-cv-arrivee' : 'hover:bg-gray-50'}`}
+                      data-testid={aSignaler ? 'ligne-arrivee' : undefined}>
                       <td className="px-3 py-2 font-mono font-semibold whitespace-nowrap">{c.numero}</td>
                       <td className="px-3 py-2 whitespace-nowrap">{formatDate(c.date)}</td>
                       {!magasinId && <td className="px-3 py-2 whitespace-nowrap">{c.magasinLabel}</td>}
@@ -494,8 +524,8 @@ export function CommandeVerreTab({ magasinId, sousOngletInitial }: { magasinId?:
                         </span>
                       </td>
                       <td className="px-3 py-2">
-                        <div className="flex justify-end items-center gap-1.5">
-                          <button onClick={() => setFiche(c)} title="Détail" className="p-1.5 rounded border text-gray-700 hover:bg-gray-100"><Eye size={15} /></button>
+                        <div className="flex justify-end items-center gap-1.5" onClick={e => e.stopPropagation()}>
+                          <button onClick={() => ouvrirFiche(c)} title="Détail" className="p-1.5 rounded border text-gray-700 hover:bg-gray-100"><Eye size={15} /></button>
                           <button onClick={() => voirOrdonnance(c)} title="Ordonnance" className="p-1.5 rounded border text-amber-800 hover:bg-amber-50"><FileText size={15} /></button>
                           {sousOnglet === 'reception' && estReception && c.statut === STATUT_ENVOYEE && (
                             <button onClick={() => confirmer(c)} disabled={enCours === c.id}
@@ -526,7 +556,7 @@ export function CommandeVerreTab({ magasinId, sousOngletInitial }: { magasinId?:
           onFermer={() => setFormulaire(false)}
           onCommandee={c => {
             setFormulaire(false);
-            setMessage(`✅ Commande ${c.numero} envoyée : elle est dans « Réception commande » et attend la confirmation de l'assistante administrative.`
+            setMessage(`✅ Commande ${c.numero} envoyée : elle est dans « Gestion de commande » et attend la confirmation de l'assistante administrative.`
               // Administration : signale que le stockage des ordonnances n'est pas encore installé.
               + (!c.ordonnance?.chemin && estAdministration ? " (Ordonnance rangée dans la base : exécutez STOCKAGE_ORDONNANCES_2026-10-28.sql pour utiliser le stockage de fichiers.)" : ''));
             recharger();

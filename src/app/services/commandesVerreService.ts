@@ -3,12 +3,15 @@
  *
  * Parcours :
  *   1. Le magasin (conseillère, opticien) passe la commande : verres + ordonnance
- *      du client → statut « Envoyée » ; elle apparaît dans « Réception commande ».
- *   2. L'assistante administrative la CONFIRME → statut « En attente » : le
- *      magasin voit « En attente ».
- *   3. Elle clique sur « Verre arrivé » → statut « Arrivée » : le magasin voit
- *      « Commande arrivée », reçoit un message et l'icône clignote dans la barre
- *      du haut jusqu'à ce qu'il ouvre ses commandes.
+ *      du client → statut « Envoyée » ; elle apparaît dans « Gestion de
+ *      commande » → « Commande » (assistante administrative).
+ *   2. L'assistante la CONFIRME → statut « En attente » (chez elle : « Suivi ») :
+ *      le magasin voit « En attente ».
+ *   3. Elle clique sur « Verre arrivé » → statut « Arrivée » (chez elle :
+ *      « Arrivage ») : le magasin voit « Commande arrivée », reçoit un message,
+ *      l'icône clignote dans la barre du haut jusqu'à ce qu'il ouvre ses
+ *      commandes, et la LIGNE de la commande clignote en rouge jusqu'à ce
+ *      qu'une conseillère ou un opticien clique dessus.
  *
  * Stockage : table `bons` (déjà partagée entre magasins, mêmes règles d'accès
  * que les bons de distribution : chaque magasin voit les siennes,
@@ -89,6 +92,13 @@ export interface CommandeVerre {
   /** Le magasin a vu l'arrivée (l'icône cesse de clignoter). */
   arriveeVue?: boolean;
   arriveeVueLe?: string;
+  /**
+   * Ligne de la commande ouverte par le magasin après l'arrivée : false → elle
+   * clignote en rouge chez le magasin. Absent : commandes arrivées avant cette
+   * règle (pas de clignotement).
+   */
+  ligneVue?: boolean;
+  ligneVueLe?: string;
 }
 
 /** Libellé du statut tel que le voit le MAGASIN demandeur. */
@@ -134,6 +144,8 @@ function versLigne(c: CommandeVerre) {
       arriveePar: c.arriveePar || null,
       arriveeVue: !!c.arriveeVue,
       arriveeVueLe: c.arriveeVueLe || null,
+      ligneVue: typeof c.ligneVue === 'boolean' ? c.ligneVue : null,
+      ligneVueLe: c.ligneVueLe || null,
     },
   };
 }
@@ -163,6 +175,8 @@ export function depuisLigne(r: any): CommandeVerre {
     arriveePar: d.arriveePar || undefined,
     arriveeVue: !!d.arriveeVue,
     arriveeVueLe: d.arriveeVueLe || undefined,
+    ligneVue: typeof d.ligneVue === 'boolean' ? d.ligneVue : undefined,
+    ligneVueLe: d.ligneVueLe || undefined,
   };
 }
 
@@ -192,12 +206,26 @@ export function arriveesNonVues(commandes: CommandeVerre[]): CommandeVerre[] {
   return commandes.filter(c => c.statut === STATUT_ARRIVEE && !c.arriveeVue);
 }
 
+/** Commande arrivée dont la ligne clignote en rouge chez le magasin (pas encore ouverte). */
+export function ligneAClignoter(c: CommandeVerre): boolean {
+  return c.statut === STATUT_ARRIVEE && c.ligneVue === false;
+}
+
 // ── Écriture ────────────────────────────────────────────────────────────────
 
 // Chaque écriture envoie la commande COMPLÈTE (pas de fusion avec l'ancienne ligne).
 async function enregistrer(c: CommandeVerre): Promise<void> {
   await setDoc(doc(db, 'bons', c.id), { ...versLigne(c), updated_at: new Date().toISOString() });
   prevenir();
+}
+
+/** Relit la commande juste avant un marquage « vu » (ne pas écraser un marquage fait entre-temps). */
+async function relire(c: CommandeVerre): Promise<CommandeVerre> {
+  try {
+    const snap: any = await getDoc(doc(db, 'bons', c.id));
+    if (snap?.exists?.()) return depuisLigne({ id: c.id, ...(snap.data() || {}) });
+  } catch { /* on garde la version affichée */ }
+  return c;
 }
 
 const idOrdonnance = (commandeId: string) => `ordonnance-${commandeId}`;
@@ -316,6 +344,7 @@ export async function signalerArriveeVerre(c: CommandeVerre, par: string): Promi
     dateArrivee: new Date().toISOString(),
     arriveePar: par,
     arriveeVue: false,
+    ligneVue: false,
   };
   await enregistrer(maj);
   return maj;
@@ -326,10 +355,24 @@ export async function marquerArriveesVues(commandes: CommandeVerre[]): Promise<v
   const aMarquer = arriveesNonVues(commandes);
   if (!aMarquer.length) return;
   const le = new Date().toISOString();
-  for (const c of aMarquer) {
+  for (const affichee of aMarquer) {
+    const c = await relire(affichee);
+    if (c.arriveeVue) continue;
     await setDoc(doc(db, 'bons', c.id), { ...versLigne({ ...c, arriveeVue: true, arriveeVueLe: le }), updated_at: le });
   }
   prevenir();
+}
+
+/**
+ * Une conseillère ou un opticien du magasin ouvre la commande arrivée : sa
+ * ligne cesse de clignoter en rouge (pour tout le magasin).
+ */
+export async function marquerLigneVue(affichee: CommandeVerre): Promise<void> {
+  if (!ligneAClignoter(affichee)) return;
+  const c = await relire(affichee);
+  if (!ligneAClignoter(c)) return;
+  const le = new Date().toISOString();
+  await enregistrer({ ...c, ligneVue: true, ligneVueLe: le, arriveeVue: true, arriveeVueLe: c.arriveeVueLe || le });
 }
 
 /**

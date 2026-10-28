@@ -114,7 +114,7 @@ export function AccueilPage() {
     ? [
         { title: 'Tableau de Bord', desc: 'Vue globale des magasins', icon: <LayoutDashboard size={22} />, to: '/', color: '#2b8fb0' },
         { title: 'Accès Magasins', desc: 'Ouvrir un magasin', icon: <Store size={22} />, to: '/espace-administrateur', color: '#16a34a', toujours: true },
-        { title: 'Commande de verre', desc: 'Réception des commandes des magasins', icon: <Glasses size={22} />, to: '/atelier?onglet=commande-verre', color: '#7c3aed', toujours: true },
+        { title: 'Commande de verre', desc: 'Gestion des commandes des magasins', icon: <Glasses size={22} />, to: '/atelier?onglet=commande-verre', color: '#7c3aed', toujours: true },
       ]
     : [
         { title: 'Mon Tableau de Bord', desc: 'Statistiques du magasin', icon: <LayoutDashboard size={22} />, to: `/magasin/${magasinActuel}/dashboard`, color: '#2b8fb0' },

@@ -287,7 +287,7 @@ function ShortcutBar() {
   const isResponsableCallCenter = user?.role === 'responsable_call_center';
   const rdvAujourdHui = useCallCenterTodayAppointments();
   const c = useLiveShortcuts();
-  // Assistante administrative / administration (ou « Réception commande »
+  // Assistante administrative / administration (ou « Gestion de commande »
   // cochée) : commandes de verre envoyées par les magasins, pas encore confirmées.
   const recoitCommandesVerre = accesCommandeVerre(user).reception;
   const { commandes: commandesVerre } = useCommandesVerre(undefined, recoitCommandesVerre);
