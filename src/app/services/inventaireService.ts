@@ -597,24 +597,28 @@ export async function enregistrerInventaire(params: {
   magasinId: string;
   /** Moment du comptage (date de création de l'inventaire). */
   date: string;
-  items: Array<{ articleId: string; designation: string; stockTheorique: number; stockPhysique: number }>;
+  /** `date` d'un article : compté plus tard (monture sautée, ajoutée en modifiant l'inventaire). */
+  items: Array<{ articleId: string; designation: string; stockTheorique: number; stockPhysique: number; date?: string }>;
 }): Promise<boolean> {
   const mag = normalizeMagasinId(params.magasinId);
   const invId = String(params.inventaireId || '').trim();
   if (!mag || !invId) return false;
-  const parArticle = new Map<string, { designation: string; theorique: number; physique: number }>();
+  const parArticle = new Map<string, { designation: string; theorique: number; physique: number; date: string }>();
   for (const it of params.items || []) {
     const article = String(it.articleId || it.designation || '').trim();
     if (!article) continue;
+    // L'ajustement prend effet à l'heure du comptage de l'article : une vente
+    // faite entre la création de l'inventaire et ce comptage n'est pas retirée deux fois.
+    const date = it.date || params.date;
     const l = parArticle.get(article);
-    if (l) l.physique += Math.max(0, Number(it.stockPhysique) || 0);
-    else parArticle.set(article, { designation: it.designation || article, theorique: Number(it.stockTheorique) || 0, physique: Math.max(0, Number(it.stockPhysique) || 0) });
+    if (l) { l.physique += Math.max(0, Number(it.stockPhysique) || 0); if (date > l.date) l.date = date; }
+    else parArticle.set(article, { designation: it.designation || article, theorique: Number(it.stockTheorique) || 0, physique: Math.max(0, Number(it.stockPhysique) || 0), date });
   }
   const ok = await insertMouvements([...parArticle.entries()].map(([article, l]) => ({
     _docId: stableUuid(`inventaire|${invId}|${mag}|${article}`),
     type: 'inventaire', article_id: article, designation: l.designation, quantite: 0,
     stock_theorique: l.theorique, stock_physique: l.physique, ecart: l.physique - l.theorique,
-    magasin_id: mag, magasin_destination: mag, bon_id: invId, date_mouvement: params.date, annule: false,
+    magasin_id: mag, magasin_destination: mag, bon_id: invId, date_mouvement: l.date, annule: false,
   })));
   if (!ok) return false;
   return annulerLignesInventaire(invId, new Set(parArticle.keys()));

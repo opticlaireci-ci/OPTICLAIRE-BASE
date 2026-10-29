@@ -2,13 +2,15 @@ import { logger } from '../../utils/logger';
 import { AddButton } from '../../components/AddButton';
 import { useState, useEffect, useRef } from 'react';
 import { useMagasins } from '../../hooks/useMagasins';
-import { Search, Save, ChevronDown, X, Pencil, Printer, Package, Trash2 } from 'lucide-react';
+import { memeMagasin } from '../../constants/magasins';
+import { Search, Save, ChevronDown, X, Pencil, Printer, Package, Trash2, Lock, Plus } from 'lucide-react';
 import { addCreateAudit, addUpdateAudit, formatDate, formatAuditInfo, logDeletion, showAuditNotification, AuditInfo } from '../../utils/auditUtils';
 import { replaceInventaires, chargerInventaires, rowToInventaire } from '../../services/inventairesService';
 import { loadStockMagasin, readStockCache, enregistrerInventaire, annulerInventaire, type StockMagasin } from '../../services/inventaireService';
 import { safeUuid } from '../../utils/safeId';
 import { TENANT, nomMagasin } from '../../config/tenant';
-import { imprimerGestionStock, imprimerFormatGestionStock } from '../../utils/stockActions';
+import { afficherHtml } from '../../utils/inAppViewer';
+import { inventaireModifiable, articlesNonInventories, htmlArticlesInventories, htmlArticlesNonInventories, jourLocal } from '../../utils/inventaireOutils';
 import { setVisibleInterval, PAGE_POLL_MS } from '../../utils/visibleInterval';
 
 interface InventaireItem {
@@ -18,6 +20,8 @@ interface InventaireItem {
   stockTheorique: number;
   stockPhysique: number;
   marge: number;
+  /** Heure du comptage d'un article ajouté en modifiant l'inventaire (monture sautée). */
+  compteLe?: string;
 }
 
 interface Inventaire extends AuditInfo {
@@ -68,6 +72,12 @@ export function InventairePage() {
   const [showManquantsModal, setShowManquantsModal] = useState(false);
   const [manquants, setManquants] = useState<StockMagasin[]>([]);
   const [manquantsInventaireLabel, setManquantsInventaireLabel] = useState('');
+  const [manquantsInventaire, setManquantsInventaire] = useState<Inventaire | null>(null);
+  // Impression (menu du bouton imprimante d'une ligne)
+  const [menuImpression, setMenuImpression] = useState<string | null>(null);
+  // Modifier inventaire : montures sautées à compter (stock physique saisi par article)
+  const [saisieSautees, setSaisieSautees] = useState<Record<string, string>>({});
+  const [rechercheSautees, setRechercheSautees] = useState('');
 
   // Filtres liste
   const [filterDate, setFilterDate] = useState('');
@@ -229,14 +239,25 @@ export function InventairePage() {
   // ── édition inventaire existant ────────────────────────────────────────────
 
   const handleEditerInventaire = async (inv: Inventaire) => {
-    const mag = ALL_MAGASINS.find(m => m.label === inv.magasin || m.id === inv.magasinId);
+    if (!inventaireModifiable(inv)) {
+      alert(`🔒 Inventaire clôturé : il a été fait le ${formatDateFR(inv.createdAt || inv.dateInventaire)} et ne peut plus être modifié (seulement le jour même).`);
+      return;
+    }
+    setShowManquantsModal(false);
+    setSaisieSautees({});
+    setRechercheSautees('');
+    // Le magasin enregistré est un identifiant en MAJUSCULES (« ABOBO ») : comparaison
+    // sans tenir compte de la casse, sinon le stock du magasin n'était pas chargé.
+    const mag = ALL_MAGASINS.find(m => m.label === inv.magasin || memeMagasin(m.id, inv.magasinId || inv.magasin));
+    const magasinId = inv.magasinId || mag?.id || '';
     setSelectedMagasin(inv.magasin);
-    setSelectedMagasinId(inv.magasinId || mag?.id || '');
+    setSelectedMagasinId(magasinId);
     setEditingInventaire(inv);
-    setDateInventaire(inv.dateInventaire);
+    // Date enregistrée avec l'heure : le champ « date » n'affiche que AAAA-MM-JJ.
+    setDateInventaire(jourLocal(inv.dateInventaire) || inv.dateInventaire);
     setItems([...inv.items]);
     setShowInventaireModal(true);
-    if (mag?.id) await chargerStockMagasin(mag.id);
+    if (magasinId) await chargerStockMagasin(magasinId);
   };
 
   // ── autocomplete ───────────────────────────────────────────────────────────
@@ -290,6 +311,8 @@ export function InventairePage() {
       stockTheorique,
       stockPhysique,
       marge,
+      // Ajouté en modifiant l'inventaire : l'ajustement prend effet à cette heure-ci.
+      ...(editingInventaire ? { compteLe: new Date().toISOString() } : {}),
     };
     setItems(prev => [...prev, newItem]);
     handleClearProduit();
@@ -297,6 +320,23 @@ export function InventairePage() {
 
   const handleRemoveItem = (id: string) => {
     setItems(prev => prev.filter(i => i.id !== id));
+  };
+
+  /** Modifier inventaire : compte une monture sautée (non inventoriée) directement depuis la liste. */
+  const ajouterSautee = (s: StockMagasin) => {
+    const saisie = (saisieSautees[s.produitId] ?? '').trim();
+    const physique = Number(saisie);
+    if (saisie === '' || !Number.isFinite(physique) || physique < 0) {
+      alert(`Indiquez le stock physique compté pour « ${s.designation} » (0 si absent).`);
+      return;
+    }
+    const theorique = Number(s.quantiteDisponible) || 0;
+    setItems(prev => [...prev, {
+      id: safeUuid(), codeBarre: s.produitId, produit: s.designation,
+      stockTheorique: theorique, stockPhysique: physique, marge: physique - theorique,
+      compteLe: new Date().toISOString(),
+    }]);
+    setSaisieSautees(prev => { const n = { ...prev }; delete n[s.produitId]; return n; });
   };
 
   // ── sauvegarde ─────────────────────────────────────────────────────────────
@@ -317,6 +357,7 @@ export function InventairePage() {
         designation: i.produit,
         stockTheorique: Number(i.stockTheorique) || 0,
         stockPhysique: Number(i.stockPhysique) || 0,
+        ...(i.compteLe ? { date: i.compteLe } : {}),
       })),
     });
     if (ok) {
@@ -332,6 +373,10 @@ export function InventairePage() {
   const handleSaveInventaire = async () => {
     let ok = false;
     let enregistre: Inventaire | undefined;
+    if (editingInventaire && !inventaireModifiable(editingInventaire)) {
+      alert('🔒 La journée de cet inventaire est passée : il est clôturé et ne peut plus être modifié.');
+      return;
+    }
     if (editingInventaire) {
       const updated = inventaires.map(inv =>
         inv.id === editingInventaire.id
@@ -379,6 +424,8 @@ export function InventairePage() {
     setItems([]);
     setSearchRecherche('');
     setStockMagasin([]);
+    setSaisieSautees({});
+    setRechercheSautees('');
     handleClearProduit();
   };
 
@@ -388,11 +435,29 @@ export function InventairePage() {
     const mag = ALL_MAGASINS.find(m => m.label === inv.magasin || m.id === inv.magasinId);
     const magasinId = inv.magasinId || mag?.id || '';
     const stock = await loadStockMagasin(magasinId.toUpperCase());
-    const inventoriesIds = new Set(inv.items.map(i => i.codeBarre || i.produit));
-    const missing = stock.filter(s => !inventoriesIds.has(s.produitId) && !inventoriesIds.has(s.designation));
-    setManquants(missing);
+    setManquants(articlesNonInventories(stock, inv.items));
     setManquantsInventaireLabel(`${inv.magasin} — ${formatDateFR(inv.dateInventaire)}`);
+    setManquantsInventaire(inv);
     setShowManquantsModal(true);
+  };
+
+  // ── impressions ────────────────────────────────────────────────────────────
+
+  const titreImpression = (inv: Inventaire, quoi: string) => `${quoi} — ${magasinLabel(inv.magasin)} — ${formatDateFR(inv.dateInventaire)}`;
+  const imprimerInventories = (inv: Inventaire) => {
+    setMenuImpression(null);
+    afficherHtml(htmlArticlesInventories(inv, magasinLabel(inv.magasin)), { titre: titreImpression(inv, 'Montures inventoriées') });
+  };
+  const imprimerNonInventories = async (inv: Inventaire, stock?: StockMagasin[]) => {
+    setMenuImpression(null);
+    try {
+      const magasinId = inv.magasinId || ALL_MAGASINS.find(m => m.label === inv.magasin)?.id || '';
+      const s = stock ?? await loadStockMagasin(magasinId.toUpperCase());
+      afficherHtml(htmlArticlesNonInventories(inv, magasinLabel(inv.magasin), articlesNonInventories(s, inv.items)),
+        { titre: titreImpression(inv, 'Montures non inventoriées') });
+    } catch (e: any) {
+      alert(`❌ Impression impossible : ${e?.message || e}`);
+    }
   };
 
   // ── filtres ────────────────────────────────────────────────────────────────
@@ -405,6 +470,15 @@ export function InventairePage() {
   const filteredItems = items.filter(i =>
     !searchRecherche || i.produit.toLowerCase().includes(searchRecherche.toLowerCase())
   );
+
+  // Inventaire en cours de saisie (pour l'impression) et montures pas encore comptées.
+  const inventaireEnCours: Inventaire = {
+    ...(editingInventaire || {}), id: editingInventaire?.id || 'en-cours',
+    magasin: selectedMagasin, magasinId: selectedMagasinId, dateInventaire, items,
+  };
+  const nonComptees = articlesNonInventories(stockMagasin, items);
+  const sautees = nonComptees.filter(s => !rechercheSautees.trim()
+    || `${s.designation} ${s.produitId}`.toLowerCase().includes(rechercheSautees.trim().toLowerCase()));
 
   // ══════════════════════════════════════════════════════════════════════════
   // MODAL INVENTAIRE (nouveau ou édition)
@@ -429,9 +503,24 @@ export function InventairePage() {
         <h2 style={{ fontSize: '22px', fontWeight: 'bold', marginBottom: '6px' }}>
           {editingInventaire ? 'Modifier Inventaire' : 'Nouveau Inventaire'}
         </h2>
-        <p style={{ color: '#6b7280', fontSize: '14px', marginBottom: '24px' }}>
-          Magasin : <strong>{selectedMagasin}</strong>
+        <p style={{ color: '#6b7280', fontSize: '14px', marginBottom: '12px' }}>
+          Magasin : <strong>{magasinLabel(selectedMagasin)}</strong>
+          {editingInventaire && (
+            <span style={{ marginLeft: '10px', color: '#92400e' }}>
+              — modifiable aujourd'hui seulement : demain, l'inventaire sera clôturé.
+            </span>
+          )}
         </p>
+        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '20px' }}>
+          <button onClick={() => imprimerInventories(inventaireEnCours)} data-testid="imprimer-inventories"
+            style={{ padding: '8px 14px', backgroundColor: '#fff', border: '1px solid #d1d5db', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <Printer size={15} /> Imprimer les montures inventoriées ({items.length})
+          </button>
+          <button onClick={() => imprimerNonInventories(inventaireEnCours, stockMagasin)} disabled={loadingStock} data-testid="imprimer-non-inventories"
+            style={{ padding: '8px 14px', backgroundColor: '#fff', border: '1px solid #d1d5db', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <Printer size={15} /> Imprimer les montures non inventoriées ({loadingStock ? '…' : nonComptees.length})
+          </button>
+        </div>
 
         <div style={{ backgroundColor: '#fff', padding: '24px', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
 
@@ -656,6 +745,56 @@ export function InventairePage() {
 
           
 
+          {/* Modifier inventaire : continuer avec les montures sautées */}
+          {editingInventaire && (
+            <div data-testid="montures-sautees" style={{ border: '1px solid #fde68a', borderRadius: '6px', marginBottom: '20px', overflow: 'hidden' }}>
+              <div style={{ padding: '12px 14px', backgroundColor: '#fef3c7', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                <span style={{ fontWeight: 700, color: '#92400e' }}>
+                  ⚠️ Montures non inventoriées : {loadingStock ? 'chargement…' : nonComptees.length} — saisissez le stock physique compté puis « Ajouter »
+                </span>
+                <input type="text" placeholder="Rechercher une monture sautée…" value={rechercheSautees}
+                  onChange={e => setRechercheSautees(e.target.value)}
+                  style={{ padding: '7px 10px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '13px', flex: '1 1 240px', maxWidth: '340px' }} />
+              </div>
+              {!loadingStock && nonComptees.length === 0 ? (
+                <div style={{ padding: '16px', color: '#065f46', fontWeight: 600, fontSize: '14px' }}>✅ Toutes les montures du magasin sont inventoriées.</div>
+              ) : (
+                <div style={{ maxHeight: '360px', overflowY: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr style={{ backgroundColor: '#fffbeb' }}>
+                        {['Monture / Accessoire', 'Type', 'Stock Théorique', 'Stock Physique', ''].map(h => (
+                          <th key={h} style={{ padding: '8px 12px', textAlign: 'left', fontSize: '12px', fontWeight: 600, borderBottom: '1px solid #fde68a', position: 'sticky', top: 0, backgroundColor: '#fffbeb' }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sautees.map(s => (
+                        <tr key={s.produitId} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                          <td style={{ padding: '8px 12px', fontSize: '13px', fontWeight: 500 }}>{s.designation}</td>
+                          <td style={{ padding: '8px 12px', fontSize: '12px' }}>{s.produitType === 'monture' ? '🕶️ Monture' : '🎯 Accessoire'}</td>
+                          <td style={{ padding: '8px 12px', fontSize: '13px', textAlign: 'center' }}>{s.quantiteDisponible}</td>
+                          <td style={{ padding: '8px 12px' }}>
+                            <input type="number" min={0} value={saisieSautees[s.produitId] ?? ''} aria-label={`Stock physique de ${s.designation}`}
+                              onChange={e => setSaisieSautees(prev => ({ ...prev, [s.produitId]: e.target.value }))}
+                              onKeyDown={e => { if (e.key === 'Enter') ajouterSautee(s); }}
+                              style={{ width: '90px', padding: '6px 8px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '13px' }} />
+                          </td>
+                          <td style={{ padding: '8px 12px', textAlign: 'right' }}>
+                            <button onClick={() => ajouterSautee(s)} title="Ajouter à l'inventaire"
+                              style={{ padding: '6px 12px', backgroundColor: '#0369a1', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                              <Plus size={14} /> Ajouter
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Actions bas */}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
             <button onClick={handleCloseInventaireModal} style={{ padding: '9px 24px', backgroundColor: '#fff', color: '#374151', border: '1px solid #d1d5db', borderRadius: '6px', cursor: 'pointer', fontSize: '14px', fontWeight: '600' }}>
@@ -684,9 +823,27 @@ export function InventairePage() {
             <h2 style={{ fontSize: '20px', fontWeight: 'bold', margin: 0 }}>Articles non inventoriés</h2>
             <p style={{ color: '#6b7280', fontSize: '13px', margin: '4px 0 0' }}>{manquantsInventaireLabel}</p>
           </div>
-          <button onClick={() => setShowManquantsModal(false)} style={{ padding: '9px 22px', backgroundColor: '#6b7280', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '14px', fontWeight: '600' }}>
-            ← Retour
-          </button>
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            {manquantsInventaire && (
+              <button onClick={() => imprimerNonInventories(manquantsInventaire)} data-testid="imprimer-manquants"
+                style={{ padding: '9px 16px', backgroundColor: '#fff', color: '#374151', border: '1px solid #d1d5db', borderRadius: '6px', cursor: 'pointer', fontSize: '14px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Printer size={16} /> Imprimer cette liste
+              </button>
+            )}
+            {manquantsInventaire && manquants.length > 0 && (inventaireModifiable(manquantsInventaire) ? (
+              <button onClick={() => handleEditerInventaire(manquantsInventaire)} data-testid="continuer-inventaire"
+                style={{ padding: '9px 16px', backgroundColor: '#0369a1', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '14px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Pencil size={16} /> Continuer l'inventaire
+              </button>
+            ) : (
+              <span style={{ padding: '9px 12px', color: '#6b7280', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Lock size={15} /> Inventaire clôturé (journée passée)
+              </span>
+            ))}
+            <button onClick={() => setShowManquantsModal(false)} style={{ padding: '9px 22px', backgroundColor: '#6b7280', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '14px', fontWeight: '600' }}>
+              ← Retour
+            </button>
+          </div>
         </div>
 
         {manquants.length === 0 ? (
@@ -853,16 +1010,37 @@ export function InventairePage() {
                   </td>
                   <td style={{ padding: '12px 14px' }}>
                     <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', alignItems: 'center' }}>
-                      <button onClick={() => imprimerGestionStock()} title="Imprimer" style={{ padding: '6px 10px', backgroundColor: '#fff', border: '1px solid #d1d5db', borderRadius: '5px', cursor: 'pointer', color: '#374151', display: 'flex', alignItems: 'center' }}>
-                        <Printer size={15} />
-                      </button>
+                      <div style={{ position: 'relative' }}>
+                        <button onClick={() => setMenuImpression(m => (m === inv.id ? null : inv.id))} title="Imprimer les montures inventoriées ou non inventoriées" data-testid="menu-impression"
+                          style={{ padding: '6px 10px', backgroundColor: '#fff', border: '1px solid #d1d5db', borderRadius: '5px', cursor: 'pointer', color: '#374151', display: 'flex', alignItems: 'center' }}>
+                          <Printer size={15} />
+                        </button>
+                        {menuImpression === inv.id && (<>
+                          <div onClick={() => setMenuImpression(null)} style={{ position: 'fixed', inset: 0, zIndex: 40 }} />
+                          <div style={{ position: 'absolute', right: 0, top: '110%', zIndex: 41, backgroundColor: '#fff', border: '1px solid #d1d5db', borderRadius: '6px', boxShadow: '0 6px 18px rgba(0,0,0,0.15)', minWidth: '250px', overflow: 'hidden' }}>
+                            <button onClick={() => imprimerInventories(inv)} style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', padding: '10px 14px', border: 'none', background: '#fff', cursor: 'pointer', fontSize: '13px', textAlign: 'left' }}>
+                              <Printer size={14} /> Montures inventoriées ({inv.items.length})
+                            </button>
+                            <button onClick={() => imprimerNonInventories(inv)} style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', padding: '10px 14px', border: 'none', borderTop: '1px solid #f3f4f6', background: '#fff', cursor: 'pointer', fontSize: '13px', textAlign: 'left' }}>
+                              <Printer size={14} /> Montures non inventoriées
+                            </button>
+                          </div>
+                        </>)}
+                      </div>
                       <button onClick={() => handleVoirManquants(inv)} title="Voir les articles non inventoriés" style={{ padding: '6px 12px', backgroundColor: '#f59e0b', border: 'none', borderRadius: '5px', cursor: 'pointer', color: '#fff', fontSize: '12px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <span>Pas Inventorier</span>
                         <span style={{ backgroundColor: '#dc2626', color: '#fff', borderRadius: '50%', width: '17px', height: '17px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: '900', flexShrink: 0 }}>✕</span>
                       </button>
-                      <button onClick={() => handleEditerInventaire(inv)} title="Modifier l'inventaire" style={{ padding: '6px 10px', backgroundColor: '#fff', border: '1px solid #d1d5db', borderRadius: '5px', cursor: 'pointer', color: '#f59e0b', display: 'flex', alignItems: 'center' }}>
-                        <Pencil size={15} />
-                      </button>
+                      {inventaireModifiable(inv) ? (
+                        <button onClick={() => handleEditerInventaire(inv)} title="Modifier l'inventaire (continuer les montures sautées) — aujourd'hui seulement" style={{ padding: '6px 10px', backgroundColor: '#fff', border: '1px solid #d1d5db', borderRadius: '5px', cursor: 'pointer', color: '#f59e0b', display: 'flex', alignItems: 'center' }}>
+                          <Pencil size={15} />
+                        </button>
+                      ) : (
+                        <span title="Inventaire clôturé : la journée est passée, il ne peut plus être modifié" data-testid="inventaire-cloture"
+                          style={{ padding: '6px 10px', border: '1px solid #e5e7eb', borderRadius: '5px', color: '#9ca3af', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px' }}>
+                          <Lock size={14} /> Clôturé
+                        </span>
+                      )}
                       <button onClick={() => handleSupprimerInventaire(inv)} title="Supprimer l'inventaire" style={{ padding: '6px 10px', backgroundColor: '#fff', border: '1px solid #fca5a5', borderRadius: '5px', cursor: 'pointer', color: '#dc2626', display: 'flex', alignItems: 'center' }}>
                         <Trash2 size={15} />
                       </button>
