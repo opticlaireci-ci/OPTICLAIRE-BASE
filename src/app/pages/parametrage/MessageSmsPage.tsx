@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { CompteurSms } from '../../components/CompteurSms';
 import { useNavigate } from 'react-router';
 import { TENANT } from '../../config/tenant';
 import { getAllMagasinIds } from '../../constants/magasins';
@@ -165,6 +166,7 @@ export function MessageSmsPage() {
       telephone: c.telephone || '',
       message,
       nature: 'Anniversaire',
+      modele: 'anniversaire',
     })));
     setAnnivSent(true);
     setTimeout(() => setAnnivSent(false), 3000);
@@ -304,6 +306,7 @@ export function MessageSmsPage() {
                       telephone: c.telephone || '',
                       message,
                       nature: 'Relance Verre',
+                      modele: 'renouvellement',
                     }));
                   }}
                   style={{ width: '100%', padding: '10px', border: 'none', borderRadius: 4, backgroundColor: '#f59e0b', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
@@ -354,6 +357,7 @@ export function MessageSmsPage() {
                 rows={3}
                 style={{ ...inputStyle, width: '100%', resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit' }}
               />
+              {smsText && <CompteurSms texte={smsText} />}
             </div>
 
             <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 8, color: '#374151' }}>Générez votre liste de client depuis un filtrage</div>
@@ -465,6 +469,10 @@ export function MessageSmsPage() {
                       <span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 700, backgroundColor: r.resultat === 'Livré' ? '#dcfce7' : r.resultat === 'Échec' ? '#fee2e2' : r.resultat === 'Envoyé' ? '#dbeafe' : '#fef3c7', color: r.resultat === 'Livré' ? '#16a34a' : r.resultat === 'Échec' ? '#dc2626' : r.resultat === 'Envoyé' ? '#2563eb' : '#d97706' }}>
                         {r.resultat}
                       </span>
+                      {(r.segments || 0) > 1 && <span style={{ marginLeft: 6, fontSize: 11, color: '#6b7280' }} data-testid="segments-sms">· {r.segments} SMS</span>}
+                      {r.erreur && (r.resultat === 'Échec' || r.resultat === 'Reporté') && (
+                        <div title={r.erreur} data-testid="raison-echec" style={{ marginTop: 4, fontSize: 11, color: '#b91c1c', maxWidth: 260, lineHeight: 1.3 }}>{r.erreur}</div>
+                      )}
                     </td>
                     <td style={{ border: '1px solid #e5e7eb', padding: '7px 10px' }}>{r.client}</td>
                     <td style={{ border: '1px solid #e5e7eb', padding: '7px 6px', textAlign: 'center' }}>

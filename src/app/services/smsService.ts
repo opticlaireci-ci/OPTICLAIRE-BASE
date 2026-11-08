@@ -18,6 +18,64 @@ export interface SmsRapport {
   message: string;
   /** Identifiant Orange permettant de corréler l'accusé de livraison. */
   resourceId?: string;
+  /** Raison d'un échec (réponse du serveur ou d'Orange), affichée dans le rapport. */
+  erreur?: string;
+  /** Nombre de SMS facturés par Orange pour ce message (selon longueur et caractères). */
+  segments?: number;
+}
+
+// ── Nombre de SMS facturés pour un texte (norme GSM des opérateurs) ──────────
+// Texte « simple » (alphabet GSM) : 160 caractères pour 1 SMS ; au-delà, le
+// message est découpé en SMS de 153 caractères. Un seul caractère hors de cet
+// alphabet (ê, ô, â, À, ç, « — », « ’ », émoji…) fait passer TOUT le message en
+// Unicode : 70 caractères pour 1 SMS, puis des SMS de 67. Les caractères
+// ^ { } [ ] ~ | \ € comptent pour 2 en texte simple.
+const GSM_BASE = '@£$¥èéùìòÇ\nØø\rÅåΔ_ΦΓΛΩΠΨΣΘΞÆæßÉ !"#¤%&\'()*+,-./0123456789:;<=>?¡ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÑÜ§¿abcdefghijklmnopqrstuvwxyzäöñüà';
+const GSM_EXTENSION = '^{}\\[~]|€\f';
+
+export interface DecompteSms {
+  /** Nombre de SMS facturés (0 pour un texte vide). */
+  segments: number;
+  encodage: 'GSM' | 'Unicode';
+  /** Longueur comptée (caractères GSM, ou unités Unicode). */
+  longueur: number;
+  /** Caractères par SMS pour ce message (160/153 ou 70/67). */
+  parSms: number;
+  /** Caractères qui imposent l'Unicode (à remplacer pour revenir à 160 par SMS). */
+  horsGsm: string[];
+}
+
+export function compterSegmentsSms(texte: string): DecompteSms {
+  const t = String(texte ?? '');
+  let longueur = 0;
+  const horsGsm = new Set<string>();
+  for (const ch of t) {
+    if (GSM_BASE.includes(ch)) longueur += 1;
+    else if (GSM_EXTENSION.includes(ch)) longueur += 2;
+    else horsGsm.add(ch);
+  }
+  if (horsGsm.size === 0) {
+    const segments = longueur === 0 ? 0 : longueur <= 160 ? 1 : Math.ceil(longueur / 153);
+    return { segments, encodage: 'GSM', longueur, parSms: segments > 1 ? 153 : 160, horsGsm: [] };
+  }
+  const unites = t.length; // unités UTF-16 (un émoji en compte 2)
+  const segments = unites <= 70 ? 1 : Math.ceil(unites / 67);
+  return { segments, encodage: 'Unicode', longueur: unites, parSms: segments > 1 ? 67 : 70, horsGsm: [...horsGsm] };
+}
+
+/**
+ * SMS automatiques : le serveur prend lui-même le texte dans la Configuration
+ * SMS. Un compte de magasin (conseillère, opticien…) peut donc les envoyer ;
+ * le texte libre reste réservé à l'encadrement.
+ */
+export type ModeleSms = 'bienvenue' | 'anniversaire' | 'retrait' | 'vente' | 'renouvellement';
+
+/** Rôles autorisés à envoyer un SMS au texte libre (mêmes règles que le serveur). */
+export const ROLES_SMS_LIBRE = ['super_admin', 'admin', 'administrateur', 'manager', 'responsable_call_center'];
+
+/** Rôle du compte connecté (lu dans la session locale). */
+function roleConnecte(): string {
+  try { return String(JSON.parse(localStorage.getItem('leclaire_current_user') || 'null')?.role || ''); } catch { return ''; }
 }
 
 const LS_RAPPORT = 'leclaire_rapport_sms';
@@ -68,11 +126,15 @@ export function setCreditsSms(total: number): void {
   persistCredits({ total: t, restant: t });
 }
 
-/** Décrémente le crédit d'un SMS (jamais en dessous de 0). Appelé à chaque envoi réussi. */
-export function decrementerCreditSms(): void {
+/**
+ * Décrémente le crédit du nombre de SMS facturés pour un message (jamais en
+ * dessous de 0). Appelé à chaque envoi accepté par Orange.
+ */
+export function decrementerCreditSms(nombre = 1): void {
   const c = loadCreditsSms();
   if (c.total <= 0) return; // compteur non configuré : on ne suit pas
-  persistCredits({ total: c.total, restant: Math.max(0, c.restant - 1) });
+  const n = Math.max(1, Math.floor(Number(nombre) || 1));
+  persistCredits({ total: c.total, restant: Math.max(0, c.restant - n) });
 }
 
 /**
@@ -257,7 +319,11 @@ export async function envoyerSmsReel(params: {
   telephone: string;
   message: string;
   nature?: string;
-}): Promise<{ success: boolean; error?: string }> {
+  /** SMS automatique : le serveur utilise le texte de la Configuration SMS. */
+  modele?: ModeleSms;
+  /** Envois quotidiens : un refus temporaire (quota, droits, réseau) est « Reporté », pas « Échec ». */
+  reporterSiTemporaire?: boolean;
+}): Promise<{ success: boolean; error?: string; temporaire?: boolean }> {
   const id = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   const base: SmsRapport = {
     id,
@@ -270,13 +336,13 @@ export async function envoyerSmsReel(params: {
   };
 
   if (!params.telephone?.trim() || !params.message?.trim()) {
-    upsertRapport({ ...base, resultat: 'Échec' });
+    upsertRapport({ ...base, resultat: 'Échec', erreur: 'Numéro ou message manquant' });
     return { success: false, error: 'Numéro ou message manquant' };
   }
 
   const to = normaliserTelephone(params.telephone);
   if (!to) {
-    upsertRapport({ ...base, resultat: 'Échec' });
+    upsertRapport({ ...base, resultat: 'Échec', erreur: 'Numéro invalide' });
     return { success: false, error: 'Numéro invalide' };
   }
 
@@ -293,7 +359,7 @@ export async function envoyerSmsReel(params: {
     const res = await serverFetch('/sms/send', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ to, message: params.message }),
+      body: JSON.stringify({ to, message: params.message, ...(params.modele ? { modele: params.modele } : {}) }),
     });
     const json = await res.json().catch(() => ({}));
     if (res.ok && json?.success) {
@@ -302,18 +368,24 @@ export async function envoyerSmsReel(params: {
       // recevoir ensuite le Delivery Receipt et passer à « Livré ».
       const resourceUrl = String(json?.data?.messageId || '');
       const resourceId = String(json?.data?.resourceId || resourceUrl.split('/requests/').pop() || '');
-      upsertRapport({ ...base, resultat: 'Envoyé', resourceId });
-      decrementerCreditSms(); // le SMS est accepté par Orange
+      // Texte réellement envoyé (SMS automatique : celui de la configuration, renvoyé par le serveur).
+      const texteEnvoye = String(json?.data?.message || params.message);
+      const segments = Math.max(1, compterSegmentsSms(texteEnvoye).segments);
+      upsertRapport({ ...base, message: texteEnvoye, resultat: 'Envoyé', resourceId, segments });
+      decrementerCreditSms(segments); // accepté par Orange : autant de SMS que facturés
       logger.log(`📤 SMS accepté par Orange pour ${params.client} (${params.telephone})`);
       return { success: true };
     }
     const error = json?.error || `Erreur serveur (HTTP ${res.status})`;
-    upsertRapport({ ...base, resultat: 'Échec' });
+    // Quota, droits, serveur indisponible : refus temporaire (à réessayer plus tard).
+    const temporaire = res.status === 401 || res.status === 403 || res.status === 429 || res.status >= 500;
+    upsertRapport({ ...base, resultat: temporaire && params.reporterSiTemporaire ? 'Reporté' : 'Échec', erreur: error });
     logger.warn('❌ SMS non envoyé:', error);
-    return { success: false, error };
+    return { success: false, error, temporaire };
   } catch (err) {
-    upsertRapport({ ...base, resultat: 'Échec' });
-    return { success: false, error: String((err as Error)?.message || err) };
+    const error = String((err as Error)?.message || err);
+    upsertRapport({ ...base, resultat: params.reporterSiTemporaire ? 'Reporté' : 'Échec', erreur: error });
+    return { success: false, error, temporaire: true };
   }
 }
 
@@ -344,6 +416,7 @@ export function envoyerSmsBienvenue(client: {
     telephone: client.telephone,
     message: config.messageBienvenue,
     nature: 'Bienvenue Client',
+    modele: 'bienvenue',
   });
   return true;
 }
@@ -356,6 +429,7 @@ export function envoyerSmsPersonnalise(params: {
   telephone: string;
   message: string;
   nature?: string;
+  modele?: ModeleSms;
 }): boolean {
   if (!params.telephone || params.telephone.trim() === '') {
     logger.warn('⚠️ Impossible d\'envoyer SMS: pas de numéro de téléphone');
@@ -391,6 +465,7 @@ export function envoyerSmsAnniversaire(client: {
     telephone: client.telephone,
     message: config.messageAnniversaire,
     nature: 'Anniversaire',
+    modele: 'anniversaire',
   });
 }
 
@@ -406,6 +481,7 @@ export function envoyerSmsRetrait(client: { nom: string; telephone: string }): b
     telephone: client.telephone,
     message: config.messageRetrait,
     nature: 'Retrait Lunettes',
+    modele: 'retrait',
   });
   return true;
 }
@@ -425,6 +501,7 @@ export function envoyerSmsRemerciementVente(vente: { id: string; client?: string
     telephone: vente.telephone,
     message: config.messageVente,
     nature: 'Remerciement Vente',
+    modele: 'vente',
   });
   return true;
 }
@@ -443,6 +520,37 @@ function dejaTraiteAujourdhui(prefix: string, id: string): boolean {
   for (const k of Object.keys(store)) if (store[k] !== today) delete store[k];
   try { localStorage.setItem(key, JSON.stringify(store)); } catch {}
   return false;
+}
+
+/** Retire la marque du jour (envoi reporté : il sera retenté). */
+function oublierTraiteAujourdhui(prefix: string, id: string): void {
+  const key = `leclaire_sms_${prefix}`;
+  try {
+    const store = JSON.parse(localStorage.getItem(key) || '{}');
+    delete store[id];
+    localStorage.setItem(key, JSON.stringify(store));
+  } catch { /* marque conservée */ }
+}
+
+/** Retire une marque permanente (envoi reporté : il sera retenté). */
+function oublierNotifiePermanent(prefix: string, id: string): void {
+  const key = `leclaire_sms_done_${prefix}`;
+  try {
+    const ids: string[] = JSON.parse(localStorage.getItem(key) || '[]');
+    localStorage.setItem(key, JSON.stringify(ids.filter(x => x !== id)));
+  } catch { /* marque conservée */ }
+}
+
+/**
+ * Envoi d'un SMS automatique quotidien, UN PAR UN. Refus temporaire (quota
+ * atteint, droits, réseau) : la marque est retirée pour retenter au prochain
+ * passage, et la tournée s'arrête (inutile d'enchaîner les refus).
+ */
+async function envoyerAutomatique(params: Parameters<typeof envoyerSmsReel>[0], oublier: () => void): Promise<'envoye' | 'echec' | 'arret'> {
+  const r = await envoyerSmsReel({ ...params, reporterSiTemporaire: true });
+  if (r.success) return 'envoye';
+  if (r.temporaire) { oublier(); return 'arret'; }
+  return 'echec';
 }
 
 /** Marqueur permanent (une seule notification par identifiant, jamais réinitialisé). */
@@ -485,13 +593,15 @@ export async function envoyerAnniversairesDuJour(
         const m = String(parseInt(c.mois_naissance || '', 10));
         if (j === jour && m === mois && c.telephone) {
           if (dejaTraiteAujourdhui('anniv', c.id)) continue;
-          void envoyerSmsReel({
+          const r = await envoyerAutomatique({
             client: c.nom,
             telephone: c.telephone,
             message: config.messageAnniversaire,
             nature: 'Anniversaire',
-          });
-          envoyes++;
+            modele: 'anniversaire',
+          }, () => oublierTraiteAujourdhui('anniv', c.id));
+          if (r === 'arret') return envoyes;
+          if (r === 'envoye') envoyes++;
         }
       }
     }
@@ -538,13 +648,15 @@ export async function envoyerRetraitsDuJour(
       const tel = telParNom.get(nom.toLowerCase());
       if (!tel) continue;
       if (dejaNotifiePermanent('retrait', b.id)) continue;
-      void envoyerSmsReel({
+      const r = await envoyerAutomatique({
         client: nom,
         telephone: tel,
         message: config.messageRetrait,
         nature: 'Retrait Lunettes',
-      });
-      envoyes++;
+        modele: 'retrait',
+      }, () => oublierNotifiePermanent('retrait', b.id));
+      if (r === 'arret') return envoyes;
+      if (r === 'envoye') envoyes++;
     }
     if (envoyes) logger.log(`👓 ${envoyes} SMS de retrait envoyés`);
     return envoyes;
@@ -584,13 +696,15 @@ export async function envoyerRenouvellementsDuJour(): Promise<number> {
       // dédoublonnage permanent garantit un seul envoi par vente).
       if (dateAchat > seuil) continue;
       if (dejaNotifiePermanent('renouvellement', v.id)) continue;
-      void envoyerSmsReel({
+      const r = await envoyerAutomatique({
         client: v.client || 'Client',
         telephone: v.telephone,
         message: config.messageRenouvellement,
         nature: 'Renouvellement Verres',
-      });
-      envoyes++;
+        modele: 'renouvellement',
+      }, () => oublierNotifiePermanent('renouvellement', v.id));
+      if (r === 'arret') return envoyes;
+      if (r === 'envoye') envoyes++;
     }
     if (envoyes) logger.log(`🔁 ${envoyes} SMS de renouvellement envoyés`);
     return envoyes;
@@ -602,6 +716,10 @@ export async function envoyerRenouvellementsDuJour(): Promise<number> {
 
 /** Déclenche les envois automatiques quotidiens (anniversaires + retraits + renouvellements). */
 export async function lancerEnvoisAutomatiques(): Promise<void> {
+  // Tournée quotidienne (anniversaires, lunettes prêtes, renouvellements) : depuis
+  // un poste d'encadrement seulement, pour ne pas lancer la même tournée sur
+  // chaque poste de magasin (doublons, refus).
+  if (!ROLES_SMS_LIBRE.includes(roleConnecte())) return;
   const { configured } = await isSmsConfigure();
   if (!configured) return;
   const config = loadConfigSms();
@@ -625,15 +743,24 @@ export async function lancerEnvoisAutomatiques(): Promise<void> {
 export function getStatistiquesSms(): {
   total: number;
   envoyes: number;
+  reportes: number;
   echecs: number;
   dernierEnvoi?: SmsRapport;
+  /** Derniers SMS en échec, avec leur raison (5 au plus). */
+  derniersEchecs: SmsRapport[];
+  /** SMS facturés pour les messages envoyés (un message long ou en Unicode en compte plusieurs). */
+  smsFactures: number;
 } {
   const rapports = loadRapport();
 
   return {
     total: rapports.length,
     envoyes: rapports.filter(r => r.resultat === 'Envoyé' || r.resultat === 'Livré').length,
+    reportes: rapports.filter(r => r.resultat === 'Reporté').length,
     echecs: rapports.filter(r => r.resultat === 'Échec').length,
     dernierEnvoi: rapports[0],
+    derniersEchecs: rapports.filter(r => r.resultat === 'Échec').slice(0, 5),
+    smsFactures: rapports.filter(r => r.resultat === 'Envoyé' || r.resultat === 'Livré')
+      .reduce((t, r) => t + (r.segments || compterSegmentsSms(r.message || '').segments || 1), 0),
   };
 }

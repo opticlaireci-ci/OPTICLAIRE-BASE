@@ -896,20 +896,61 @@ app.get(`/${ROUTE_PREFIX}/sms/status`, (c) => {
 // l'expéditeur de l'entreprise : à réserver au personnel encadrant).
 const SMS_ROLES = ['super_admin', 'admin', 'administrateur', 'manager', 'responsable_call_center'];
 
+// SMS AUTOMATIQUES (bienvenue, remerciement après vente, anniversaire, lunettes
+// prêtes, renouvellement) : ils partent du poste qui déclenche l'événement,
+// souvent celui d'un magasin (conseillère, opticien…). Tout compte rattaché à
+// un magasin peut donc les envoyer, mais le TEXTE est celui de la Configuration
+// SMS, relu ici côté serveur : un compte de magasin ne peut pas envoyer d'autre
+// texte. Les SMS au texte libre restent réservés aux SMS_ROLES.
+const SMS_MODELES: Record<string, string> = {
+  bienvenue: 'messageBienvenue',
+  anniversaire: 'messageAnniversaire',
+  retrait: 'messageRetrait',
+  vente: 'messageVente',
+  renouvellement: 'messageRenouvellement',
+};
+const SMS_NOM = Deno.env.get('TENANT_NOM') || 'LECLAIRE';
+// Textes par défaut (identiques à ceux de l'application) si la configuration n'a jamais été enregistrée.
+const SMS_TEXTES_DEFAUT: Record<string, string> = {
+  bienvenue: `Bienvenue chez ${SMS_NOM} ! Nous sommes ravis de vous compter parmi nos clients. Pour toute question, n'hésitez pas à nous contacter.`,
+  anniversaire: `Bonjour, ${SMS_NOM} vous souhaite un heureux et joyeux anniversaire. Excellente journée, au plaisir de vous voir.`,
+  retrait: `Bonjour, vos lunettes sont prêtes et disponibles en magasin. Vous pouvez passer les récupérer. Merci de votre confiance — ${SMS_NOM}.`,
+  vente: `Merci pour votre achat chez ${SMS_NOM} ! Nous vous remercions de votre confiance et restons à votre disposition. À très bientôt.`,
+  renouvellement: `Bonjour, cela fait bientôt 2 ans que vous avez acheté vos verres chez ${SMS_NOM}. Vos verres arrivent en fin de vie : pensez à les renouveler pour préserver votre confort visuel. Passez nous voir, nous serons ravis de vous accueillir.`,
+};
+
+/** Texte d'un SMS automatique : Configuration SMS enregistrée (app_data), sinon texte par défaut. */
+async function texteSmsAutomatique(modele: string): Promise<string> {
+  const champ = SMS_MODELES[modele];
+  if (!champ) return '';
+  try {
+    const { data } = await supabaseAdmin().from('app_data').select('value').eq('key', 'leclaire_config_sms').maybeSingle();
+    let config: any = data?.value;
+    if (config && typeof config === 'object' && config.value !== undefined) config = config.value;
+    if (typeof config === 'string') { try { config = JSON.parse(config); } catch { config = null; } }
+    const texte = typeof config?.[champ] === 'string' ? config[champ].trim() : '';
+    if (texte) return texte;
+  } catch (e) {
+    console.log('sms : configuration illisible, texte par défaut utilisé', e);
+  }
+  return SMS_TEXTES_DEFAUT[modele] || '';
+}
+
 // Quota anti-abus par utilisateur : fenêtre glissante en mémoire de l'instance.
 // Empêche un compte compromis de vider le crédit Orange / spammer en masse.
-const SMS_RATE_LIMIT = 30;                 // messages max par fenêtre
+const SMS_RATE_LIMIT = 30;                 // messages au texte libre max par fenêtre
+const SMS_RATE_LIMIT_AUTO = 150;           // SMS automatiques (texte imposé) max par fenêtre
 const SMS_RATE_WINDOW_MS = 60 * 60 * 1000; // 1 heure
 const _smsHits = new Map<string, number[]>();
-function smsRateExceeded(userId: string): boolean {
+function smsRateExceeded(cle: string, limite = SMS_RATE_LIMIT): boolean {
   const now = Date.now();
-  const recent = (_smsHits.get(userId) || []).filter((t) => now - t < SMS_RATE_WINDOW_MS);
-  if (recent.length >= SMS_RATE_LIMIT) {
-    _smsHits.set(userId, recent);
+  const recent = (_smsHits.get(cle) || []).filter((t) => now - t < SMS_RATE_WINDOW_MS);
+  if (recent.length >= limite) {
+    _smsHits.set(cle, recent);
     return true;
   }
   recent.push(now);
-  _smsHits.set(userId, recent);
+  _smsHits.set(cle, recent);
   return false;
 }
 
@@ -957,15 +998,25 @@ app.post(`/${ROUTE_PREFIX}/sms/send`, async (c) => {
   const guard = await requireUser(c);
   if (!guard.ok) return guard.res;
 
-  // Contrôle de rôle : tout utilisateur authentifié ne doit PAS pouvoir envoyer.
+  const body = await c.req.json().catch(() => ({}));
+  // SMS automatique (texte imposé par la Configuration SMS) ou texte libre.
+  const modele = String(body?.modele || '').trim();
+  const automatique = Object.prototype.hasOwnProperty.call(SMS_MODELES, modele);
+
+  // Contrôle de rôle : texte libre → encadrement seulement ; SMS automatique →
+  // tout compte rattaché à un magasin.
   const meta = await getUserMeta(guard.userId);
-  const autorise = (meta?.magasins || []).some((r) => SMS_ROLES.includes(r.role));
-  if (!autorise) {
-    return c.json({ success: false, error: "Envoi de SMS non autorisé pour votre rôle." }, 403);
+  const roles = (meta?.magasins || []).map((r) => r.role);
+  const encadrant = roles.some((r) => SMS_ROLES.includes(r));
+  if (!encadrant && !(automatique && roles.length > 0)) {
+    return c.json({ success: false, error: automatique
+      ? "Envoi de SMS non autorisé : compte rattaché à aucun magasin."
+      : "Envoi de SMS au texte libre réservé aux administrateurs, managers et responsables du Call Center." }, 403);
   }
-  // Quota anti-abus.
-  if (smsRateExceeded(guard.userId)) {
-    return c.json({ success: false, error: `Quota SMS atteint (${SMS_RATE_LIMIT}/h). Réessayez plus tard.` }, 429);
+  // Quota anti-abus (compté à part pour les SMS automatiques, au texte imposé).
+  const limite = automatique ? SMS_RATE_LIMIT_AUTO : SMS_RATE_LIMIT;
+  if (smsRateExceeded(automatique ? `${guard.userId}:auto` : guard.userId, limite)) {
+    return c.json({ success: false, error: `Quota SMS atteint (${limite}/h). Réessayez plus tard.` }, 429);
   }
 
   const { authHeader, senderAddress, senderName, baseUrl } = orangeConfig();
@@ -973,9 +1024,8 @@ app.post(`/${ROUTE_PREFIX}/sms/send`, async (c) => {
     return c.json({ success: false, error: "Orange non configuré : définissez les secrets ORANGE_SMS_AUTH_HEADER et ORANGE_SENDER_ADDRESS, puis redéployez la fonction." }, 400);
   }
   try {
-    const body = await c.req.json().catch(() => ({}));
     let to = String(body?.to || '').trim();
-    const message = String(body?.message || '').trim();
+    const message = automatique ? await texteSmsAutomatique(modele) : String(body?.message || '').trim();
     if (!to) return c.json({ success: false, error: 'Numéro destinataire (to) requis' }, 400);
     if (!message) return c.json({ success: false, error: 'Message requis' }, 400);
 
@@ -1020,7 +1070,8 @@ app.post(`/${ROUTE_PREFIX}/sms/send`, async (c) => {
     }
     const ref = String(data?.outboundSMSMessageRequest?.resourceURL || '');
     const resourceId = ref.split('/requests/').pop() || '';
-    return c.json({ success: true, data: { messageId: ref, resourceId, status: 'SUBMITTED' } });
+    // `message` : texte réellement envoyé (permet de compter les SMS facturés côté application).
+    return c.json({ success: true, data: { messageId: ref, resourceId, status: 'SUBMITTED', message } });
   } catch (e) {
     console.log('sms/send error:', e);
     return c.json({ success: false, error: String((e as Error)?.message || e) }, 500);

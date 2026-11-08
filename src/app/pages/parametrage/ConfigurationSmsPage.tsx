@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { ArrowLeft, Save, Send } from 'lucide-react';
+import { CompteurSms } from '../../components/CompteurSms';
 import { loadConfigSms, saveConfigSms, type ConfigSms, getStatistiquesSms, envoyerSmsReel, isSmsConfigure, loadCreditsSms, setCreditsSms, etatCreditSms, SMS_CREDITS_EVENT } from '../../services/smsService';
 
 export function ConfigurationSmsPage() {
@@ -122,10 +123,14 @@ export function ConfigurationSmsPage() {
         <div className="bg-white p-6 rounded-lg shadow">
           <div className="text-3xl font-bold text-green-600">{stats.envoyes}</div>
           <div className="text-sm text-gray-600">SMS Envoyés</div>
+          {stats.smsFactures !== stats.envoyes && (
+            <div className="text-xs text-gray-500 mt-1" data-testid="sms-factures">soit {stats.smsFactures} SMS facturés par Orange</div>
+          )}
         </div>
         <div className="bg-white p-6 rounded-lg shadow">
           <div className="text-3xl font-bold text-red-600">{stats.echecs}</div>
           <div className="text-sm text-gray-600">SMS Échecs</div>
+          {stats.reportes > 0 && <div className="text-xs text-amber-700 mt-1">+ {stats.reportes} reporté(s), retentés plus tard</div>}
         </div>
         <div className="bg-white p-6 rounded-lg shadow">
           <div className="text-sm font-medium text-gray-700">Dernier envoi</div>
@@ -143,6 +148,23 @@ export function ConfigurationSmsPage() {
           </div>
         </div>
       </div>
+
+      {/* Derniers échecs : la raison donnée par le serveur ou par Orange */}
+      {stats.derniersEchecs.length > 0 && (
+        <div className="mb-6 bg-white rounded-lg shadow p-4 border border-red-100" data-testid="derniers-echecs">
+          <div className="text-sm font-semibold text-red-700 mb-2">Derniers SMS en échec — raison</div>
+          <ul className="space-y-1 text-sm">
+            {stats.derniersEchecs.map(r => (
+              <li key={r.id} className="flex flex-wrap gap-x-2">
+                <span className="text-gray-500">{new Date(r.date).toLocaleString('fr-FR')}</span>
+                <span className="font-medium">{r.nature}</span>
+                <span className="text-gray-600">{r.client}{r.telephone ? ` (${r.telephone})` : ''}</span>
+                <span className="text-red-700">: {r.erreur || 'raison non enregistrée (SMS envoyé avant cette mise à jour)'}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {/* Compteur / crédit de SMS disponibles */}
       {(() => {
@@ -235,9 +257,7 @@ export function ConfigurationSmsPage() {
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-500"
               placeholder="Votre message de bienvenue..."
             />
-            <p className="text-xs text-gray-500 mt-1">
-              {config.messageBienvenue.length} caractères
-            </p>
+            <CompteurSms texte={config.messageBienvenue} />
           </div>
 
           {config.envoyerBienvenue && (
@@ -289,9 +309,7 @@ export function ConfigurationSmsPage() {
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-500"
               placeholder="Votre message d'anniversaire..."
             />
-            <p className="text-xs text-gray-500 mt-1">
-              {config.messageAnniversaire.length} caractères
-            </p>
+            <CompteurSms texte={config.messageAnniversaire} />
           </div>
 
           {config.envoyerAnniversaire && (
@@ -343,9 +361,7 @@ export function ConfigurationSmsPage() {
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-500"
               placeholder="Votre message de retrait..."
             />
-            <p className="text-xs text-gray-500 mt-1">
-              {config.messageRetrait.length} caractères
-            </p>
+            <CompteurSms texte={config.messageRetrait} />
           </div>
 
           {config.envoyerRetrait ? (
@@ -396,9 +412,7 @@ export function ConfigurationSmsPage() {
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-500"
               placeholder="Votre message de remerciement..."
             />
-            <p className="text-xs text-gray-500 mt-1">
-              {config.messageVente.length} caractères
-            </p>
+            <CompteurSms texte={config.messageVente} />
           </div>
 
           {config.envoyerVente ? (
@@ -468,9 +482,7 @@ export function ConfigurationSmsPage() {
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-500"
               placeholder="Votre message de rappel de renouvellement..."
             />
-            <p className="text-xs text-gray-500 mt-1">
-              {config.messageRenouvellement.length} caractères
-            </p>
+            <CompteurSms texte={config.messageRenouvellement} />
           </div>
 
           {config.envoyerRenouvellement ? (
@@ -522,6 +534,7 @@ export function ConfigurationSmsPage() {
               placeholder="Votre message de test..."
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
+            {testMessage && <CompteurSms texte={testMessage} />}
           </div>
         </div>
 
