@@ -26,7 +26,7 @@ function QuickStat({
   return (
     <button
       onClick={onClick}
-      className="flex items-center gap-3 rounded-2xl p-4 text-left w-full transition-all"
+      className="relative flex flex-col items-start sm:flex-row sm:items-center gap-2 sm:gap-3 rounded-2xl p-4 text-left w-full transition-all"
       style={{
         background: 'white',
         boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
@@ -47,11 +47,11 @@ function QuickStat({
         <span style={{ color }}>{icon}</span>
       </div>
       <div className="min-w-0">
-        <p className="text-xs font-medium truncate" style={{ color: 'var(--color-muted)' }}>{label}</p>
-        <p className="text-sm font-bold num truncate" style={{ color: '#0F172A' }}>{value}</p>
+        <p className="text-xs font-medium leading-snug" style={{ color: 'var(--color-muted)' }}>{label}</p>
+        <p className="text-sm font-bold num leading-snug" style={{ color: '#0F172A' }}>{value}</p>
       </div>
       {onClick && (
-        <svg className="w-3.5 h-3.5 ml-auto flex-shrink-0 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="w-3.5 h-3.5 absolute top-4 right-4 sm:static sm:ml-auto flex-shrink-0 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
         </svg>
       )}

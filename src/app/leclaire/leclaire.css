@@ -77,3 +77,23 @@
   font-feature-settings: 'tnum';
   letter-spacing: -0.02em;
 }
+
+/*
+ * Téléphone (≤ 899 px) : OPTICLAIRE applique à toute la page des règles
+ * d'adaptation (src/styles/globals.css, « MOBILE ») prévues pour SES écrans :
+ * grilles forcées sur une colonne, rangées qui passent à la ligne, fenêtres
+ * collées en haut, marges réduites, titres agrandis. Les écrans LECLAIRE sont
+ * déjà conçus pour le téléphone : à l'intérieur de LECLAIRE, ces règles sont
+ * annulées (`revert-layer` : retour aux classes Tailwind de l'écran).
+ * La répétition de .leclaire-app sert seulement à l'emporter sur ces règles.
+ */
+@media (max-width: 899px) {
+  .leclaire-app.leclaire-app.leclaire-app .grid { grid-template-columns: revert-layer !important; }
+  .leclaire-app.leclaire-app.leclaire-app .flex { flex-wrap: revert-layer !important; gap: revert-layer !important; }
+  .leclaire-app.leclaire-app.leclaire-app .fixed.inset-0 { align-items: revert-layer !important; }
+  .leclaire-app.leclaire-app.leclaire-app :is(.p-5, .p-6) { padding: revert-layer !important; }
+  .leclaire-app.leclaire-app.leclaire-app :is(.px-5, .px-6) { padding-left: revert-layer !important; padding-right: revert-layer !important; }
+  .leclaire-app.leclaire-app.leclaire-app :is(h1, h2) { font-size: revert-layer !important; }
+  .leclaire-app.leclaire-app.leclaire-app [class*="min-w-"] { min-width: revert-layer !important; }
+  .leclaire-app.leclaire-app.leclaire-app :is(h1, h2, h3, h4, p, td, th) { word-break: revert-layer; overflow-wrap: revert-layer; }
+}

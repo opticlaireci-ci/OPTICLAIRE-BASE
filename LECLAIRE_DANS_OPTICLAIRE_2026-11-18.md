@@ -98,6 +98,25 @@ LECLAIRE), statistiques, catégories, justificatifs, historique, paramètres
   toutes les 2 minutes, ou en revenant sur la page.
 - Une action refusée (droits) affiche un message au lieu d'un faux « succès ».
 
+## Affichage sur ordinateur et sur téléphone (correctif du 18/11/2026)
+
+- **Ordinateur** : LECLAIRE occupe toute la largeur de l'écran, avec le menu
+  toujours affiché à gauche (Tableau de bord, Mouvements, Magasins,
+  Statistiques, Catégories, Justificatifs, et pour l'administration :
+  Historique, Utilisateurs, Reprise des données, Paramètres ; en bas : Retour à
+  OPTICLAIRE, Déconnexion). Avant, l'application LECLAIRE affichait une colonne
+  de téléphone au milieu de l'écran : les cartes du tableau de bord y étaient
+  trop étroites et leurs textes disparaissaient.
+- **Téléphone** : présentation de l'application LECLAIRE (menu par ☰, barre du
+  bas). Les règles d'adaptation au téléphone propres aux écrans d'OPTICLAIRE
+  (grilles sur une colonne, en-tête qui passe à la ligne, fenêtres collées en
+  haut, titres agrandis, mots coupés) ne s'appliquent plus à l'intérieur de
+  LECLAIRE ; les écrans d'OPTICLAIRE ne changent pas. Les petites cartes du
+  tableau de bord affichent leur texte en entier (icône au-dessus du texte).
+- Vérifié sur tous les écrans LECLAIRE, à 1 440 px (ordinateur) et 390 px
+  (téléphone) : aucun débordement, menu et barre du bas comme prévu, aucune
+  violation de la politique de sécurité (26/26).
+
 ## Technique
 
 - `supabase/LECLAIRE_CAISSE_2026-11-18.sql` : tables `leclaire_caisse_*`

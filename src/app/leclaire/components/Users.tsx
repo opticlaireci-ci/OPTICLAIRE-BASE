@@ -96,7 +96,7 @@ export default function Users({ users, currentUser, transactions, comptes, onVie
         </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4">
         {sorted.map((u) => {
           const userTxns = transactions.filter((t) => t.userId === u.id)
           const userIncome = userTxns.filter((t) => t.type === 'income').reduce((s, t) => s + t.amount, 0)
