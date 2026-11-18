@@ -1,0 +1,79 @@
+/*
+ * LECLAIRE — couleurs et animations de l'application LECLAIRE, limitées au
+ * conteneur .leclaire-app : rien ne change dans les écrans d'OPTICLAIRE
+ * (certaines variables portent le même nom que celles d'OPTICLAIRE, elles
+ * ne sont redéfinies qu'à l'intérieur de LECLAIRE).
+ */
+.leclaire-app {
+  --color-navy: #0B1D3A;
+  --color-navy-mid: #152D58;
+  --color-navy-hover: #1A3670;
+  --color-navy-active: #1E3F85;
+  --color-blue: #1D6FA4;
+  --color-blue-light: #E8F4FD;
+  --color-income: #059669;
+  --color-income-light: #D1FAE5;
+  --color-expense: #DC2626;
+  --color-expense-light: #FEE2E2;
+  --color-surface: #EEF2F8;
+  --color-border: #E2E8F0;
+  --color-muted: #64748B;
+
+  --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-display: 'Outfit', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  font-family: var(--font-sans);
+  background: var(--color-surface);
+  color: #0F172A;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100dvh;
+}
+
+.leclaire-app * {
+  scrollbar-width: thin;
+  scrollbar-color: #CBD5E1 transparent;
+}
+.leclaire-app *::-webkit-scrollbar        { width: 4px; height: 4px; }
+.leclaire-app *::-webkit-scrollbar-thumb  { background: #CBD5E1; border-radius: 3px; }
+.leclaire-app *::-webkit-scrollbar-track  { background: transparent; }
+
+.leclaire-app .bg-income  { background-color: var(--color-income); }
+.leclaire-app .bg-expense { background-color: var(--color-expense); }
+.leclaire-app .border-border { border-color: var(--color-border); }
+
+@keyframes lcFadeUp {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes lcSlideIn {
+  from { opacity: 0; transform: translateX(16px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes lcScalePop {
+  from { opacity: 0; transform: scale(0.94); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+.leclaire-app .fade-up   { animation: lcFadeUp 0.35s ease both; }
+.leclaire-app .scale-pop { animation: lcScalePop 0.25s ease both; }
+.leclaire-app .slide-in  { animation: lcSlideIn 0.2s ease both; }
+
+.leclaire-app .dot-grid {
+  background-image: radial-gradient(circle, rgba(255,255,255,0.12) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+.leclaire-app .card-hover {
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+.leclaire-app .card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+}
+
+.leclaire-app .num {
+  font-family: var(--font-mono);
+  font-feature-settings: 'tnum';
+  letter-spacing: -0.02em;
+}

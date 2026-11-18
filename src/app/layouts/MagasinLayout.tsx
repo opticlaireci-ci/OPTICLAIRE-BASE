@@ -46,8 +46,10 @@ import {
   ExpandLess,
   AccountBalance,
   Inventory2,
+  Savings,
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
+import { accesLeclaire } from '../utils/actionRights';
 import { SessionIndicator } from '../components/SessionIndicator';
 import { SeasonLogo } from '../components/SeasonLogo';
 import { pathToButtonKey } from '../constants/appButtons';
@@ -546,7 +548,7 @@ export function MagasinLayout() {
   const roleLectureVenteFacture = ['conseillere', 'opticien'].includes(user?.role || '');
   const accesVenteFacture = roleLectureVenteFacture
     || menuAccess.includes('magasin:commercial/vente-facture') || menuAccess.includes('commercial/vente-facture');
-  const visibleMenuItems = (isAdminRole || menuAccess.length === 0)
+  const menuMagasin = (isAdminRole || menuAccess.length === 0)
     ? menuItems
     : filterByAccess(
         menuItems,
@@ -558,6 +560,11 @@ export function MagasinLayout() {
           `/magasin/${magasinId}/atelier`,
         ],
       );
+  // LECLAIRE (caisse des ouvertures de magasins et des missions) : pour les
+  // comptes qui en ont l'accès (case cochée, ou administrateurs d'office).
+  const visibleMenuItems: MenuItemType[] = accesLeclaire(user)
+    ? [...menuMagasin, { title: 'LECLAIRE', icon: <Savings />, path: '/leclaire' }]
+    : menuMagasin;
 
   const handleExpand = (title: string) => {
     // Accordéon : une seule rubrique ouverte à la fois. Ouvrir une rubrique

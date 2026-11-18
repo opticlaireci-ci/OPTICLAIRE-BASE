@@ -78,6 +78,12 @@ export const router = createBrowserRouter([
     HydrateFallback,
     lazy: lazyRoute(() => import("./pages/gestion-magasin/SelectMagasinPage"), "SelectMagasinPage"),
   },
+  // LECLAIRE : caisse des ouvertures de magasins et des missions (données à part).
+  {
+    path: "/leclaire",
+    HydrateFallback,
+    lazy: lazyRoute(() => import("./pages/LeclairePage"), "LeclairePage"),
+  },
   {
     path: "/magasin/:magasinId",
     Component: MagasinLayout,

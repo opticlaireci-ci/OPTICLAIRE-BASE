@@ -282,3 +282,25 @@ export function accesAtelier(user: (UserLike & { droitsVoir?: string[] }) | null
     montage: a(VOIR_ATELIER_MONTAGE_KEY),
   };
 }
+
+/*
+ * LECLAIRE (caisse des ouvertures de magasins et des missions, données à
+ * part d'OPTICLAIRE). Cases de Gestion des Utilisateurs (préfixe `droit:`) :
+ *  - « Accès LECLAIRE » : saisit ses entrées / dépenses, ne voit que les siennes ;
+ *  - « Administrateur LECLAIRE » : voit et gère tout LECLAIRE.
+ * Administrateurs et super administrateur : administrateurs LECLAIRE d'office.
+ * La base vérifie les mêmes règles (supabase/LECLAIRE_CAISSE_2026-11-18.sql) :
+ * ces fonctions ne servent qu'à afficher le menu.
+ */
+export const DROIT_LECLAIRE_KEY = 'droit:leclaire';
+export const DROIT_LECLAIRE_ADMIN_KEY = 'droit:leclaire-admin';
+
+/** Accès LECLAIRE de l'utilisateur : 'admin', 'utilisateur' ou null. */
+export function accesLeclaire(user: (UserLike & { droitsVoir?: string[] }) | null | undefined): 'admin' | 'utilisateur' | null {
+  if (!user) return null;
+  if (ADMIN_ROLES.includes(user.role || '')) return 'admin';
+  const droits = user.droitsVoir ?? clesVoir(user.menuAccess || []);
+  if (droits.includes(DROIT_LECLAIRE_ADMIN_KEY)) return 'admin';
+  if (droits.includes(DROIT_LECLAIRE_KEY)) return 'utilisateur';
+  return null;
+}

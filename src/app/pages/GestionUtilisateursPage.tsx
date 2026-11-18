@@ -12,7 +12,7 @@ import { logger } from '../utils/logger';
 import { getMagasins } from '../constants/magasins';
 import { useMagasins } from '../hooks/useMagasins';
 import { APP_BUTTON_GROUPS } from '../constants/appButtons';
-import { ACTION_ADD_KEY, ACTION_EDIT_KEY, ACTION_DELETE_KEY, ADD_MODULES, addModuleKey, ACCES_CONSEILLERES_OPTICIENS, ROLES_ACCES_RESTREINT, DROITS_PARTICULIERS, ACCES_COMMANDE_VERRE, accesCommandeVerreParRole, ACCES_ATELIER, accesAtelierParRole, accesAtelierParMenu } from '../utils/actionRights';
+import { ACTION_ADD_KEY, ACTION_EDIT_KEY, ACTION_DELETE_KEY, ADD_MODULES, addModuleKey, ACCES_CONSEILLERES_OPTICIENS, ROLES_ACCES_RESTREINT, DROITS_PARTICULIERS, ACCES_COMMANDE_VERRE, accesCommandeVerreParRole, ACCES_ATELIER, accesAtelierParRole, accesAtelierParMenu, DROIT_LECLAIRE_KEY, DROIT_LECLAIRE_ADMIN_KEY } from '../utils/actionRights';
 import { AddButton } from '../components/AddButton';
 
 // Les rôles intégrés + tout rôle personnalisé ajouté par l'administrateur.
@@ -304,6 +304,19 @@ function ModalUser({
     }));
   };
 
+  // LECLAIRE : « Administrateur LECLAIRE » inclut l'accès ; retirer l'accès retire aussi l'administration.
+  const toggleLeclaire = (key: string) => {
+    setForm(f => {
+      const a = new Set(f.menuAccess);
+      if (key === DROIT_LECLAIRE_ADMIN_KEY) {
+        if (a.has(DROIT_LECLAIRE_ADMIN_KEY)) a.delete(DROIT_LECLAIRE_ADMIN_KEY);
+        else { a.add(DROIT_LECLAIRE_ADMIN_KEY); a.add(DROIT_LECLAIRE_KEY); }
+      } else if (a.has(DROIT_LECLAIRE_KEY)) { a.delete(DROIT_LECLAIRE_KEY); a.delete(DROIT_LECLAIRE_ADMIN_KEY); }
+      else a.add(DROIT_LECLAIRE_KEY);
+      return { ...f, menuAccess: [...a] };
+    });
+  };
+
   const toggleGroupAccess = (keys: string[], allChecked: boolean) => {
     setForm(f => ({
       ...f,
@@ -555,6 +568,40 @@ function ModalUser({
               Cochez la case pour donner ce droit à un autre utilisateur ; décochez-la pour le lui retirer.
             </div>
           </div>
+          {/* LECLAIRE : caisse des ouvertures de magasins et des missions (données à part). */}
+          {(() => {
+            const leclaireParRole = form.assignments.some(a => ['super_admin', 'admin', 'administrateur'].includes(a.role));
+            const cases = [
+              { key: DROIT_LECLAIRE_KEY, label: 'Accès LECLAIRE : saisir ses entrées et dépenses (ouverture de magasin, mission) et voir les siennes' },
+              { key: DROIT_LECLAIRE_ADMIN_KEY, label: 'Administrateur LECLAIRE : voir et gérer tout LECLAIRE (tous les mouvements, magasins LECLAIRE, utilisateurs, paramètres, reprise des données)' },
+            ];
+            return (
+              <div className="border border-emerald-300 rounded overflow-hidden" data-testid="acces-leclaire">
+                <div className="bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-900">
+                  LECLAIRE (caisse des ouvertures de magasins et des missions)
+                </div>
+                <div className="grid grid-cols-1 gap-y-1 p-3">
+                  {cases.map(c => (
+                    <label key={c.key} className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        className="accent-emerald-600"
+                        checked={leclaireParRole || form.menuAccess.includes(c.key)}
+                        disabled={leclaireParRole}
+                        onChange={() => toggleLeclaire(c.key)}
+                      />
+                      {c.label}
+                      {leclaireParRole && <span className="text-xs text-emerald-700">(inclus dans son rôle)</span>}
+                    </label>
+                  ))}
+                </div>
+                <div className="px-3 pb-2 text-xs text-gray-500">
+                  LECLAIRE a ses propres données, séparées de la caisse des magasins d'OPTICLAIRE. La personne l'ouvre avec son
+                  compte OPTICLAIRE (menu « LECLAIRE »). Les administrateurs et le super administrateur y ont accès d'office.
+                </div>
+              </div>
+            );
+          })()}
           {/* Commande de verre (Atelier) : parties données d'office par le rôle,
               et à n'importe quel autre utilisateur en cochant la case. */}
           <div className="border border-blue-200 rounded overflow-hidden" data-testid="acces-commande-verre">

@@ -68,6 +68,7 @@ import {
   Home as HomeIcon,
   Phone as PhoneIcon,
   AdminPanelSettings,
+  Savings,
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
 import { SessionIndicator } from '../components/SessionIndicator';
@@ -82,7 +83,7 @@ import { doc, onSnapshot } from '../utils/firestoreCompat';
 import { db } from '../utils/firebaseClient';
 import { useCommandesVerre } from '../hooks/useCommandesVerre';
 import { STATUT_ENVOYEE } from '../services/commandesVerreService';
-import { accesCommandeVerre } from '../utils/actionRights';
+import { accesCommandeVerre, accesLeclaire } from '../utils/actionRights';
 
 // Suit en direct le crédit de SMS restant + son état (couleur).
 function useSmsCredits() {
@@ -761,10 +762,15 @@ function NavigationMenu() {
       ? filterByAccess(menuItems, menuAccess)
       : roleFilteredMenuItems;
   // Assistante administrative : jamais sans accueil, accès aux magasins ni Atelier.
-  const filteredMenuItems = user?.role === 'assistante_admin'
+  const menuSansLeclaire = user?.role === 'assistante_admin'
     ? menuItems.filter(item => menuParAcces.some(m => m.title === item.title) || TITRES_ASSISTANTE_TOUJOURS.includes(item.title))
       .map(item => menuParAcces.find(m => m.title === item.title) || item)
     : menuParAcces;
+  // LECLAIRE (caisse des ouvertures de magasins et des missions) : pour les
+  // comptes qui en ont l'accès (case cochée, ou administrateurs d'office).
+  const filteredMenuItems = accesLeclaire(user)
+    ? [...menuSansLeclaire, { title: 'LECLAIRE', icon: <Savings />, path: '/leclaire' }]
+    : menuSansLeclaire;
 
   const handleDrawerToggle = () => {
     if (isMobile) {
