@@ -18,6 +18,10 @@ interface Props {
   canAssign?: boolean
   users?: User[]
   defaultUserId?: string
+  /** Magasin habituel d'une personne (celui de son dernier mouvement). */
+  magasinHabituelDe?: (userId: string) => string | undefined
+  /** Magasin LECLAIRE cité dans un texte (description, commentaire…). */
+  reconnaitreMagasin?: (textes: string[]) => string | null
 }
 
 const today = () => new Date().toISOString().split('T')[0]
@@ -125,14 +129,20 @@ function CategoryCombobox({
 // ── main modal ───────────────────────────────────────────────────────────────
 export default function TransactionModal({
   mode, editing, settings, currentBalance, categories, stores, onSave, onNewCategory, onClose, readOnly = false,
-  canAssign = false, users = [], defaultUserId = '',
+  canAssign = false, users = [], defaultUserId = '', magasinHabituelDe, reconnaitreMagasin,
 }: Props) {
   const isIncome = mode === 'income'
   const [amount, setAmount] = useState(editing ? String(editing.amount) : '')
   const [date, setDate] = useState(editing?.date ?? today())
   const [description, setDescription] = useState(editing?.description ?? '')
-  const [storeId, setStoreId] = useState(editing?.storeId ?? (stores[0]?.id ?? ''))
+  // Magasin choisi automatiquement (nouveau mouvement) : celui du dernier
+  // mouvement de la personne, puis celui cité dans la description ; un choix
+  // fait à la main n'est jamais remplacé.
+  const habituelInitial = !editing ? magasinHabituelDe?.(defaultUserId) : undefined
+  const [storeId, setStoreId] = useState(editing?.storeId ?? habituelInitial ?? (stores[0]?.id ?? ''))
   const [assignedUserId, setAssignedUserId] = useState(editing?.userId ?? defaultUserId)
+  const [magasinManuel, setMagasinManuel] = useState(!!editing)
+  const [origineMagasin, setOrigineMagasin] = useState<'habituel' | 'texte' | null>(habituelInitial ? 'habituel' : null)
   const [category, setCategory] = useState(editing?.category ?? (categories[0] ?? 'Autre'))
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(editing?.paymentMethod ?? 'Espèces')
   const [beneficiaryOrSource, setBeneficiaryOrSource] = useState(editing?.beneficiaryOrSource ?? '')
@@ -143,6 +153,27 @@ export default function TransactionModal({
   // Justificatif déjà enregistré (espace « leclaire-justificatifs ») : gardé tant qu'il n'est ni retiré ni remplacé.
   const [attachmentPath, setAttachmentPath] = useState(editing?.attachmentPath)
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (magasinManuel || !reconnaitreMagasin) return
+    const cite = reconnaitreMagasin([description, comment, beneficiaryOrSource])
+    if (cite) {
+      if (cite !== storeId) setStoreId(cite)
+      setOrigineMagasin('texte')
+    } else if (origineMagasin === 'texte') {
+      // Plus de magasin cité : retour au magasin habituel de la personne.
+      const h = magasinHabituelDe?.(assignedUserId)
+      if (h) { setStoreId(h); setOrigineMagasin('habituel') } else setOrigineMagasin(null)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [description, comment, beneficiaryOrSource])
+
+  const changerPersonne = (id: string) => {
+    setAssignedUserId(id)
+    if (magasinManuel || origineMagasin === 'texte') return
+    const h = magasinHabituelDe?.(id)
+    if (h) { setStoreId(h); setOrigineMagasin('habituel') }
+  }
   const [saving, setSaving] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -302,7 +333,8 @@ export default function TransactionModal({
                 Magasin *
               </label>
               <select
-                value={storeId} onChange={(e) => setStoreId(e.target.value)}
+                value={storeId} onChange={(e) => { setStoreId(e.target.value); setMagasinManuel(true); setOrigineMagasin(null) }}
+                data-testid="lc-saisie-magasin"
                 className={fieldClass} required
                 onFocus={(e) => (e.target.style.borderColor = accentColor)}
                 onBlur={(e) => (e.target.style.borderColor = '')}
@@ -310,6 +342,11 @@ export default function TransactionModal({
                 {stores.length === 0 && <option value="">Aucun magasin — créez-en un</option>}
                 {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
+              {!magasinManuel && origineMagasin && (
+                <p className="text-xs mt-1" style={{ color: 'var(--color-income)' }} data-testid="lc-saisie-magasin-auto">
+                  {origineMagasin === 'texte' ? 'Magasin reconnu dans la description' : 'Magasin du dernier mouvement de la personne'} — modifiable
+                </p>
+              )}
             </div>
 
             {/* Assign to a user — admins only */}
@@ -319,7 +356,7 @@ export default function TransactionModal({
                   Affecter à l&apos;utilisateur *
                 </label>
                 <select
-                  value={assignedUserId} onChange={(e) => setAssignedUserId(e.target.value)}
+                  value={assignedUserId} onChange={(e) => changerPersonne(e.target.value)}
                   className={fieldClass}
                   onFocus={(e) => (e.target.style.borderColor = accentColor)}
                   onBlur={(e) => (e.target.style.borderColor = '')}

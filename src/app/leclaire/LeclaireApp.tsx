@@ -31,6 +31,9 @@ import Stores from './components/Stores'
 import Settings from './components/Settings'
 import Reprise from './components/Reprise'
 import ImportFichier from './components/ImportFichier'
+import { getMagasins } from '../constants/magasins'
+import { nomMagasin } from '../config/tenant'
+import { magasinCite, magasinHabituel } from './classement'
 import Logo from './components/Logo'
 import './leclaire.css'
 
@@ -75,6 +78,10 @@ export default function LeclaireApp({ compte, onRetour, onLogout }: Props) {
   const [essai, setEssai] = useState(0)
 
   const admin = entree?.role === 'admin'
+  // Noms des magasins d'OPTICLAIRE : LECLAIRE finance leur ouverture, il les reconnaît dans les textes.
+  const magasinsOpticlaire = useMemo(() => {
+    try { return getMagasins().map((m) => m.label).filter(Boolean) } catch { return [] as string[] }
+  }, [])
 
   const addToast = useCallback((message: string, type: ToastMsg['type'] = 'success') => {
     setToasts((prev) => [...prev, { id: genId(), message, type }])
@@ -247,6 +254,27 @@ export default function LeclaireApp({ compte, onRetour, onLogout }: Props) {
       addAuditLog('UPDATE', `${ids.length} mouvement(s) réaffecté(s) au magasin "${store.name}"`)
     } catch (err) { signaler(err); recharger() }
   }, [currentUser, stores, addToast, addAuditLog, signaler, recharger])
+
+  // Classement automatique des mouvements sans magasin (magasins reconnus créés au besoin).
+  const handleClasser = useCallback(async (groupes: Array<{ nom: string; id: string | null; ids: string[] }>) => {
+    let n = 0
+    const resume: string[] = []
+    try {
+      for (const g of groupes) {
+        const shop = g.id ? stores.find((s) => s.id === g.id) ?? null : await handleAddStoreRetour(g.nom)
+        if (!shop) throw new Error(`Magasin « ${g.nom} » introuvable ou impossible à créer.`)
+        await svc.reaffecterMagasin(g.ids, shop)
+        n += g.ids.length
+        resume.push(`${shop.name} : ${g.ids.length}`)
+      }
+      addAuditLog('UPDATE', `Classement automatique : ${n} mouvement(s) rangé(s) dans leur magasin (${resume.join(', ')})`)
+      addToast(`${n} mouvement(s) rangé(s) dans leur magasin.`, 'success')
+    } catch (err) {
+      signaler(err)
+    } finally {
+      await recharger(true)
+    }
+  }, [stores, handleAddStoreRetour, addAuditLog, addToast, signaler, recharger])
 
   // ── Mouvements ─────────────────────────────────────────────────────────────
   const handleSaveTransaction = useCallback(async (
@@ -464,6 +492,10 @@ export default function LeclaireApp({ compte, onRetour, onLogout }: Props) {
             onDeleteStore={handleDeleteStore}
             onReassign={handleReassignTransactions}
             onToast={addToast}
+            users={users}
+            magasinsOpticlaire={magasinsOpticlaire}
+            nommerMagasin={nomMagasin}
+            onClasser={isPrivilegedRole(currentUser.role) && !viewAsUserId ? handleClasser : undefined}
           />
         )}
         {view === 'statistics' && <Statistics transactions={visibleTransactions} settings={settings} />}
@@ -492,6 +524,8 @@ export default function LeclaireApp({ compte, onRetour, onLogout }: Props) {
             categories={categories}
             currentUser={currentUser}
             settings={settings}
+            magasinsOpticlaire={magasinsOpticlaire}
+            nommerMagasin={nomMagasin}
             onAjouterMagasin={handleAddStoreRetour}
             onToast={addToast}
             onTermine={() => recharger(true)}
@@ -523,6 +557,8 @@ export default function LeclaireApp({ compte, onRetour, onLogout }: Props) {
           canAssign={isPrivilegedRole(currentUser.role)}
           users={users.filter((u) => u.compte || u.id === modal.editing?.userId)}
           defaultUserId={modal.editing?.userId ?? viewAsUserId ?? currentUser.id}
+          magasinHabituelDe={(id) => magasinHabituel(transactions, id, stores)?.id}
+          reconnaitreMagasin={(textes) => magasinCite(textes, stores)?.id ?? null}
         />
       )}
 

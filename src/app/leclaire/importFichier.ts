@@ -16,6 +16,7 @@
  */
 import type { Shop, Transaction } from './types'
 import type { LigneMouvement } from './leclaireService'
+import { catalogueMagasins, coeur, deduireParPeriode, normaliser, reconnaitre, sansAccents, type MagasinConnu } from './reconnaissance'
 
 export type Cellule = string | number | boolean | Date | null | undefined
 
@@ -45,9 +46,7 @@ export interface ResultatLecture {
 
 // ── Texte ────────────────────────────────────────────────────────────────────
 
-export const sansAccents = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '')
-/** Texte comparable : majuscules, sans accents ni ponctuation, espaces simples. */
-export const normaliser = (s: unknown) => sansAccents(String(s ?? '')).toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim()
+export { sansAccents, normaliser, motsCles } from './reconnaissance'
 const cle = (s: unknown) => sansAccents(String(s ?? '')).toLowerCase().replace(/[^a-z0-9]+/g, '')
 
 /** Octets d'un fichier texte → texte (UTF-8, sinon Windows-1252 : CSV réenregistré par Excel). */
@@ -246,18 +245,6 @@ export function analyser(tableau: Cellule[][]): ResultatLecture {
 
 // ── Magasins ─────────────────────────────────────────────────────────────────
 
-/** Mots trop généraux pour reconnaître un magasin. */
-const MOTS_GENERAUX = new Set(['MAGASIN', 'MAGASINS', 'OPTICLAIRE', 'LECLAIRE', 'OUVERTURE', 'BOUTIQUE', 'MISSION', 'NOUVEAU',
-  'NOUVELLE', 'AGENCE', 'SITE', 'CAISSE', 'DES', 'DU', 'DE', 'LA', 'LE', 'LES', 'ET', 'AU', 'AUX', 'EN', 'SUR', 'TRAVAUX', 'OPTIQUE'])
-
-/** Mots distinctifs du nom d'un magasin (« Magasin de Bouaké » → BOUAKE). */
-export function motsCles(nom: string): string[] {
-  const mots = normaliser(nom).split(' ').filter(m => m.length >= 3 && !MOTS_GENERAUX.has(m) && !/^\d+$/.test(m))
-  return mots.length ? mots : normaliser(nom).split(' ').filter(m => m.length >= 3)
-}
-
-const contientMot = (texte: string, mot: string) => (` ${texte} `).includes(` ${mot} `)
-
 export interface Detection {
   magasinId: string | null
   /** D'où vient le magasin : colonne « Magasin », texte de la ligne, ou rien. */
@@ -268,20 +255,143 @@ export interface Detection {
   inconnu?: string
 }
 
+/** Magasin LECLAIRE existant de la ligne (sans créer de magasin). */
 export function detecterMagasin(l: Pick<LigneFichier, 'magasinTexte' | 'description' | 'commentaire' | 'beneficiaire'>, magasins: Shop[]): Detection {
+  const cat = catalogueMagasins(magasins, [], [])
   if (l.magasinTexte) {
-    const n = normaliser(l.magasinTexte)
-    const exact = magasins.find(m => normaliser(m.name) === n)
+    const exact = magasins.find(m => normaliser(m.name) === normaliser(l.magasinTexte))
     if (exact) return { magasinId: exact.id, par: 'colonne' }
-    const parMots = magasins.filter(m => motsCles(m.name).some(k => contientMot(n, k)))
-    if (parMots.length === 1) return { magasinId: parMots[0].id, par: 'colonne' }
-    return { magasinId: null, par: null, inconnu: l.magasinTexte, ambigu: parMots.length > 1 }
+    const r = reconnaitre(l.magasinTexte, cat, false)
+    if (r.magasin?.id) return { magasinId: r.magasin.id, par: 'colonne' }
+    return { magasinId: null, par: null, inconnu: l.magasinTexte, ambigu: r.ambigu }
   }
-  const texte = normaliser(`${l.description} ${l.commentaire} ${l.beneficiaire}`)
-  const cites = magasins.filter(m => motsCles(m.name).some(k => contientMot(texte, k)))
-  if (cites.length === 1) return { magasinId: cites[0].id, par: 'texte' }
-  return { magasinId: null, par: null, ambigu: cites.length > 1 }
+  const r = reconnaitre([l.description, l.commentaire, l.beneficiaire], cat, false)
+  return r.magasin?.id ? { magasinId: r.magasin.id, par: 'texte' } : { magasinId: null, par: null, ambigu: r.ambigu }
 }
+
+/** D'où vient le magasin retenu pour une ligne. */
+export type OrigineMagasin = 'choix' | 'colonne' | 'mention' | 'nom' | 'periode' | 'defaut' | null
+/** D'où vient la personne retenue pour une ligne. */
+export type OriginePersonne = 'colonne' | 'habituelle' | 'choisie'
+
+export interface PlanLigne {
+  magasin: MagasinConnu | null
+  origine: OrigineMagasin
+  /** Ligne (numéro dans le fichier) dont la période a donné le magasin. */
+  depuisLigne?: number
+  ambigu?: boolean
+  personneId: string
+  personneOrigine: OriginePersonne
+}
+
+/** Magasin d'un mouvement LECLAIRE existant (identifiant, sinon nom enregistré). */
+export function magasinDuMouvement(t: Pick<Transaction, 'storeId' | 'storeName'>, magasins: Shop[]): Shop | undefined {
+  return (t.storeId ? magasins.find(m => m.id === t.storeId) : undefined)
+    || (t.storeName ? magasins.find(m => normaliser(m.name) === normaliser(t.storeName)) : undefined)
+}
+
+/** Personne qui a le plus de mouvements dans chaque magasin (à égalité : la plus récente). */
+export function personnesHabituelles(existants: Transaction[], magasins: Shop[]): Map<string, string> {
+  const compte = new Map<string, Map<string, { n: number; dernier: string }>>()
+  for (const t of existants) {
+    const m = magasinDuMouvement(t, magasins)
+    if (!m) continue
+    const parPersonne = compte.get(m.id) || new Map()
+    const c = parPersonne.get(t.userId) || { n: 0, dernier: '' }
+    c.n++
+    if (t.date > c.dernier) c.dernier = t.date
+    parPersonne.set(t.userId, c)
+    compte.set(m.id, parPersonne)
+  }
+  const out = new Map<string, string>()
+  for (const [magasin, parPersonne] of compte) {
+    const meilleur = [...parPersonne.entries()].sort((a, b) => b[1].n - a[1].n || b[1].dernier.localeCompare(a[1].dernier))[0]
+    if (meilleur) out.set(magasin, meilleur[0])
+  }
+  return out
+}
+
+/**
+ * Magasin et personne de chaque ligne, automatiquement :
+ *  magasin : choix fait à la main > colonne « Magasin » > « MAGASIN DE X » >
+ *  nom cité dans la ligne > même période (même personne, 45 jours au plus) >
+ *  magasin par défaut (facultatif) ;
+ *  personne : colonne « Personne » > personne habituelle du magasin (mode
+ *  automatique) > personne choisie.
+ */
+export function planifier(
+  lignes: Array<Pick<LigneFichier, 'numero' | 'date' | 'description' | 'commentaire' | 'beneficiaire' | 'magasinTexte' | 'personneTexte'>>,
+  o: {
+    magasins: Shop[]
+    opticlaire?: string[]
+    existants?: Transaction[]
+    personnes: Array<{ id: string; name: string }>
+    personneChoisie: string
+    personneAuto: boolean
+    magasinDefaut?: string
+    choix?: Record<number, string>
+  },
+): PlanLigne[] {
+  const cat = catalogueMagasins(o.magasins, o.opticlaire || [])
+  const parId = new Map(cat.filter(m => m.id).map(m => [m.id as string, m]))
+  const nouveaux = new Map<string, MagasinConnu>()
+  const unique = (m: MagasinConnu) => {
+    if (m.id) return m
+    const deja = nouveaux.get(m.cle)
+    if (deja) return deja
+    nouveaux.set(m.cle, m)
+    return m
+  }
+  const personneParNom = new Map(o.personnes.map(p => [normaliser(p.name), p.id]))
+  const personneColonne = (l: { personneTexte: string }) => (l.personneTexte ? personneParNom.get(normaliser(l.personneTexte)) : undefined)
+
+  // 1) colonne / texte
+  const auto: Array<{ magasin: MagasinConnu | null; origine: OrigineMagasin; ambigu?: boolean }> = lignes.map(l => {
+    if (l.magasinTexte) {
+      const exact = o.magasins.find(m => normaliser(m.name) === normaliser(l.magasinTexte))
+      if (exact) return { magasin: parId.get(exact.id) || null, origine: 'colonne' }
+      const r = reconnaitre(l.magasinTexte, cat, true)
+      const m = r.magasin || { cle: coeur(l.magasinTexte), nom: l.magasinTexte.trim(), id: null, source: 'texte' as const }
+      return { magasin: unique(m), origine: 'colonne' }
+    }
+    const r = reconnaitre([l.description, l.commentaire, l.beneficiaire], cat, true)
+    return r.magasin ? { magasin: unique(r.magasin), origine: r.par } : { magasin: null, origine: null, ambigu: r.ambigu }
+  })
+  // 2) même période, même personne (colonne « Personne », sinon tout le fichier)
+  const refs = deduireParPeriode(lignes.map((l, i) => ({
+    date: l.date, groupe: personneColonne(l) || normaliser(l.personneTexte) || '*', cle: auto[i].magasin?.cle || null,
+  })))
+  const habituelles = o.personneAuto ? personnesHabituelles(o.existants || [], o.magasins) : new Map<string, string>()
+  const defaut = o.magasinDefaut ? parId.get(o.magasinDefaut) || null : null
+
+  return lignes.map((l, i) => {
+    let magasin = auto[i].magasin
+    let origine = auto[i].origine
+    let depuisLigne: number | undefined
+    const choix = o.choix?.[l.numero]
+    if (choix !== undefined) {
+      magasin = choix ? (parId.get(choix) || nouveaux.get(choix.replace(/^nouveau:/, '')) || null) : null
+      origine = 'choix'
+    } else if (!magasin && refs[i] >= 0) {
+      magasin = auto[refs[i]].magasin
+      origine = 'periode'
+      depuisLigne = lignes[refs[i]].numero
+    } else if (!magasin && defaut) {
+      magasin = defaut
+      origine = 'defaut'
+    }
+    const col = personneColonne(l)
+    const habituelle = magasin?.id ? habituelles.get(magasin.id) : undefined
+    return {
+      magasin, origine, depuisLigne, ambigu: auto[i].ambigu,
+      personneId: col || habituelle || o.personneChoisie,
+      personneOrigine: col ? 'colonne' : habituelle ? 'habituelle' : 'choisie',
+    }
+  })
+}
+
+/** Valeur de choix d'un magasin dans l'aperçu (magasin existant, ou à créer). */
+export const valeurChoix = (m: MagasinConnu | null) => (m ? (m.id || `nouveau:${m.cle}`) : '')
 
 // ── Doublons et identifiants ─────────────────────────────────────────────────
 
@@ -303,6 +413,12 @@ export interface LignePreparee extends LigneFichier {
   occurrence: number
   /** Ligne déjà présente dans LECLAIRE. */
   dejaPresent: boolean
+  /**
+   * Même jour, même type, même description et même bénéficiaire qu'un
+   * mouvement déjà dans LECLAIRE, mais AUTRE MONTANT (ligne corrigée entre
+   * deux exports) : montant enregistré dans LECLAIRE.
+   */
+  semblable?: number
   /** Identifiant stable : réimporter le même fichier ne crée pas de doublon. */
   id: string
 }
@@ -316,12 +432,33 @@ export function preparer(lignes: LigneFichier[], existants: Transaction[]): Lign
   const presents = new Map<string, number>()
   for (const t of existants) { const e = empreinteMouvement(t); presents.set(e, (presents.get(e) || 0) + 1) }
   const vus = new Map<string, number>()
-  return lignes.map(l => {
+  const prets: LignePreparee[] = lignes.map(l => {
     const e = empreinte(l)
     const occurrence = (vus.get(e) || 0) + 1
     vus.set(e, occurrence)
     return { ...l, empreinte: e, occurrence, dejaPresent: !l.erreur && occurrence <= (presents.get(e) || 0), id: `fic-${fnv(e, 2166136261)}${fnv(e, 374761393)}-${occurrence}` }
   })
+  // Lignes corrigées : mouvement existant du même jour / description /
+  // bénéficiaire, non retrouvé tel quel dans le fichier, avec un autre montant.
+  const proche = (date: string, type: string | null, description: string, beneficiaire: string) =>
+    [date, type, normaliser(description), normaliser(beneficiaire)].join('|')
+  const restants = new Map<string, number[]>()
+  for (const t of existants) {
+    const k = proche(t.date, t.type, t.description, t.beneficiaryOrSource)
+    restants.set(k, [...(restants.get(k) || []), Math.round(t.amount * 100)])
+  }
+  for (const l of prets) {
+    if (!l.dejaPresent) continue
+    const r = restants.get(proche(l.date, l.type, l.description, l.beneficiaire))
+    const i = r ? r.indexOf(Math.round((l.montant || 0) * 100)) : -1
+    if (r && i >= 0) r.splice(i, 1)
+  }
+  for (const l of prets) {
+    if (l.dejaPresent || l.erreur) continue
+    const r = restants.get(proche(l.date, l.type, l.description, l.beneficiaire))
+    if (r && r.length) l.semblable = (r.shift() as number) / 100
+  }
+  return prets
 }
 
 /** Ligne prête → ligne de la table des mouvements LECLAIRE. */

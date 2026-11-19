@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react'
-import type { Transaction, AppSettings, Shop } from '../types'
+import type { Transaction, AppSettings, Shop, User } from '../types'
+import ClassementAuto, { type GroupeClassement } from './ClassementAuto'
 import { formatFCFA, formatDate, calcTotalIncome, calcTotalExpense, calcBalance } from '../outils'
 
 interface Props {
@@ -13,6 +14,14 @@ interface Props {
   onDeleteStore: (id: string) => void
   onReassign: (transactionIds: string[], storeId: string) => void
   onToast: (msg: string, type: 'success' | 'error') => void
+  /** Personnes LECLAIRE (dépenses par personne dans chaque magasin). */
+  users?: User[]
+  /** Noms des magasins d'OPTICLAIRE (reconnus par le classement automatique). */
+  magasinsOpticlaire?: string[]
+  /** Administration : ranger automatiquement les mouvements sans magasin. */
+  onClasser?: (groupes: GroupeClassement[]) => Promise<void>
+  /** Nom donné aux magasins créés par le classement automatique. */
+  nommerMagasin?: (nom: string) => string
 }
 
 const UNAFFILIATED = '__none__'
@@ -20,6 +29,7 @@ const UNAFFILIATED = '__none__'
 export default function Stores({
   stores, transactions, settings, canManage, onEdit,
   onAddStore, onRenameStore, onDeleteStore, onReassign, onToast,
+  users = [], magasinsOpticlaire = [], onClasser, nommerMagasin,
 }: Props) {
   const [selected, setSelected] = useState<string | null>(null)
   const [newName, setNewName] = useState('')
@@ -109,6 +119,33 @@ export default function Stores({
             ))}
           </div>
         </div>
+
+        {/* Entrées et sorties de chaque personne dans ce magasin */}
+        {(() => {
+          const parPersonne = new Map<string, Transaction[]>()
+          for (const t of list) parPersonne.set(t.userId, [...(parPersonne.get(t.userId) || []), t])
+          if (parPersonne.size === 0) return null
+          const lignes = [...parPersonne.entries()]
+            .map(([id, l]) => ({ id, nom: users.find((u) => u.id === id)?.name ?? 'Personne inconnue', n: l.length, entrees: calcTotalIncome(l), sorties: calcTotalExpense(l) }))
+            .sort((a, b) => b.sorties - a.sorties)
+          return (
+            <div className="bg-white rounded-2xl p-4 space-y-2" style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }} data-testid="lc-magasin-par-personne">
+              <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-muted)' }}>Par personne</p>
+              {lignes.map((p) => (
+                <div key={p.id} className="flex items-center justify-between gap-3 text-sm py-1.5" style={{ borderTop: '1px solid #F1F5F9' }}>
+                  <div className="min-w-0">
+                    <p className="font-semibold truncate" style={{ color: '#0F172A' }}>{p.nom}</p>
+                    <p className="text-xs" style={{ color: '#94A3B8' }}>{p.n} mouvement{p.n > 1 ? 's' : ''}</p>
+                  </div>
+                  <div className="text-right text-xs num">
+                    <p style={{ color: 'var(--color-expense)' }}>Sorties {formatFCFA(p.sorties, settings.currency)}</p>
+                    <p style={{ color: 'var(--color-income)' }}>Entrées {formatFCFA(p.entrees, settings.currency)}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )
+        })()}
 
         {/* Bulk re-affiliation — only for orphaned movements, admins only */}
         {selected === UNAFFILIATED && canManage && list.length > 0 && stores.length > 0 && (
@@ -211,6 +248,17 @@ export default function Stores({
 
   return (
     <div className="space-y-4 fade-up">
+      {canManage && onClasser && (
+        <ClassementAuto
+          transactions={transactions}
+          stores={stores}
+          users={users}
+          settings={settings}
+          magasinsOpticlaire={magasinsOpticlaire}
+          nommerMagasin={nommerMagasin}
+          onClasser={onClasser}
+        />
+      )}
       {/* Add store */}
       {canManage && (
         <div className="bg-white rounded-2xl p-5 flex flex-col sm:flex-row gap-3 sm:items-end" style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
