@@ -117,6 +117,55 @@ LECLAIRE), statistiques, catégories, justificatifs, historique, paramètres
   (téléphone) : aucun débordement, menu et barre du bas comme prévu, aucune
   violation de la politique de sécurité (26/26).
 
+## Importer un fichier de mouvements (19/11/2026)
+
+Administration LECLAIRE : menu **Importer un fichier**, ou bouton
+**« ↑ Importer »** à côté de « Excel / CSV » dans Mouvements.
+
+1. **Choisir le fichier** : CSV (comme l'export « Excel / CSV » de LECLAIRE,
+   par exemple `leclaire_mouvements_2026-08-23.csv`) ou tableau Excel (.xlsx,
+   .xls). Colonnes reconnues par leur titre, dans n'importe quel ordre :
+   Date, Type, Description, Catégorie, Mode de paiement,
+   Bénéficiaire/Source, Entrée, Sortie (ou Montant), Commentaire, et si
+   elles existent Magasin et Personne. Dates jj/mm/aaaa ou aaaa-mm-jj,
+   montants « 1 200 000 », « 1.200.000 » ou « 15000 FCFA » ; un CSV
+   réenregistré par Excel garde ses accents.
+2. **Pour qui et dans quel magasin** : la personne à qui affecter les
+   mouvements, et le **magasin par défaut**. Un magasin manquant se crée
+   directement ici (« + Créer », ou touche Entrée).
+3. **Vérifier les lignes** : chaque ligne va **dans son magasin** :
+   - colonne « Magasin » du fichier si elle existe ;
+   - sinon le magasin LECLAIRE **cité dans la ligne** (description,
+     commentaire, bénéficiaire) : « CAUTION MAGASIN BINGERVILLE » →
+     Bingerville, « …MAGASIN DE BOUAKE » → Bouaké (accents et majuscules
+     ignorés ; les mots « magasin », « LECLAIRE », « ouverture »… ne
+     comptent pas) ;
+   - sinon le magasin par défaut.
+   Le magasin de chaque ligne reste modifiable. Une ligne déjà dans LECLAIRE
+   est **décochée** (« Déjà dans LECLAIRE »), une ligne illisible est
+   signalée avec la raison. Deux lignes identiques du fichier (deux taxis le
+   même jour) restent deux mouvements.
+4. **Importer** : rapport par magasin. Les catégories nouvelles du fichier
+   sont ajoutées. **Le même fichier importé deux fois n'ajoute rien la
+   seconde fois.**
+
+L'export **« Excel / CSV »** ajoute maintenant les colonnes **Magasin** (et
+**Personne** pour l'administration) : un fichier exporté se réimporte dans le
+bon magasin.
+
+Avec le fichier `leclaire_mouvements_2026-08-23_2.csv` : 77 mouvements lus
+(4 entrées pour 840 000 FCFA, 73 sorties pour 34 981 600 FCFA), aucune ligne
+illisible ; avec les magasins « Bouaké » (par défaut) et « Bingerville » :
+76 mouvements à Bouaké (dont la caution de 7 700 000), 1 à Bingerville (la
+caution de 15 000 000).
+
+## Logos des fêtes allégés (19/11/2026)
+
+Les 7 logos des fêtes (Pâques, Indépendance, fin d'année, Tabaski, Carême,
+Noël, Noël de l'enseigne) passent de 1 254 à 512 pixels de côté (affichés au
+plus à 124 pixels) : **10,4 Mo → 2,0 Mo**, sans différence visible. Mêmes noms
+de fichiers, aucun autre changement.
+
 ## Technique
 
 - `supabase/LECLAIRE_CAISSE_2026-11-18.sql` : tables `leclaire_caisse_*`
@@ -153,5 +202,13 @@ LECLAIRE), statistiques, catégories, justificatifs, historique, paramètres
   reprise bloquée par une personne sans date de création, actions refusées
   affichées comme réussies, justificatifs gardés en mémoire d'un compte à
   l'autre sur le même poste.
+- Import de fichier (19/11/2026) : **29/29** (fichier réel de 77 lignes,
+  totaux, magasin cité dans la ligne, doublons, montants et dates, Excel,
+  CSV réenregistré par Excel, export avec colonne Magasin, import réel puis
+  réimport sans doublon, refus pour un utilisateur simple) ; navigateur avec
+  la politique de sécurité : **12/12** (bouton « ↑ Importer », création des
+  magasins, ligne Bingerville détectée, 76 / 1 mouvements par magasin, écran
+  Magasins, réimport « 0 à importer », export avec colonnes Magasin et
+  Personne). Tous les contrôles précédents repassés sur cette version.
 - Non testé ici : la vraie ancienne base (inaccessible depuis l'environnement
   de travail) ; elle est lue de la même façon depuis le navigateur.

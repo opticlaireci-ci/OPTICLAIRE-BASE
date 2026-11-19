@@ -30,6 +30,7 @@ import Users from './components/Users'
 import Stores from './components/Stores'
 import Settings from './components/Settings'
 import Reprise from './components/Reprise'
+import ImportFichier from './components/ImportFichier'
 import Logo from './components/Logo'
 import './leclaire.css'
 
@@ -199,6 +200,20 @@ export default function LeclaireApp({ compte, onRetour, onLogout }: Props) {
       addAuditLog('CREATE_STORE', `Magasin créé : "${name}"`)
     } catch (err) { signaler(err) }
   }, [addAuditLog, signaler])
+
+  // Création d'un magasin depuis l'import de fichier : renvoie le magasin créé.
+  const handleAddStoreRetour = useCallback(async (name: string): Promise<Shop | null> => {
+    const existant = stores.find((s) => s.name.trim().toLowerCase() === name.trim().toLowerCase())
+    if (existant) return existant
+    const shop: Shop = { id: genId(), name: name.trim(), createdAt: new Date().toISOString() }
+    try {
+      await svc.ajouterMagasin(shop)
+      setStores((prev) => [...prev, shop])
+      addAuditLog('CREATE_STORE', `Magasin créé : "${shop.name}"`)
+      addToast(`Magasin « ${shop.name} » créé.`, 'success')
+      return shop
+    } catch (err) { signaler(err); return null }
+  }, [stores, addAuditLog, addToast, signaler])
 
   const handleRenameStore = useCallback(async (id: string, name: string) => {
     const prev = stores.find((s) => s.id === id)
@@ -434,6 +449,7 @@ export default function LeclaireApp({ compte, onRetour, onLogout }: Props) {
             onView={handleViewTransaction}
             onAddIncome={() => setModal({ open: true, mode: 'income' })}
             onAddExpense={() => setModal({ open: true, mode: 'expense' })}
+            onImport={isPrivilegedRole(currentUser.role) && !viewAsUserId ? () => setView('fichier') : undefined}
           />
         )}
         {view === 'stores' && (
@@ -467,6 +483,20 @@ export default function LeclaireApp({ compte, onRetour, onLogout }: Props) {
         )}
         {view === 'settings' && isPrivilegedRole(currentUser.role) && (
           <Settings settings={settings} onSave={handleSaveSettings} onToast={addToast} />
+        )}
+        {view === 'fichier' && isPrivilegedRole(currentUser.role) && (
+          <ImportFichier
+            stores={stores}
+            users={users}
+            transactions={transactions}
+            categories={categories}
+            currentUser={currentUser}
+            settings={settings}
+            onAjouterMagasin={handleAddStoreRetour}
+            onToast={addToast}
+            onTermine={() => recharger(true)}
+            journal={(action, description) => addAuditLog(action, description)}
+          />
         )}
         {view === 'import' && isPrivilegedRole(currentUser.role) && (
           <Reprise

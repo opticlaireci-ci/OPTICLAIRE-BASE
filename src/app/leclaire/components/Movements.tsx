@@ -11,9 +11,11 @@ interface Props {
   onAddExpense: () => void
   users?: User[]
   showAuthor?: boolean
+  /** Administration : ouvrir l'import d'un fichier de mouvements. */
+  onImport?: () => void
 }
 
-export default function Movements({ transactions, settings, onView, onAddIncome, onAddExpense, users = [], showAuthor = false }: Props) {
+export default function Movements({ transactions, settings, onView, onAddIncome, onAddExpense, users = [], showAuthor = false, onImport }: Props) {
   const authorName = (userId: string) => users.find((u) => u.id === userId)?.name ?? 'Inconnu'
   const [search, setSearch] = useState('')
   const [filterType, setFilterType] = useState<'all' | 'income' | 'expense'>('all')
@@ -55,17 +57,22 @@ export default function Movements({ transactions, settings, onView, onAddIncome,
   }
 
   const exportCSV = () => {
-    const headers = ['Date', 'Type', 'Description', 'Catégorie', 'Mode de paiement', 'Bénéficiaire/Source', 'Entrée', 'Sortie', 'Commentaire']
+    // Colonnes « Magasin » (et « Personne » pour l'administration) en fin de
+    // ligne : un fichier exporté se réimporte dans le bon magasin.
+    const q = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`
+    const headers = ['Date', 'Type', 'Description', 'Catégorie', 'Mode de paiement', 'Bénéficiaire/Source', 'Entrée', 'Sortie', 'Commentaire', 'Magasin', ...(showAuthor ? ['Personne'] : [])]
     const rows = filtered.map((t) => [
       t.date,
       t.type === 'income' ? 'Entrée' : 'Sortie',
-      `"${t.description.replace(/"/g, '""')}"`,
-      t.category,
-      t.paymentMethod,
-      `"${t.beneficiaryOrSource.replace(/"/g, '""')}"`,
+      q(t.description),
+      q(t.category),
+      q(t.paymentMethod),
+      q(t.beneficiaryOrSource),
       t.type === 'income' ? t.amount : '',
       t.type === 'expense' ? t.amount : '',
-      `"${(t.comment ?? '').replace(/"/g, '""')}"`,
+      q(t.comment ?? ''),
+      q(t.storeName ?? ''),
+      ...(showAuthor ? [q(users.find((u) => u.id === t.userId)?.name ?? '')] : []),
     ])
     const csv = [headers, ...rows].map((r) => r.join(';')).join('\n')
     const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
@@ -156,6 +163,11 @@ export default function Movements({ transactions, settings, onView, onAddIncome,
             <button onClick={exportCSV} className="text-xs px-3 py-1.5 rounded-lg border text-white" style={{ background: '#16A34A', borderColor: '#16A34A' }}>
               ↓ Excel / CSV
             </button>
+            {onImport && (
+              <button onClick={onImport} className="text-xs px-3 py-1.5 rounded-lg border" style={{ color: '#16A34A', borderColor: '#16A34A' }} data-testid="lc-bouton-importer">
+                ↑ Importer
+              </button>
+            )}
             <button onClick={handlePrint} className="text-xs px-3 py-1.5 rounded-lg border" style={{ color: 'var(--color-navy)', borderColor: 'var(--color-border)' }}>
               🖨 Imprimer
             </button>

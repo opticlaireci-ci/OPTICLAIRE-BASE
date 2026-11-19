@@ -415,6 +415,31 @@ export async function ajouterCategorie(nom: string): Promise<void> {
   if (error) echec(error, 'Ajout de la catégorie')
 }
 
+export async function ajouterCategories(noms: string[]): Promise<void> {
+  const uniques = [...new Set(noms.map(n => n.trim()).filter(Boolean))]
+  for (let i = 0; i < uniques.length; i += 200) {
+    const { error } = await supabase.from(T_CATEGORIES).upsert(uniques.slice(i, i + 200).map(nom => ({ nom })), { onConflict: 'nom', ignoreDuplicates: true })
+    if (error) echec(error, 'Ajout des catégories')
+  }
+}
+
+/**
+ * Mouvements importés d'un fichier (administration) : envoyés par lots ; une
+ * ligne déjà importée (même identifiant) est ignorée. Renvoie le nombre de
+ * mouvements réellement ajoutés.
+ */
+export async function insererMouvementsImportes(lignes: LigneMouvement[], progression?: (fait: number, total: number) => void): Promise<number> {
+  let ajoutes = 0
+  for (let i = 0; i < lignes.length; i += 200) {
+    const { data, error } = await supabase.from(T_MOUVEMENTS)
+      .upsert(lignes.slice(i, i + 200), { onConflict: 'id', ignoreDuplicates: true }).select('id')
+    if (error) echec(error, 'Import des mouvements')
+    ajoutes += (data || []).length
+    progression?.(Math.min(i + 200, lignes.length), lignes.length)
+  }
+  return ajoutes
+}
+
 export async function enregistrerReglages(s: AppSettings): Promise<void> {
   const { data, error } = await supabase.from(T_REGLAGES).upsert({
     id: 1,

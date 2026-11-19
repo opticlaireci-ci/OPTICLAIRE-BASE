@@ -94,6 +94,7 @@ export type View =
   | 'users'
   | 'settings'
   | 'import'
+  | 'fichier'
 
 export interface ToastMsg {
   id: string

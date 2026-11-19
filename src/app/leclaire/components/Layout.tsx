@@ -58,6 +58,12 @@ const secondaryNav: NavItem[] = [
     icon: <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>,
   },
   {
+    id: 'fichier',
+    label: 'Importer un fichier',
+    adminOnly: true,
+    icon: <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M9 17v-2m3 2v-4m3 4v-6M7 3h7l5 5v11a2 2 0 01-2 2H7a2 2 0 01-2-2V5a2 2 0 012-2z" /></svg>,
+  },
+  {
     id: 'import',
     label: 'Reprise des données',
     adminOnly: true,
@@ -82,6 +88,7 @@ const viewTitles: Record<View, string> = {
   users: 'Gestion des utilisateurs',
   settings: 'Paramètres',
   import: 'Reprise des données',
+  fichier: 'Importer un fichier',
 }
 
 interface Props {
