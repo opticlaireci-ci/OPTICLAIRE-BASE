@@ -15,14 +15,21 @@ import { useSearchParams } from 'react-router';
 import { ROLES_ECRITURE, aujourdhui, lundiDe } from '../../../utils/pointsSemaine';
 import { PointHebdomadaire } from './PointHebdomadaire';
 import { PointMobileMoney } from './PointMobileMoney';
+import { ChargesSalaires } from './ChargesSalaires';
+import { estMois, moisCourant } from '../../../utils/chargesSalaires';
 
 /** Onglets de la page : la liste des mouvements, puis les deux points de la semaine. */
 const ONGLETS = [
   { id: 'mouvements', libelle: 'Mouvements' },
   { id: 'hebdo', libelle: 'Point hebdomadaire' },
   { id: 'mobile', libelle: 'Point Mobile Money' },
+  { id: 'charges', libelle: 'Charges & salaires' },
 ] as const;
 type Onglet = typeof ONGLETS[number]['id'];
+const SESSION_SEMAINE = 'opticlaire_points_semaine';
+const SESSION_MOIS = 'opticlaire_charges_mois';
+const lireSession = (k: string) => { try { return sessionStorage.getItem(k) || ''; } catch { return ''; } };
+const ecrireSession = (k: string, v: string) => { try { sessionStorage.setItem(k, v); } catch { /* navigation privée */ } };
 
 const genRef = () => String(Date.now()).slice(-5).padStart(5, '0');
 
@@ -188,18 +195,29 @@ export function MouvementPage() {
   const peutModifierPoints = ROLES_ECRITURE.includes(user?.role || '') || hasPermission(user, 'comptabilite.manage');
   const [params, setParams] = useSearchParams();
   const ongletDemande = params.get('onglet');
-  const onglet: Onglet = peutVoirRecap && (ongletDemande === 'hebdo' || ongletDemande === 'mobile') ? ongletDemande : 'mouvements';
-  // Semaine des points : la même dans les deux onglets, gardée dans l'adresse.
-  const semaineDemandee = params.get('semaine') || '';
-  const semainePoints = /^\d{4}-\d{2}-\d{2}$/.test(semaineDemandee) ? lundiDe(semaineDemandee) : lundiDe(aujourdhui());
+  // Charges et salaires (données sensibles) : administration, direction, comptabilité seulement.
+  const peutGererSalaires = ROLES_ECRITURE.includes(user?.role || '');
+  // Onglets visibles : ceux qui voient le récap, et les comptables / directeurs
+  // (rôles qui n'ont pas la permission « comptabilité » dans la liste des rôles).
+  const voitOnglets = peutVoirRecap || peutModifierPoints;
+  const onglet: Onglet = voitOnglets && (ongletDemande === 'hebdo' || ongletDemande === 'mobile') ? ongletDemande
+    : peutGererSalaires && ongletDemande === 'charges' ? 'charges' : 'mouvements';
+  // Semaine des points (la même dans les deux onglets) et mois des charges :
+  // gardés pour cet onglet du navigateur, y compris après une actualisation.
+  // Pas dans l'adresse : la page entière serait rechargée à chaque changement.
+  const [semainePoints, setSemainePoints] = useState(() => {
+    const s = lireSession(SESSION_SEMAINE);
+    return /^\d{4}-\d{2}-\d{2}$/.test(s) ? lundiDe(s) : lundiDe(aujourdhui());
+  });
+  const [moisCharges, setMoisCharges] = useState(() => {
+    const m = lireSession(SESSION_MOIS);
+    return estMois(m) ? m : moisCourant();
+  });
+  const choisirSemainePoints = (s: string) => { setSemainePoints(s); ecrireSession(SESSION_SEMAINE, s); };
+  const choisirMoisCharges = (m: string) => { setMoisCharges(m); ecrireSession(SESSION_MOIS, m); };
   const choisirOnglet = (o: Onglet) => {
     const p = new URLSearchParams(params);
-    if (o === 'mouvements') { p.delete('onglet'); p.delete('semaine'); } else p.set('onglet', o);
-    setParams(p, { replace: true });
-  };
-  const choisirSemainePoints = (s: string) => {
-    const p = new URLSearchParams(params);
-    p.set('semaine', s);
+    if (o === 'mouvements') p.delete('onglet'); else p.set('onglet', o);
     setParams(p, { replace: true });
   };
   const [mouvements, setMouvements] = useLiveData<Mouvement>('leclaire_mouvements');
@@ -334,7 +352,7 @@ export function MouvementPage() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }} className="bg-white rounded-lg shadow-sm px-5 py-3">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded bg-gray-200 flex items-center justify-center"><Calendar size={15} className="text-gray-600" /></div>
-          <span className="text-sm font-semibold text-gray-600" style={{ fontSize: 'clamp(0.75rem, 2vw, 0.875rem)' }}>{onglet === 'hebdo' ? 'Point hebdomadaire — Recettes des officines' : onglet === 'mobile' ? 'Point Mobile Money — Dépôts reçus' : 'Mouvements Entrées/Sorties - Tous les Magasins'}</span>
+          <span className="text-sm font-semibold text-gray-600" style={{ fontSize: 'clamp(0.75rem, 2vw, 0.875rem)' }}>{onglet === 'hebdo' ? 'Point hebdomadaire — Recettes des officines' : onglet === 'mobile' ? 'Point Mobile Money — Dépôts reçus' : onglet === 'charges' ? 'Charges du mois et salaires des employés' : 'Mouvements Entrées/Sorties - Tous les Magasins'}</span>
         </div>
         {!estConseillere && onglet === 'mouvements' && (
           <AddButton onClick={() => setModal({ mode: 'add' })} className="px-4 py-2 rounded text-white text-sm font-semibold" style={{ backgroundColor: '#0d9488' }}>
@@ -344,9 +362,9 @@ export function MouvementPage() {
       </div>
 
       {/* Onglets (comptables, directeurs, administrateurs) */}
-      {peutVoirRecap && (
+      {voitOnglets && (
         <div className="flex items-center gap-1 flex-wrap bg-white rounded-lg shadow-sm px-2 py-1.5" role="tablist" data-testid="mouvement-onglets">
-          {ONGLETS.map(o => (
+          {ONGLETS.filter(o => o.id !== 'charges' || peutGererSalaires).map(o => (
             <button
               key={o.id}
               type="button"
@@ -369,6 +387,10 @@ export function MouvementPage() {
       )}
       {onglet === 'mobile' && (
         <PointMobileMoney semaine={semainePoints} onSemaine={choisirSemainePoints} ventes={ventesAll} ventesChargees={ventesChargees} mouvementsAdministration={mouvements} editable={peutModifierPoints} />
+      )}
+
+      {onglet === 'charges' && (
+        <ChargesSalaires mois={moisCharges} onMois={choisirMoisCharges} editable={peutGererSalaires} />
       )}
 
       {onglet === 'mouvements' && <>
