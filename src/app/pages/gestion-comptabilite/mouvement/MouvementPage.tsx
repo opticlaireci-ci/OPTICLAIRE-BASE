@@ -11,6 +11,18 @@ import { hasPermission } from '../../../utils/permissions';
 import { chargerToutesLesVentes, type VenteSupabase } from '../../../services/ventesService';
 import { TENANT } from '../../../config/tenant';
 import { setVisibleInterval, PAGE_POLL_MS } from '../../../utils/visibleInterval';
+import { useSearchParams } from 'react-router';
+import { ROLES_ECRITURE, aujourdhui, lundiDe } from '../../../utils/pointsSemaine';
+import { PointHebdomadaire } from './PointHebdomadaire';
+import { PointMobileMoney } from './PointMobileMoney';
+
+/** Onglets de la page : la liste des mouvements, puis les deux points de la semaine. */
+const ONGLETS = [
+  { id: 'mouvements', libelle: 'Mouvements' },
+  { id: 'hebdo', libelle: 'Point hebdomadaire' },
+  { id: 'mobile', libelle: 'Point Mobile Money' },
+] as const;
+type Onglet = typeof ONGLETS[number]['id'];
 
 const genRef = () => String(Date.now()).slice(-5).padStart(5, '0');
 
@@ -171,6 +183,25 @@ export function MouvementPage() {
   const estConseillere = user?.role === 'conseillere';
   // Récap des entrées/sorties réservé aux comptables, directeurs et administrateurs.
   const peutVoirRecap = hasPermission(user, 'comptabilite.read');
+  // Points de la semaine : vus comme le récap ; modifiables par les mêmes
+  // personnes que le Récap hebdomadaire (directeurs, comptables, administrateurs).
+  const peutModifierPoints = ROLES_ECRITURE.includes(user?.role || '') || hasPermission(user, 'comptabilite.manage');
+  const [params, setParams] = useSearchParams();
+  const ongletDemande = params.get('onglet');
+  const onglet: Onglet = peutVoirRecap && (ongletDemande === 'hebdo' || ongletDemande === 'mobile') ? ongletDemande : 'mouvements';
+  // Semaine des points : la même dans les deux onglets, gardée dans l'adresse.
+  const semaineDemandee = params.get('semaine') || '';
+  const semainePoints = /^\d{4}-\d{2}-\d{2}$/.test(semaineDemandee) ? lundiDe(semaineDemandee) : lundiDe(aujourdhui());
+  const choisirOnglet = (o: Onglet) => {
+    const p = new URLSearchParams(params);
+    if (o === 'mouvements') { p.delete('onglet'); p.delete('semaine'); } else p.set('onglet', o);
+    setParams(p, { replace: true });
+  };
+  const choisirSemainePoints = (s: string) => {
+    const p = new URLSearchParams(params);
+    p.set('semaine', s);
+    setParams(p, { replace: true });
+  };
   const [mouvements, setMouvements] = useLiveData<Mouvement>('leclaire_mouvements');
   const [search, setSearch] = useState('');
   const [dateDebut, setDateDebut] = useState('');
@@ -183,12 +214,14 @@ export function MouvementPage() {
   // que le comptable / directeur / administrateur voient CHAQUE vente comme une
   // entrée, même sans avoir ouvert la page d'un magasin (cache local vide).
   const [ventesAll, setVentesAll] = useState<VenteSupabase[]>([]);
+  const [ventesChargees, setVentesChargees] = useState(false);
 
   useEffect(() => {
     let annule = false;
     const load = () => chargerToutesLesVentes()
       .then(rows => { if (!annule) setVentesAll(rows); })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => { if (!annule) setVentesChargees(true); });
     load();
     const stopPolling = setVisibleInterval(load, PAGE_POLL_MS);
     const onUpdate = () => load();
@@ -301,15 +334,44 @@ export function MouvementPage() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }} className="bg-white rounded-lg shadow-sm px-5 py-3">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded bg-gray-200 flex items-center justify-center"><Calendar size={15} className="text-gray-600" /></div>
-          <span className="text-sm font-semibold text-gray-600" style={{ fontSize: 'clamp(0.75rem, 2vw, 0.875rem)' }}>Mouvements Entrées/Sorties - Tous les Magasins</span>
+          <span className="text-sm font-semibold text-gray-600" style={{ fontSize: 'clamp(0.75rem, 2vw, 0.875rem)' }}>{onglet === 'hebdo' ? 'Point hebdomadaire — Recettes des officines' : onglet === 'mobile' ? 'Point Mobile Money — Dépôts reçus' : 'Mouvements Entrées/Sorties - Tous les Magasins'}</span>
         </div>
-        {!estConseillere && (
+        {!estConseillere && onglet === 'mouvements' && (
           <AddButton onClick={() => setModal({ mode: 'add' })} className="px-4 py-2 rounded text-white text-sm font-semibold" style={{ backgroundColor: '#0d9488' }}>
             Ajouter Mouvement
           </AddButton>
         )}
       </div>
 
+      {/* Onglets (comptables, directeurs, administrateurs) */}
+      {peutVoirRecap && (
+        <div className="flex items-center gap-1 flex-wrap bg-white rounded-lg shadow-sm px-2 py-1.5" role="tablist" data-testid="mouvement-onglets">
+          {ONGLETS.map(o => (
+            <button
+              key={o.id}
+              type="button"
+              role="tab"
+              aria-selected={onglet === o.id}
+              data-sans-anti-double
+              data-testid={`onglet-${o.id}`}
+              onClick={() => choisirOnglet(o.id)}
+              className="px-3 py-1.5 rounded text-sm font-semibold"
+              style={onglet === o.id ? { backgroundColor: '#1e3a5f', color: '#fff' } : { color: '#475569' }}
+            >
+              {o.libelle}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {onglet === 'hebdo' && (
+        <PointHebdomadaire semaine={semainePoints} onSemaine={choisirSemainePoints} ventes={ventesAll} ventesChargees={ventesChargees} mouvementsAdministration={mouvements} editable={peutModifierPoints} />
+      )}
+      {onglet === 'mobile' && (
+        <PointMobileMoney semaine={semainePoints} onSemaine={choisirSemainePoints} ventes={ventesAll} ventesChargees={ventesChargees} mouvementsAdministration={mouvements} editable={peutModifierPoints} />
+      )}
+
+      {onglet === 'mouvements' && <>
       {/* Récap — visible uniquement pour comptables, directeurs et administrateurs */}
       {peutVoirRecap && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '1rem' }}>
@@ -493,6 +555,7 @@ export function MouvementPage() {
           ))}
         </div>
       </div>
+      </>}
     </div>
   );
 }
