@@ -75,21 +75,41 @@ Pour remplir la liste :
 
 Un employé déjà dans la liste (même nom) est mis à jour, jamais doublé.
 
-## Un nouveau mois
+## Chaque mois : tout est repris, vous ne modifiez que ce qui change
 
-Un mois pas encore enregistré **repart du dernier mois enregistré** :
+Un mois pas encore enregistré **reprend tout le dernier mois enregistré** :
 
-- **repris** : mêmes officines, colonnes et références, mêmes employés et
-  salaires de base ;
-- **remis à 0** : les montants des charges et les emprunts, à saisir.
+- officines et colonnes ;
+- références **et montants** des charges ;
+- employés, fonctions, salaires de base **et emprunts**.
 
-Deux boutons reprennent le mois précédent :
+Il suffit de modifier les cases qui changent (une facture CIE, un nouvel
+employé, un emprunt terminé…).
 
-- « **Reprendre les montants de …** » : les cases vides seulement ;
-- « **Reprendre les emprunts de …** » : pour un emprunt remboursé sur
-  plusieurs mois.
+- Le bouton « **Remettre les emprunts à 0** » remet tous les emprunts du mois
+  à 0 en un clic, quand les emprunts sont terminés. Pour un seul emprunt
+  terminé, tapez 0 dans sa case.
+- Chaque mois est enregistré à part : corriger novembre ne change pas
+  octobre.
 
-Chaque mois est enregistré à part : corriger octobre ne change pas novembre.
+## Vos données d'octobre 2026
+
+Les employés et salaires (fiche salariale) et toutes les charges (tableau en
+image) d'octobre 2026 sont dans un petit script fourni **à part**, pas dans le
+ZIP ni dans le dépôt, car il contient les salaires :
+`DONNEES_OCTOBRE_2026_charges_salaires.sql`.
+
+À exécuter **une fois**, **après** `CHARGES_SALAIRES_2026-11-23.sql`
+(Supabase → SQL Editor → coller → RUN). Ensuite :
+
+- octobre est enregistré (33 employés, 7 090 000 ; charges 5 490 665) ;
+- novembre et les mois suivants reprennent ces informations tout seuls.
+
+Le script est sans risque : un mois déjà enregistré dans l'application n'est
+jamais remplacé.
+
+Sinon, les deux fichiers Excel (`…_a_importer.xlsx`) s'importent avec le
+bouton « ↑ Importer (Excel / CSV) ».
 
 ## Importer, exporter, imprimer
 
@@ -142,13 +162,14 @@ Chaque mois est enregistré à part : corriger octobre ne change pas novembre.
     personne sans connexion : aucun accès ;
   - mois mal écrit refusé ;
   - enregistrer les salaires ne touche pas aux charges.
-- **Calculs : 24/24**, avec la fiche salariale et le tableau des charges
+- **Calculs : 23/23**, avec la fiche salariale et le tableau des charges
   d'octobre importés depuis Excel :
   - totaux 7 090 000 et 5 490 665 ;
   - salaire final = base − emprunt ;
   - réimport sans doublon, copier-coller, export puis réimport ;
-  - mois suivant, reprise des montants et des emprunts.
-- **Navigateur, site de production avec sa politique de sécurité : 35/35** :
+  - mois suivant qui reprend tout (montants et emprunts compris), sans
+    toucher au mois précédent.
+- **Navigateur, site de production avec sa politique de sécurité : 37/37 + 6/6** :
   - le bouton ;
   - l'import des deux fichiers et les totaux ;
   - case modifiée, charge ajoutée puis retirée ;
@@ -157,13 +178,15 @@ Chaque mois est enregistré à part : corriger octobre ne change pas novembre.
   - l'enregistrement dans la table protégée, rien dans le navigateur ;
   - les impressions comme une facture (logo affiché, coordonnées, somme en
     lettres, signature, une seule page chacune) ;
-  - novembre repris d'octobre et les deux boutons de reprise ;
+  - novembre qui reprend tout d'octobre sans rien retaper, un seul montant
+    modifié, octobre intact, décembre repris de novembre, « Remettre les
+    emprunts à 0 » ;
+  - le script des données d'octobre : passé deux fois sans doublon, puis
+    l'application montre les 33 employés et toutes les charges sans aucun
+    import ;
   - l'actualisation, le téléphone ;
   - comptable : accès et modification ; conseillère : rien.
-- **Corrigé pendant les tests** :
-  - une modification pouvait être perdue si la page se rechargeait juste
-    après une confirmation ;
-  - la reprise des montants se faisait depuis le « modèle » au lieu du mois
-    précédent.
+- **Corrigé pendant les tests** : une modification pouvait être perdue si la
+  page se rechargeait juste après une confirmation.
 - Tous les contrôles précédents repassés : points 40/40 et 35/35, LECLAIRE
   59/59, 63/63, 22/22, 26/26.

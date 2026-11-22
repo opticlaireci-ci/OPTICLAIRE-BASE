@@ -8,9 +8,10 @@
  *  - Salaires des employés : NOM, FONCTION, SALAIRE DE BASE, EMPRUNT et
  *    SALAIRE FINAL = salaire de base − emprunt ; totaux.
  *
- * Un nouveau mois repart du dernier mois enregistré : mêmes officines,
- * colonnes et références, mêmes employés et salaires de base ; les montants
- * des charges et les emprunts repartent à 0 (des boutons les reprennent).
+ * Un nouveau mois reprend TOUT le dernier mois enregistré : officines,
+ * colonnes, références et montants des charges, employés, salaires de base et
+ * emprunts. On ne modifie que ce qui change ; chaque mois est enregistré à
+ * part (corriger un mois ne change pas les autres).
  *
  * Ce module ne contient que des calculs (aucun accès au réseau ni à l'écran).
  */
@@ -109,55 +110,21 @@ export function lignesEffectives(c: ChargesMois, magasins: MagasinPoint[], tenan
 
 // ── Mois affiché ─────────────────────────────────────────────────────────────
 
-/** Charges d'un mois : enregistrées, sinon reprises du dernier mois (références gardées, montants à 0). */
+/** Charges d'un mois : enregistrées, sinon reprises telles quelles du dernier mois enregistré. */
 export function chargesDuMois(ligne: LigneMois | null, modele: LigneMois | null, magasins: MagasinPoint[], tenant: string): ChargesMois {
   const defaut = chargesDefaut(magasins, tenant);
   if (ligne?.charges) return normaliserCharges(ligne.charges, defaut);
   if (modele?.charges) {
-    const m = normaliserCharges(modele.charges, defaut);
-    const cases: ChargesMois['cases'] = {};
-    for (const [l, cols] of Object.entries(m.cases)) {
-      for (const [c, v] of Object.entries(cols || {})) {
-        if (v?.ref) (cases[l] ||= {})[c] = { ref: v.ref };
-      }
-    }
-    return { colonnes: m.colonnes, lignes: m.lignes, retires: m.retires, cases };
+    const { moisSource: _source, ...m } = normaliserCharges(modele.charges, defaut);
+    return JSON.parse(JSON.stringify(m));
   }
   return defaut;
 }
-/** Salaires d'un mois : enregistrés, sinon repris du dernier mois (emprunts à 0). */
+/** Salaires d'un mois : enregistrés, sinon repris tels quels du dernier mois enregistré (emprunts compris). */
 export function salairesDuMois(ligne: LigneMois | null, modele: LigneMois | null): SalairesMois {
   if (ligne?.salaires) return normaliserSalaires(ligne.salaires);
-  if (modele?.salaires) return { employes: normaliserSalaires(modele.salaires).employes.map(e => ({ ...e, emprunt: 0 })) };
+  if (modele?.salaires) return { employes: normaliserSalaires(modele.salaires).employes };
   return { employes: [] };
-}
-
-/** Reprend les montants du dernier mois enregistré (cases vides seulement si `seulementVides`). */
-export function reprendreMontants(c: ChargesMois, modele: ChargesMois | null | undefined, seulementVides = true): { charges: ChargesMois; repris: number } {
-  if (!modele) return { charges: c, repris: 0 };
-  const cases: ChargesMois['cases'] = JSON.parse(JSON.stringify(c.cases || {}));
-  let repris = 0;
-  for (const [l, cols] of Object.entries(modele.cases || {})) {
-    for (const [col, v] of Object.entries(cols || {})) {
-      if (typeof v?.montant !== 'number') continue;
-      const actuel = cases[l]?.[col];
-      if (seulementVides && typeof actuel?.montant === 'number') continue;
-      (cases[l] ||= {})[col] = { ...(actuel || {}), montant: v.montant, ...(actuel?.ref || !v.ref ? {} : { ref: v.ref }) };
-      repris++;
-    }
-  }
-  return { charges: { ...c, cases }, repris };
-}
-/** Reprend les emprunts du dernier mois enregistré (même employé). */
-export function reprendreEmprunts(s: SalairesMois, modele: SalairesMois | null | undefined): { salaires: SalairesMois; repris: number } {
-  if (!modele) return { salaires: s, repris: 0 };
-  let repris = 0;
-  const employes = s.employes.map(e => {
-    const m = modele.employes.find(x => x.id === e.id) || modele.employes.find(x => cle(x.nom) === cle(e.nom));
-    if (m && m.emprunt) { repris++; return { ...e, emprunt: m.emprunt }; }
-    return e;
-  });
-  return { salaires: { ...s, employes }, repris };
 }
 
 // ── Totaux ───────────────────────────────────────────────────────────────────

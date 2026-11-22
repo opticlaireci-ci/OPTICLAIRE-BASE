@@ -17,7 +17,7 @@ import { getCurrentUser } from '../../../utils/auditUtils';
 import { nouvelId, texteSur } from '../../../utils/pointsSemaine';
 import {
   COULEURS_NOUVELLES_CHARGES, ajouterMois, chargesDuMois, estMois, importerCharges, importerSalaires, libelleMois, lignesEffectives,
-  moisCourant, reprendreEmprunts, reprendreMontants, salaireFinal, salairesDuMois, tableauCharges, tableauSalaires, totauxCharges, totauxSalaires,
+  moisCourant, salaireFinal, salairesDuMois, tableauCharges, tableauSalaires, totauxCharges, totauxSalaires,
   type ChargesMois, type Employe, type LigneCharge, type LigneMois, type SalairesMois,
 } from '../../../utils/chargesSalaires';
 import { chargerMois, enregistrerMois, TableChargesAbsente } from '../../../services/chargesSalairesService';
@@ -84,11 +84,6 @@ export function ChargesSalaires({ mois, onMois, editable }: { mois: string; onMo
   const totC = charges ? totauxCharges(charges, lignes) : null;
   const totS = salaires ? totauxSalaires(salaires) : null;
   const moisModele = etat?.modele?.charges?.moisSource || etat?.modele?.salaires?.moisSource || '';
-  // Mois à reprendre (montants, emprunts) : le mois précédent s'il est enregistré,
-  // sinon le dernier mois enregistré avant celui-ci.
-  const reprise: { mois: string; ligne: LigneMois } | null = !etat ? null
-    : etat.precedent ? { mois: ajouterMois(mois, -1), ligne: etat.precedent }
-    : etat.modele && moisModele && moisModele < mois ? { mois: moisModele, ligne: etat.modele } : null;
 
   /** Change le mois affiché et l'enregistre (le mois est créé au premier changement). */
   const modifier = (f: (c: { charges: ChargesMois; salaires: SalairesMois; lignes: LigneCharge[] }) => { charges?: ChargesMois; salaires?: SalairesMois }) => {
@@ -182,7 +177,7 @@ export function ChargesSalaires({ mois, onMois, editable }: { mois: string; onMo
   const quandModifie = etat?.ligne?.modifie_le ? new Date(etat.ligne.modifie_le) : null;
   const infoMois = !etat ? '' : etat.ligne
     ? `Modifié${etat.ligne.modifie_par ? ` par ${etat.ligne.modifie_par}` : ''}${quandModifie && !Number.isNaN(quandModifie.getTime()) ? ` le ${quandModifie.toLocaleDateString('fr-FR')} à ${quandModifie.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}` : ''}`
-    : moisModele ? `Mois pas encore enregistré : officines, références, employés et salaires de base repris de ${libelleMois(moisModele)} ; montants des charges et emprunts à saisir.` : 'Mois pas encore enregistré.';
+    : moisModele ? `Tout est repris de ${libelleMois(moisModele)} (officines, références et montants des charges, employés, salaires et emprunts) : modifiez seulement ce qui change ce mois-ci.` : 'Mois pas encore enregistré.';
 
   return (
     <div className="flex flex-col gap-4" data-testid="charges-salaires">
@@ -238,13 +233,6 @@ export function ChargesSalaires({ mois, onMois, editable }: { mois: string; onMo
                     <BoutonAjouter testId="charges-ajouter-colonne" onClick={() => changerCharges(c => ({
                       ...c, colonnes: [...c.colonnes, { id: nouvelId('ch'), nom: 'NOUVELLE CHARGE', reference: true, couleur: COULEURS_NOUVELLES_CHARGES[c.colonnes.length % COULEURS_NOUVELLES_CHARGES.length] }],
                     }))}>+ Ajouter une charge</BoutonAjouter>
-                    {reprise?.ligne.charges && (
-                      <button type="button" data-sans-anti-double className={bouton} data-testid="charges-reprendre-montants" onClick={() => {
-                        let n = 0;
-                        modifier(a => { const r = reprendreMontants({ ...a.charges, lignes: a.lignes }, reprise.ligne.charges); n = r.repris; return { charges: r.charges }; });
-                        setMessage(`${n} montant(s) repris de ${libelleMois(reprise.mois)} (cases vides seulement).`);
-                      }}>Reprendre les montants de {libelleMois(reprise.mois).toLowerCase()}</button>
-                    )}
                     <button type="button" data-sans-anti-double className={bouton} onClick={() => fichierCharges.current?.click()}>↑ Importer (Excel / CSV)</button>
                     <input ref={fichierCharges} type="file" accept=".xlsx,.xls,.csv,.txt,.ods" hidden data-testid="charges-fichier" onChange={e => { void importer(e.target.files?.[0], 'charges'); e.target.value = ''; }} />
                   </div>
@@ -334,12 +322,12 @@ export function ChargesSalaires({ mois, onMois, editable }: { mois: string; onMo
                 {editable && (
                   <div className="flex items-center gap-2 flex-wrap" style={{ marginLeft: 'auto' }}>
                     <BoutonAjouter testId="salaires-ajouter" onClick={() => changerSalaires(s => ({ ...s, employes: [...s.employes, { id: nouvelId('emp'), nom: 'NOUVEL EMPLOYÉ', fonction: '', salaireBase: 0, emprunt: 0 }] }))}>+ Ajouter un employé</BoutonAjouter>
-                    {reprise && (reprise.ligne.salaires?.employes || []).some(x => Number(x.emprunt)) && (
-                      <button type="button" data-sans-anti-double className={bouton} data-testid="salaires-reprendre-emprunts" onClick={() => {
-                        let n = 0;
-                        modifier(a => { const r = reprendreEmprunts(a.salaires, reprise.ligne.salaires); n = r.repris; return { salaires: r.salaires }; });
-                        setMessage(`${n} emprunt(s) repris de ${libelleMois(reprise.mois)}.`);
-                      }}>Reprendre les emprunts de {libelleMois(reprise.mois).toLowerCase()}</button>
+                    {totS.emprunt > 0 && (
+                      <button type="button" data-sans-anti-double className={bouton} data-testid="salaires-emprunts-zero" onClick={() => {
+                        if (!window.confirm(`Remettre à 0 les emprunts de tous les employés pour ${libelleMois(mois).toLowerCase()} ?`)) return;
+                        changerSalaires(x => ({ ...x, employes: x.employes.map(y => ({ ...y, emprunt: 0 })) }));
+                        setMessage('Emprunts remis à 0 pour ce mois.');
+                      }}>Remettre les emprunts à 0</button>
                     )}
                     <button type="button" data-sans-anti-double className={bouton} onClick={() => fichierSalaires.current?.click()}>↑ Importer (Excel / CSV)</button>
                     <input ref={fichierSalaires} type="file" accept=".xlsx,.xls,.csv,.txt,.ods" hidden data-testid="salaires-fichier" onChange={e => { void importer(e.target.files?.[0], 'salaires'); e.target.value = ''; }} />
