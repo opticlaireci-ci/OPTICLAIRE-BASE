@@ -108,7 +108,15 @@ reste de l'écran.
 
 - Point hebdomadaire : A4 portrait. Quatre officines par rangée, puis le
   récapitulatif et les assurances.
+  - **Seules les officines qui ont des recettes dans la semaine sont
+    imprimées** : une officine à 0 tous les jours n'apparaît pas sur la page
+    (elle reste à l'écran). Une semaine sans aucune recette imprime « Aucune
+    recette enregistrée pour cette semaine ».
+  - **Toutes les cases ont la même taille** : officines de même largeur,
+    lignes de même hauteur, colonnes d'assurance de même largeur et avec le
+    même nombre de cases (totaux alignés).
 - Point Mobile Money : A4 paysage. Tableau global, puis un tableau par moyen.
+  Toutes les colonnes ont la même largeur.
 
 Pour un PDF, choisissez « Enregistrer au format PDF » dans la fenêtre
 d'impression.
@@ -141,7 +149,7 @@ d'impression.
   - Contrôlé aussi : modes de paiement, entrées « assurance » exclues,
     semaines à cheval sur deux mois ou deux années, dimanche, cases
     modifiées et ajoutées, données anciennes ou abîmées relues sans erreur.
-- **Navigateur, site de production avec sa politique de sécurité : 37/37** :
+- **Navigateur, site de production avec sa politique de sécurité : 40/40** :
   - les onglets, le remplissage seul et les chiffres des PDF ;
   - les règlements d'assurance enregistrés (5 000 000) non repris ;
   - la recette assurance tapée et les frais tapés → 6 403 000 ;
@@ -150,7 +158,9 @@ d'impression.
   - l'enregistrement partagé, la semaine suivante, l'actualisation, la même
     semaine d'un onglet à l'autre ;
   - le Point Mobile Money modifié et complété, le lien frais ↔ Mobile Money ;
-  - les impressions A4, l'affichage sur téléphone sans débordement ;
+  - les impressions A4 (seules les officines avec des recettes ; semaine
+    sans recette ; cases de même taille), l'affichage sur téléphone sans
+    débordement ;
   - un responsable en lecture seule, une conseillère sans les onglets.
 - Tous les contrôles précédents repassés sur cette version : 22/22, 63/63,
   26/26.

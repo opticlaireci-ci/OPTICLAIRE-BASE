@@ -112,6 +112,7 @@ function SemaineHebdo({ semaine, onSemaine, donnees, pret, editable }: {
         <p className="text-xs text-gray-500" style={{ textAlign: 'center' }}>
           Recettes remplies automatiquement avec les encaissements d’OPTICLAIRE (acomptes, règlements clients, entrées), sans rien qui vienne des assurances. Recette assurance : à taper.
           {editable ? ' Cliquez sur un montant pour le changer ; videz la case pour revenir au calcul. En jaune : modifié à la main.' : ' Lecture seule.'}
+          {' À l’impression, seules les officines qui ont des recettes dans la semaine sont imprimées.'}
           {!pret && ' — Chargement des ventes et règlements…'}
         </p>
         <p className="text-xs text-gray-400" style={{ textAlign: 'center' }} data-testid="point-audit">{ligneAudit(enregistre)}</p>
