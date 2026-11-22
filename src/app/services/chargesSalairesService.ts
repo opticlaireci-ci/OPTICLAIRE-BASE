@@ -7,7 +7,7 @@
  * par la synchronisation d'OPTICLAIRE).
  */
 import { supabase } from '../utils/supabaseClient';
-import type { ChargesMois, LigneMois, SalairesMois } from '../utils/chargesSalaires';
+import { moisVide, type ChargesMois, type LigneMois, type SalairesMois } from '../utils/chargesSalaires';
 
 const TABLE = 'charges_salaires_mois';
 export const SCRIPT_CHARGES_SALAIRES = 'supabase/CHARGES_SALAIRES_2026-11-23.sql';
@@ -36,27 +36,30 @@ function echec(err: any, action: string): never {
 const COLONNES = 'mois, charges, salaires, modifie_par, modifie_le';
 
 /**
- * Le mois demandé et son mois de référence : le mois enregistré le plus
- * proche AVANT lui (à défaut, le plus proche après). La ligne « modele »
- * n'est pas un mois (« modele » vient après « 2026-… » dans l'ordre).
+ * Le mois demandé et son mois de référence : le mois REMPLI le plus proche
+ * AVANT lui (à défaut, le plus proche après). Un mois enregistré vide est
+ * ignoré. La ligne « modele » n'est pas un mois (« modele » vient après
+ * « 2026-… » dans l'ordre).
  */
 export async function chargerMois(mois: string): Promise<{ ligne: LigneMois | null; reference: LigneMois | null }> {
-  const { data, error } = await supabase.from(TABLE).select(COLONNES).lte('mois', mois).order('mois', { ascending: false }).limit(2);
+  const { data, error } = await supabase.from(TABLE).select(COLONNES).lte('mois', mois).order('mois', { ascending: false }).limit(24);
   if (error) echec(error, 'Lecture des charges et salaires');
   const avant = ((data || []) as LigneMois[]).filter(l => l.mois !== 'modele');
-  const ligne = avant.find(l => l.mois === mois) || null;
+  const ligne = avant.find(l => l.mois === mois && !moisVide(l)) || null;
   if (ligne) return { ligne, reference: null };
-  if (avant[0]) return { ligne: null, reference: avant[0] };
-  const { data: apres, error: e2 } = await supabase.from(TABLE).select(COLONNES).gt('mois', mois).neq('mois', 'modele').order('mois', { ascending: true }).limit(1);
+  const precedent = avant.find(l => l.mois !== mois && !moisVide(l));
+  if (precedent) return { ligne: null, reference: precedent };
+  const { data: apres, error: e2 } = await supabase.from(TABLE).select(COLONNES).gt('mois', mois).neq('mois', 'modele').order('mois', { ascending: true }).limit(24);
   if (e2) echec(e2, 'Lecture des charges et salaires');
-  return { ligne: null, reference: ((apres || []) as LigneMois[])[0] || null };
+  return { ligne: null, reference: ((apres || []) as LigneMois[]).find(l => !moisVide(l)) || null };
 }
 
 /** Mois enregistrés APRÈS ce mois (pour y reporter une correction). */
 export async function chargerMoisSuivants(mois: string): Promise<LigneMois[]> {
   const { data, error } = await supabase.from(TABLE).select(COLONNES).gt('mois', mois).neq('mois', 'modele').order('mois', { ascending: true });
   if (error) echec(error, 'Lecture des mois suivants');
-  return (data || []) as LigneMois[];
+  // Un mois enregistré vide montre le mois précédent : rien à y reporter.
+  return ((data || []) as LigneMois[]).filter(l => !moisVide(l));
 }
 
 /**

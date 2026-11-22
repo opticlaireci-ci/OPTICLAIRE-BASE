@@ -97,25 +97,42 @@ tels quels chaque mois, même en allant directement en décembre.
 - **Un mois déjà passé n'est jamais modifié** par une correction faite plus
   tard dans l'année : corriger décembre ne change pas octobre.
 
-## Vos données d'octobre 2026
+## Vos données d'octobre 2026 : un seul fichier à exécuter
 
 Les employés et salaires (fiche salariale) et toutes les charges (tableau en
-image) d'octobre 2026 sont dans un petit script fourni **à part**, pas dans le
-ZIP ni dans le dépôt, car il contient les salaires :
-`DONNEES_OCTOBRE_2026_charges_salaires.sql`.
+image) d'octobre 2026 sont dans un fichier fourni **à part** :
+`DONNEES_OCTOBRE_2026_charges_salaires.sql`. Il n'est ni dans le ZIP ni dans
+le dépôt, car il contient les salaires.
 
-À exécuter **une fois**, **après** `CHARGES_SALAIRES_2026-11-23.sql`
-(Supabase → SQL Editor → coller → RUN). Ensuite :
+Supabase → SQL Editor → coller **tout** le fichier → RUN. **Ce seul fichier
+suffit** :
 
-- octobre est enregistré (33 employés, 7 090 000 ; charges 5 490 665) ;
-- novembre, décembre et les mois suivants montrent ces informations tout
-  seuls ; vous ne corrigez que ce qui change.
+- il crée la table protégée si elle n'existe pas encore ;
+- il remplit octobre 2026.
 
-Le script est sans risque : un mois déjà enregistré dans l'application n'est
-jamais remplacé.
+Le résultat affiche :
 
-Sinon, les deux fichiers Excel (`…_a_importer.xlsx`) s'importent avec le
-bouton « ↑ Importer (Excel / CSV) ».
+- « Table des charges et salaires : protégée » ;
+- « Employés d'octobre 2026 : 33 » ;
+- « Salaires de base d'octobre 2026 : 7090000 » ;
+- « Lignes de charges d'octobre 2026 : 13 ».
+
+Ensuite, novembre, décembre et tous les mois suivants sont **préremplis** avec
+les employés, fonctions, salaires de base et charges.
+
+Le fichier est sans risque et peut être relancé :
+
+- un octobre déjà rempli dans l'application n'est jamais remplacé ;
+- un octobre enregistré vide est rempli.
+
+## Mois enregistré vide
+
+Un mois enregistré sans aucune donnée (par exemple avant que les données
+d'octobre existent) est ignoré : il montre les informations du mois rempli
+précédent. Cliquer dans une case puis repartir sans rien taper n'enregistre
+plus rien.
+
+Quand il n'existe encore aucune donnée, l'écran le dit et indique quoi faire.
 
 ## Importer, exporter, imprimer
 
@@ -167,7 +184,7 @@ bouton « ↑ Importer (Excel / CSV) ».
     personne sans connexion : aucun accès ;
   - mois mal écrit refusé ;
   - enregistrer les salaires ne touche pas aux charges.
-- **Calculs : 28/28**, avec la fiche salariale et le tableau des charges
+- **Calculs : 29/29**, avec la fiche salariale et le tableau des charges
   d'octobre importés depuis Excel :
   - totaux 7 090 000 et 5 490 665 ;
   - salaire final = base − emprunt ;
@@ -192,9 +209,15 @@ bouton « ↑ Importer (Excel / CSV) ».
   - décembre repris de novembre ;
   - correction de Michel en octobre reportée sur novembre et visible en
     décembre ; Yves, changé exprès en novembre, gardé ;
-  - le script des données d'octobre : passé deux fois sans doublon, puis
-    l'application montre les 33 employés et toutes les charges sans aucun
-    import ;
+  - le fichier des données d'octobre :
+    - sur une base neuve, il crée la table et remplit octobre ;
+    - relancé, il ne crée pas de doublon ;
+    - il remplit un octobre enregistré vide, et ne remplace pas un octobre
+      modifié ;
+  - novembre enregistré vide : il montre octobre, et un clic sans rien taper
+    n'enregistre rien ;
+  - préremplissage jusqu'en février 2027 ;
+  - message clair quand il n'y a aucune donnée ;
   - l'actualisation, le téléphone ;
   - comptable : accès et modification ; conseillère : rien.
 - **Corrigé pendant les tests** : une modification pouvait être perdue si la

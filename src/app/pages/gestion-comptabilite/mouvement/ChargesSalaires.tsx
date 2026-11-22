@@ -195,7 +195,7 @@ export function ChargesSalaires({ mois, onMois, editable }: { mois: string; onMo
   const quandModifie = etat?.ligne?.modifie_le ? new Date(etat.ligne.modifie_le) : null;
   const infoMois = !etat ? '' : etat.ligne
     ? `Modifié${etat.ligne.modifie_par ? ` par ${etat.ligne.modifie_par}` : ''}${quandModifie && !Number.isNaN(quandModifie.getTime()) ? ` le ${quandModifie.toLocaleDateString('fr-FR')} à ${quandModifie.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}` : ''}`
-    : affiche?.source ? `Informations fixes reprises de ${libelleMois(affiche.source)} : employés, fonctions, salaires de base et charges. Corrigez seulement ce qui change ; la correction vaudra aussi pour les mois suivants. Emprunts du mois à saisir.` : 'Mois pas encore enregistré.';
+    : affiche?.source ? `Informations fixes reprises de ${libelleMois(affiche.source)} : employés, fonctions, salaires de base et charges. Corrigez seulement ce qui change ; la correction vaudra aussi pour les mois suivants. Emprunts du mois à saisir.` : 'Aucune donnée enregistrée pour l’instant : exécutez une fois dans Supabase le fichier des données d’octobre 2026 (employés, salaires et charges), ou importez vos fichiers Excel avec « ↑ Importer ». Les mois suivants seront ensuite préremplis tout seuls.';
 
   return (
     <div className="flex flex-col gap-4" data-testid="charges-salaires">
@@ -261,7 +261,7 @@ export function ChargesSalaires({ mois, onMois, editable }: { mois: string; onMo
                 <table className="no-mobile-scroll" style={{ borderCollapse: 'collapse', width: '100%' }} data-testid="charges-tableau">
                   <thead>
                     <tr>
-                      <th rowSpan={2} style={{ ...cellule, background: '#F2F2F2', fontSize: 13, fontWeight: 800, minWidth: 110 }}>OFFICINES</th>
+                      <th rowSpan={2} style={{ ...cellule, background: '#F2F2F2', fontSize: 13, fontWeight: 800, minWidth: 165 }}>OFFICINES</th>
                       {charges.colonnes.map((col, ci) => (
                         <th key={col.id} colSpan={col.reference ? 2 : 1} style={{ ...cellule, background: col.couleur, color: texteSur(col.couleur), fontWeight: 800 }}>
                           <NomModifiable valeur={col.nom} lectureSeule={!editable} style={{ textAlign: 'center', fontWeight: 800, fontSize: 14 }} testId="charges-colonne-nom"

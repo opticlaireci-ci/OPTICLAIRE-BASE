@@ -114,14 +114,31 @@ export function lignesEffectives(c: ChargesMois, magasins: MagasinPoint[], tenan
 // ── Mois affiché ─────────────────────────────────────────────────────────────
 
 /**
+ * Mois enregistré mais VIDE (aucun employé, aucune référence ni aucun montant
+ * de charge) — par exemple enregistré avant que les données existent : il est
+ * ignoré et le mois montre les informations du mois rempli précédent.
+ */
+export function moisVide(l: LigneMois | null | undefined): boolean {
+  if (!l) return true;
+  const employes = Array.isArray(l.salaires?.employes) ? l.salaires!.employes.length : 0;
+  if (employes > 0) return false;
+  for (const cols of Object.values(l.charges?.cases || {})) {
+    for (const v of Object.values(cols || {})) {
+      if ((v?.ref ?? '') !== '' || typeof v?.montant === 'number') return false;
+    }
+  }
+  return true;
+}
+
+/**
  * Charges et salaires d'un mois : ceux du mois s'il est enregistré, sinon ceux
  * du mois de référence (le mois enregistré le plus proche avant lui — à
  * défaut, le plus proche après), emprunts remis à 0.
  */
 export function moisAffiche(ligne: LigneMois | null, reference: LigneMois | null, magasins: MagasinPoint[], tenant: string): { charges: ChargesMois; salaires: SalairesMois; source: string | null } {
   const defaut = chargesDefaut(magasins, tenant);
-  if (ligne) return { charges: normaliserCharges(ligne.charges, defaut), salaires: normaliserSalaires(ligne.salaires), source: null };
-  if (reference) {
+  if (ligne && !moisVide(ligne)) return { charges: normaliserCharges(ligne.charges, defaut), salaires: normaliserSalaires(ligne.salaires), source: null };
+  if (reference && !moisVide(reference)) {
     const { moisSource: _s, ...c } = normaliserCharges(reference.charges, defaut);
     return {
       charges: JSON.parse(JSON.stringify(c)),

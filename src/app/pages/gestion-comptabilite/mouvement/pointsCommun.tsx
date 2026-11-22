@@ -45,6 +45,8 @@ export function ChampMontant({
   gras?: boolean;
 }) {
   const [texte, setTexte] = useState<string | null>(null);
+  // Texte au moment du clic : cliquer puis repartir sans rien changer n'enregistre rien.
+  const [initial, setInitial] = useState('');
   const affiche = texte ?? (valeur ? fmt(valeur) : (auto === undefined ? '' : '0'));
   const info = titre ?? (modifie && auto !== undefined ? `Modifié à la main (calcul automatique : ${fmt(auto)}). Videz la case pour revenir au calcul.` : undefined);
   const base: CSSProperties = {
@@ -55,6 +57,7 @@ export function ChampMontant({
   if (lectureSeule) return <span style={{ ...base, display: 'block' }} title={info} data-testid={testId}>{valeur ? fmt(valeur) : '0'}</span>;
   const valider = () => {
     if (texte === null) return;
+    if (texte.trim() === initial.trim()) { setTexte(null); return; }
     const v = lireMontant(texte);
     setTexte(null);
     if (v === null) { onChange(null); return; }
@@ -67,7 +70,7 @@ export function ChampMontant({
       value={affiche}
       title={info}
       data-testid={testId}
-      onFocus={e => { setTexte(valeur ? String(valeur) : ''); requestAnimationFrame(() => e.target.select()); }}
+      onFocus={e => { const t = valeur ? String(valeur) : ''; setTexte(t); setInitial(t); requestAnimationFrame(() => e.target.select()); }}
       onChange={e => setTexte(e.target.value)}
       onBlur={valider}
       onKeyDown={e => {
