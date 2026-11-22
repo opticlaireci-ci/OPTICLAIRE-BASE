@@ -16,11 +16,11 @@ import { TENANT } from '../../../config/tenant';
 import { getCurrentUser } from '../../../utils/auditUtils';
 import { nouvelId, texteSur } from '../../../utils/pointsSemaine';
 import {
-  COULEURS_NOUVELLES_CHARGES, ajouterMois, chargesDuMois, estMois, importerCharges, importerSalaires, libelleMois, lignesEffectives,
-  moisCourant, salaireFinal, salairesDuMois, tableauCharges, tableauSalaires, totauxCharges, totauxSalaires,
+  COULEURS_NOUVELLES_CHARGES, ajouterMois, estMois, importerCharges, importerSalaires, libelleMois, lignesEffectives, memesCharges, memesSalaires,
+  moisAffiche, moisCourant, reporterCharges, reporterSalaires, salaireFinal, tableauCharges, tableauSalaires, totauxCharges, totauxSalaires,
   type ChargesMois, type Employe, type LigneCharge, type LigneMois, type SalairesMois,
 } from '../../../utils/chargesSalaires';
-import { chargerMois, enregistrerMois, TableChargesAbsente } from '../../../services/chargesSalairesService';
+import { chargerMois, chargerMoisSuivants, enregistrerMois, TableChargesAbsente } from '../../../services/chargesSalairesService';
 import { lireCsv, lireTableur } from '../../../leclaire/importFichier';
 import { BoutonAjouter, ChampMontant, NomModifiable, PetitBouton, deplacer, fmt, useMagasinsPoint } from './pointsCommun';
 import { htmlCharges, htmlSalaires, imprimerDocument } from './chargesImpression';
@@ -29,7 +29,7 @@ const BORD = '1px solid #1f2937';
 const cellule: CSSProperties = { border: BORD, padding: '2px 4px', fontSize: 13, textAlign: 'center', whiteSpace: 'nowrap' };
 const bouton = 'px-3 py-1.5 rounded text-xs font-semibold border border-gray-300 text-gray-700 hover:bg-gray-50';
 
-type Etat = { ligne: LigneMois | null; precedent: LigneMois | null; modele: LigneMois | null };
+type Etat = { ligne: LigneMois | null; reference: LigneMois | null };
 
 /** Texte modifiable qui peut être vidé (référence, nom, fonction). */
 function TexteCase({ valeur, onChange, lectureSeule, style, testId, placeholder }: {
@@ -78,21 +78,26 @@ export function ChargesSalaires({ mois, onMois, editable }: { mois: string; onMo
   }, [mois]);
   useEffect(() => { setEtat(null); setMessage(''); setStatut(''); void charger(); }, [charger]);
 
-  const charges = useMemo(() => (etat ? chargesDuMois(etat.ligne, etat.modele, magasins, tenant) : null), [etat, magasins, tenant]);
-  const salaires = useMemo(() => (etat ? salairesDuMois(etat.ligne, etat.modele) : null), [etat]);
+  const affiche = useMemo(() => (etat ? moisAffiche(etat.ligne, etat.reference, magasins, tenant) : null), [etat, magasins, tenant]);
+  const charges = affiche?.charges ?? null;
+  const salaires = affiche?.salaires ?? null;
   const lignes = useMemo(() => (charges ? lignesEffectives(charges, magasins, tenant) : []), [charges, magasins, tenant]);
   const totC = charges ? totauxCharges(charges, lignes) : null;
   const totS = salaires ? totauxSalaires(salaires) : null;
-  const moisModele = etat?.modele?.charges?.moisSource || etat?.modele?.salaires?.moisSource || '';
 
-  /** Change le mois affiché et l'enregistre (le mois est créé au premier changement). */
+  /**
+   * Change le mois affiché et l'enregistre (le mois est créé au premier
+   * changement), puis reporte la correction sur les mois suivants déjà
+   * enregistrés (là où ils avaient encore l'ancienne valeur).
+   */
   const modifier = (f: (c: { charges: ChargesMois; salaires: SalairesMois; lignes: LigneCharge[] }) => { charges?: ChargesMois; salaires?: SalairesMois }) => {
     const e = etatRef.current;
     if (!e || !editable) return;
-    const ch = chargesDuMois(e.ligne, e.modele, magasins, tenant);
-    const actuel = { charges: ch, salaires: salairesDuMois(e.ligne, e.modele), lignes: lignesEffectives(ch, magasins, tenant) };
-    const maj = f(actuel);
-    const complet = { charges: maj.charges ?? actuel.charges, salaires: maj.salaires ?? actuel.salaires };
+    const a = moisAffiche(e.ligne, e.reference, magasins, tenant);
+    const lignesAvant = lignesEffectives(a.charges, magasins, tenant);
+    const avant = { charges: { ...a.charges, lignes: lignesAvant }, salaires: a.salaires };
+    const maj = f({ ...avant, lignes: lignesAvant });
+    const complet = { charges: maj.charges ?? avant.charges, salaires: maj.salaires ?? avant.salaires };
     const auteur = getCurrentUser();
     const quand = new Date().toISOString();
     const nouveau = !e.ligne;
@@ -102,13 +107,26 @@ export function ChargesSalaires({ mois, onMois, editable }: { mois: string; onMo
     file.current = file.current.then(async () => {
       try {
         await enregistrerMois(mois, envoi, auteur);
-        const src = etatRef.current?.modele?.charges?.moisSource || etatRef.current?.modele?.salaires?.moisSource || '';
-        if (!src || src <= mois) {
-          const modele = { charges: { ...complet.charges, moisSource: mois }, salaires: { ...complet.salaires, moisSource: mois } };
-          await enregistrerMois('modele', modele, auteur);
-          if (etatRef.current) setEtat({ ...etatRef.current, modele: { mois: 'modele', ...modele } });
+        // Report sur les mois suivants déjà enregistrés.
+        const reportes: string[] = [];
+        for (const suivant of await chargerMoisSuivants(mois)) {
+          const parties: { charges?: ChargesMois; salaires?: SalairesMois } = {};
+          if (maj.charges && suivant.charges) {
+            const c0 = suivant.charges as ChargesMois;
+            const c1 = reporterCharges(avant.charges, complet.charges, c0);
+            if (!memesCharges(c0, c1)) parties.charges = c1;
+          }
+          if (maj.salaires && suivant.salaires) {
+            const s0 = suivant.salaires as SalairesMois;
+            const s1 = reporterSalaires(avant.salaires, complet.salaires, s0);
+            if (!memesSalaires(s0, s1)) parties.salaires = s1;
+          }
+          if (parties.charges || parties.salaires) {
+            await enregistrerMois(suivant.mois, parties, auteur);
+            reportes.push(libelleMois(suivant.mois).toLowerCase());
+          }
         }
-        setStatut(`Enregistré à ${new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`);
+        setStatut(`Enregistré à ${new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}${reportes.length ? ` — correction reportée sur ${reportes.join(', ')}` : ''}`);
         setErreur(null);
       } catch (err: any) {
         setStatut('');
@@ -177,7 +195,7 @@ export function ChargesSalaires({ mois, onMois, editable }: { mois: string; onMo
   const quandModifie = etat?.ligne?.modifie_le ? new Date(etat.ligne.modifie_le) : null;
   const infoMois = !etat ? '' : etat.ligne
     ? `Modifié${etat.ligne.modifie_par ? ` par ${etat.ligne.modifie_par}` : ''}${quandModifie && !Number.isNaN(quandModifie.getTime()) ? ` le ${quandModifie.toLocaleDateString('fr-FR')} à ${quandModifie.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}` : ''}`
-    : moisModele ? `Tout est repris de ${libelleMois(moisModele)} (officines, références et montants des charges, employés, salaires et emprunts) : modifiez seulement ce qui change ce mois-ci.` : 'Mois pas encore enregistré.';
+    : affiche?.source ? `Informations fixes reprises de ${libelleMois(affiche.source)} : employés, fonctions, salaires de base et charges. Corrigez seulement ce qui change ; la correction vaudra aussi pour les mois suivants. Emprunts du mois à saisir.` : 'Mois pas encore enregistré.';
 
   return (
     <div className="flex flex-col gap-4" data-testid="charges-salaires">

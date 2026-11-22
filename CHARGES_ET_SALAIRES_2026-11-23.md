@@ -75,22 +75,27 @@ Pour remplir la liste :
 
 Un employé déjà dans la liste (même nom) est mis à jour, jamais doublé.
 
-## Chaque mois : tout est repris, vous ne modifiez que ce qui change
+## Informations fixes chaque mois, corrections reportées sur les mois suivants
 
-Un mois pas encore enregistré **reprend tout le dernier mois enregistré** :
+Les **noms, fonctions et salaires de base** des employés, et **toutes les
+charges** (officines, références, montants) sont **fixes** : ils apparaissent
+tels quels chaque mois, même en allant directement en décembre.
 
-- officines et colonnes ;
-- références **et montants** des charges ;
-- employés, fonctions, salaires de base **et emprunts**.
-
-Il suffit de modifier les cases qui changent (une facture CIE, un nouvel
-employé, un emprunt terminé…).
-
-- Le bouton « **Remettre les emprunts à 0** » remet tous les emprunts du mois
-  à 0 en un clic, quand les emprunts sont terminés. Pour un seul emprunt
-  terminé, tapez 0 dans sa case.
-- Chaque mois est enregistré à part : corriger novembre ne change pas
-  octobre.
+- **Quel mois est montré** : un mois pas encore enregistré montre le **mois
+  enregistré le plus proche avant lui**. L'écran l'indique : « Informations
+  fixes reprises d'octobre 2026 ».
+- **Les emprunts** sont propres à chaque mois : ils sont à 0 dans un nouveau
+  mois. Tapez ceux du mois ; le bouton « Remettre les emprunts à 0 » les
+  efface tous en un clic.
+- **Une correction vaut pour ce mois et les suivants** :
+  - les mois suivants pas encore enregistrés la montrent d'eux-mêmes ;
+  - elle est aussi **reportée sur les mois suivants déjà enregistrés**, sauf
+    là où une autre valeur y avait été mise exprès. Exemple : Michel passe
+    à 650 000 en octobre, donc novembre passe aussi à 650 000 ; mais si
+    novembre avait déjà Yves à 170 000, il le garde.
+  - L'écran l'indique : « correction reportée sur novembre 2026 ».
+- **Un mois déjà passé n'est jamais modifié** par une correction faite plus
+  tard dans l'année : corriger décembre ne change pas octobre.
 
 ## Vos données d'octobre 2026
 
@@ -103,7 +108,8 @@ ZIP ni dans le dépôt, car il contient les salaires :
 (Supabase → SQL Editor → coller → RUN). Ensuite :
 
 - octobre est enregistré (33 employés, 7 090 000 ; charges 5 490 665) ;
-- novembre et les mois suivants reprennent ces informations tout seuls.
+- novembre, décembre et les mois suivants montrent ces informations tout
+  seuls ; vous ne corrigez que ce qui change.
 
 Le script est sans risque : un mois déjà enregistré dans l'application n'est
 jamais remplacé.
@@ -137,8 +143,7 @@ bouton « ↑ Importer (Excel / CSV) ».
 ## Technique
 
 - `supabase/CHARGES_SALAIRES_2026-11-23.sql` :
-  - table `charges_salaires_mois` : une ligne par mois (`2026-10`), plus la
-    ligne `modele` (dernier mois enregistré) ;
+  - table `charges_salaires_mois` : une ligne par mois (`2026-10`) ;
   - fonction `peut_gerer_salaires()` et règle d'accès.
 - `src/app/utils/montantEnLettres.ts` : somme en toutes lettres (même règle
   que la facture de vente).
@@ -162,14 +167,17 @@ bouton « ↑ Importer (Excel / CSV) ».
     personne sans connexion : aucun accès ;
   - mois mal écrit refusé ;
   - enregistrer les salaires ne touche pas aux charges.
-- **Calculs : 23/23**, avec la fiche salariale et le tableau des charges
+- **Calculs : 28/28**, avec la fiche salariale et le tableau des charges
   d'octobre importés depuis Excel :
   - totaux 7 090 000 et 5 490 665 ;
   - salaire final = base − emprunt ;
   - réimport sans doublon, copier-coller, export puis réimport ;
-  - mois suivant qui reprend tout (montants et emprunts compris), sans
-    toucher au mois précédent.
-- **Navigateur, site de production avec sa politique de sécurité : 37/37 + 6/6** :
+  - mois suivants qui montrent les informations fixes (emprunts à 0) ;
+  - correction reportée sur un mois suivant déjà enregistré, sauf sur une
+    valeur changée exprès ;
+  - employé ajouté ou retiré, montant, référence et ligne renommée
+    reportés.
+- **Navigateur, site de production avec sa politique de sécurité : 40/40 + 6/6** :
   - le bouton ;
   - l'import des deux fichiers et les totaux ;
   - case modifiée, charge ajoutée puis retirée ;
@@ -178,9 +186,12 @@ bouton « ↑ Importer (Excel / CSV) ».
   - l'enregistrement dans la table protégée, rien dans le navigateur ;
   - les impressions comme une facture (logo affiché, coordonnées, somme en
     lettres, signature, une seule page chacune) ;
-  - novembre qui reprend tout d'octobre sans rien retaper, un seul montant
-    modifié, octobre intact, décembre repris de novembre, « Remettre les
-    emprunts à 0 » ;
+  - novembre qui montre noms, fonctions, salaires de base et charges
+    d'octobre sans rien retaper ;
+  - un seul montant modifié, octobre intact ;
+  - décembre repris de novembre ;
+  - correction de Michel en octobre reportée sur novembre et visible en
+    décembre ; Yves, changé exprès en novembre, gardé ;
   - le script des données d'octobre : passé deux fois sans doublon, puis
     l'application montre les 33 employés et toutes les charges sans aucun
     import ;

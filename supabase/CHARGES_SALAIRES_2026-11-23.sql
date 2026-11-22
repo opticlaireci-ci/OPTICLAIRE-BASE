@@ -12,8 +12,9 @@
 --  lisent et modifient cette table ; aucun accès sans connexion.
 --
 --  Une ligne par mois (« 2026-10 ») : charges du mois et salaires du mois.
---  La ligne « modele » garde le dernier mois enregistré : un nouveau mois
---  repart de ses officines, références et employés.
+--  Un mois pas encore enregistré montre le mois enregistré le plus proche
+--  avant lui (informations fixes) ; une correction est reportée sur les mois
+--  suivants. (Une ancienne ligne « modele » éventuelle n'est plus utilisée.)
 -- ============================================================================
 
 -- 0) Bonne base ? (le script s'arrête avec un message clair sinon)

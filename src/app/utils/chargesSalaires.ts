@@ -8,10 +8,13 @@
  *  - Salaires des employés : NOM, FONCTION, SALAIRE DE BASE, EMPRUNT et
  *    SALAIRE FINAL = salaire de base − emprunt ; totaux.
  *
- * Un nouveau mois reprend TOUT le dernier mois enregistré : officines,
- * colonnes, références et montants des charges, employés, salaires de base et
- * emprunts. On ne modifie que ce qui change ; chaque mois est enregistré à
- * part (corriger un mois ne change pas les autres).
+ * Les informations sont FIXES d'un mois à l'autre : noms, fonctions et
+ * salaires de base des employés, officines, références et montants des
+ * charges. Un mois pas encore enregistré montre le mois enregistré le plus
+ * proche AVANT lui (les emprunts, propres à chaque mois, y sont à 0).
+ * Une correction faite un mois vaut pour ce mois et pour les mois suivants :
+ * elle est reportée sur les mois suivants déjà enregistrés, sauf là où une
+ * autre valeur y avait été mise exprès.
  *
  * Ce module ne contient que des calculs (aucun accès au réseau ni à l'écran).
  */
@@ -110,22 +113,110 @@ export function lignesEffectives(c: ChargesMois, magasins: MagasinPoint[], tenan
 
 // ── Mois affiché ─────────────────────────────────────────────────────────────
 
-/** Charges d'un mois : enregistrées, sinon reprises telles quelles du dernier mois enregistré. */
-export function chargesDuMois(ligne: LigneMois | null, modele: LigneMois | null, magasins: MagasinPoint[], tenant: string): ChargesMois {
+/**
+ * Charges et salaires d'un mois : ceux du mois s'il est enregistré, sinon ceux
+ * du mois de référence (le mois enregistré le plus proche avant lui — à
+ * défaut, le plus proche après), emprunts remis à 0.
+ */
+export function moisAffiche(ligne: LigneMois | null, reference: LigneMois | null, magasins: MagasinPoint[], tenant: string): { charges: ChargesMois; salaires: SalairesMois; source: string | null } {
   const defaut = chargesDefaut(magasins, tenant);
-  if (ligne?.charges) return normaliserCharges(ligne.charges, defaut);
-  if (modele?.charges) {
-    const { moisSource: _source, ...m } = normaliserCharges(modele.charges, defaut);
-    return JSON.parse(JSON.stringify(m));
+  if (ligne) return { charges: normaliserCharges(ligne.charges, defaut), salaires: normaliserSalaires(ligne.salaires), source: null };
+  if (reference) {
+    const { moisSource: _s, ...c } = normaliserCharges(reference.charges, defaut);
+    return {
+      charges: JSON.parse(JSON.stringify(c)),
+      salaires: { employes: normaliserSalaires(reference.salaires).employes.map(e => ({ ...e, emprunt: 0 })) },
+      source: reference.mois,
+    };
   }
-  return defaut;
+  return { charges: defaut, salaires: { employes: [] }, source: null };
 }
-/** Salaires d'un mois : enregistrés, sinon repris tels quels du dernier mois enregistré (emprunts compris). */
-export function salairesDuMois(ligne: LigneMois | null, modele: LigneMois | null): SalairesMois {
-  if (ligne?.salaires) return normaliserSalaires(ligne.salaires);
-  if (modele?.salaires) return { employes: normaliserSalaires(modele.salaires).employes };
-  return { employes: [] };
+
+// ── Report d'une correction sur les mois suivants ────────────────────────────
+
+const pareil = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+
+/**
+ * Reporte sur `cible` (un mois suivant déjà enregistré) les changements faits
+ * entre `avant` et `apres` : employé ajouté, retiré, nom / fonction / salaire
+ * de base corrigé — seulement là où `cible` avait encore l'ancienne valeur.
+ * Les emprunts (propres à chaque mois) ne sont jamais reportés.
+ */
+export function reporterSalaires(avant: SalairesMois, apres: SalairesMois, cible: SalairesMois): SalairesMois {
+  let employes = cible.employes.map(e => ({ ...e }));
+  const av = new Map(avant.employes.map(e => [e.id, e]));
+  const ap = new Map(apres.employes.map(e => [e.id, e]));
+  for (const [id, a] of av) {
+    const n = ap.get(id);
+    if (!n) { employes = employes.filter(e => e.id !== id); continue; }
+    const c = employes.find(e => e.id === id);
+    if (!c) continue;
+    for (const champ of ['nom', 'fonction', 'salaireBase'] as const) {
+      if (!pareil(a[champ], n[champ]) && pareil(c[champ], a[champ])) (c as any)[champ] = n[champ];
+    }
+  }
+  for (const [id, n] of ap) {
+    if (!av.has(id) && !employes.some(e => e.id === id)) employes.push({ ...n, emprunt: 0 });
+  }
+  return { ...cible, employes };
 }
+
+/**
+ * Même chose pour les charges : lignes et colonnes ajoutées, retirées ou
+ * renommées, références et montants corrigés (là où `cible` avait encore
+ * l'ancienne valeur).
+ */
+export function reporterCharges(avant: ChargesMois, apres: ChargesMois, cible: ChargesMois): ChargesMois {
+  const r: ChargesMois = JSON.parse(JSON.stringify(cible));
+  // Lignes
+  const lAv = new Map(avant.lignes.map(l => [l.id, l]));
+  const lAp = new Map(apres.lignes.map(l => [l.id, l]));
+  for (const [id, a] of lAv) {
+    const n = lAp.get(id);
+    if (!n) { r.lignes = r.lignes.filter(l => l.id !== id); continue; }
+    const c = r.lignes.find(l => l.id === id);
+    if (c && a.nom !== n.nom && c.nom === a.nom) c.nom = n.nom;
+  }
+  for (const [id, n] of lAp) {
+    if (lAv.has(id) || r.lignes.some(l => l.id === id)) continue;
+    const iBas = r.lignes.findIndex(l => l.bas);
+    if (n.bas || iBas === -1) r.lignes.push({ ...n }); else r.lignes.splice(iBas, 0, { ...n });
+  }
+  for (const id of apres.retires) if (!avant.retires.includes(id) && !r.retires.includes(id)) r.retires.push(id);
+  for (const id of avant.retires) if (!apres.retires.includes(id)) r.retires = r.retires.filter(x => x !== id);
+  // Colonnes
+  const cAv = new Map(avant.colonnes.map(c => [c.id, c]));
+  const cAp = new Map(apres.colonnes.map(c => [c.id, c]));
+  for (const [id, a] of cAv) {
+    const n = cAp.get(id);
+    if (!n) { r.colonnes = r.colonnes.filter(c => c.id !== id); continue; }
+    const c = r.colonnes.find(x => x.id === id);
+    if (!c) continue;
+    if (a.nom !== n.nom && c.nom === a.nom) c.nom = n.nom;
+    if (a.reference !== n.reference && c.reference === a.reference) c.reference = n.reference;
+  }
+  for (const [id, n] of cAp) if (!cAv.has(id) && !r.colonnes.some(c => c.id === id)) r.colonnes.push({ ...n });
+  // Cases : référence et montant
+  const lignesIds = new Set([...Object.keys(avant.cases || {}), ...Object.keys(apres.cases || {})]);
+  for (const l of lignesIds) {
+    const cols = new Set([...Object.keys(avant.cases?.[l] || {}), ...Object.keys(apres.cases?.[l] || {})]);
+    for (const col of cols) {
+      const a = avant.cases?.[l]?.[col] || {}, n = apres.cases?.[l]?.[col] || {};
+      for (const champ of ['ref', 'montant'] as const) {
+        if (pareil(a[champ], n[champ])) continue;
+        const actuel = r.cases?.[l]?.[col]?.[champ];
+        if (!pareil(actuel, a[champ])) continue;
+        const cell = { ...((r.cases[l] ||= {})[col] || {}) };
+        if (n[champ] === undefined || n[champ] === '') delete cell[champ]; else (cell as any)[champ] = n[champ];
+        r.cases[l][col] = cell;
+      }
+    }
+  }
+  return r;
+}
+
+export const memesCharges = (a: ChargesMois, b: ChargesMois) => pareil(a, b);
+export const memesSalaires = (a: SalairesMois, b: SalairesMois) => pareil(a, b);
 
 // ── Totaux ───────────────────────────────────────────────────────────────────
 
