@@ -431,11 +431,23 @@ export async function kvGetDoc<T = any>(entity: string, id: string): Promise<T |
 const PENDING_WRITES_KEY = 'leclaire_pending_cloud_writes_v2';
 let pendingFlushRunning = false;
 
+/**
+ * Écritures jamais mises en file : la liste des magasins est renvoyée par sa
+ * propre synchronisation, qui relit le serveur et fusionne juste avant d'écrire.
+ * Une ancienne copie rejouée plus tard depuis la file pouvait remplacer une liste
+ * plus complète enregistrée entre-temps par un autre appareil.
+ */
+const ECRITURES_SANS_FILE = new Set(['app_data|leclaire_magasins']);
+
 function readPendingWrites(): any[] {
   try {
     const raw = localStorage.getItem(PENDING_WRITES_KEY);
     const rows = raw ? JSON.parse(raw) : [];
-    return Array.isArray(rows) ? rows : [];
+    if (!Array.isArray(rows)) return [];
+    const utiles = rows.filter(r => !ECRITURES_SANS_FILE.has(`${r?.entity}|${r?.id}`));
+    // Ancienne copie de la liste des magasins laissée par une version précédente : retirée.
+    if (utiles.length !== rows.length) writePendingWrites(utiles);
+    return utiles;
   } catch { return []; }
 }
 function writePendingWrites(rows: any[]) {
@@ -456,6 +468,7 @@ export function ecritureEnAttente(entity: string, id: string): boolean {
 }
 
 function enqueuePendingWrite(entity: string, id: string, value: Record<string, any>, merge: boolean) {
+  if (ECRITURES_SANS_FILE.has(`${entity}|${id}`)) return;
   const rows = readPendingWrites();
   const key = `${entity}|${id}`;
   const existing = rows.findIndex(r => `${r.entity}|${r.id}` === key);
@@ -592,14 +605,19 @@ async function kvSetDocInternal(
   }
   throw new Error(`kvSetDoc ${entity}/${id}: schéma de public.${target.table} incompatible après adaptation.`);
 }
-/** Point d'entrée public de toutes les écritures métier. */
+/**
+ * Point d'entrée public de toutes les écritures métier. `fileAttente: false` :
+ * en cas d'échec, l'écriture n'est PAS gardée pour être rejouée plus tard
+ * (l'appelant réessaie lui-même avec une valeur à jour).
+ */
 export async function kvSetDoc(
   entity: string,
   id: string,
   value: Record<string, any>,
   merge = false,
+  options: { fileAttente?: boolean } = {},
 ): Promise<void> {
-  return kvSetDocInternal(entity, id, value, merge, true);
+  return kvSetDocInternal(entity, id, value, merge, options.fileAttente !== false);
 }
 
 /** Crée un document avec id auto-généré côté client. Renvoie l'id créé. */

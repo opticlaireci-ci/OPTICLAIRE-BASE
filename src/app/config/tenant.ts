@@ -178,6 +178,16 @@ export const TENANT: TenantConfig = {
   visuels: TENANT_DEFAUT.visuels,
 };
 
+/**
+ * Magasins saisis dans « Configuration de l'enseigne », RELUS à chaque appel.
+ * `TENANT.magasins` est figé à l'ouverture de l'application : une configuration
+ * reçue du serveur juste après (autre appareil) n'y figurait qu'au rechargement.
+ */
+export function magasinsConfigurationEnregistree(): Array<{ id: string; label: string }> {
+  const liste = chargerOverride().magasins;
+  return Array.isArray(liste) ? liste.filter(m => m && String(m.id || '').trim()) : [];
+}
+
 /** Valeurs par défaut livrées avec le code (pour un « rétablir »). */
 export function tenantConfigDefaut(): TenantConfig {
   return TENANT_DEFAUT;

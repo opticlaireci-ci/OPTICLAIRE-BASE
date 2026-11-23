@@ -1,5 +1,5 @@
 import { logger } from '../utils/logger';
-import { TENANT, nomMagasin, tenantConfigDefaut } from '../config/tenant';
+import { nomMagasin, tenantConfigDefaut, magasinsConfigurationEnregistree } from '../config/tenant';
 import { creerNormaliseurMagasins } from '../services/stockLedger';
 /**
  * Liste complète des magasins OPTICLAIRE
@@ -106,12 +106,45 @@ export function lireRegistreMagasins(): EntreeRegistreMagasin[] {
   }
 }
 
-/** Magasins de la configuration de l'enseigne (code, puis réglage de l'application). */
+/**
+ * Magasins de la configuration de l'enseigne : ceux livrés avec le code, puis
+ * ceux saisis dans « Configuration de l'enseigne » (relus à chaque appel).
+ */
 function magasinsDeConfiguration(): Magasin[] {
   return [
     ...MAGASINS,
-    ...TENANT.magasins.map(m => ({ id: m.id, label: nomMagasin(m.label) })),
+    ...magasinsConfigurationEnregistree().map(m => ({ id: m.id, label: nomMagasin(String(m.label || m.id)) })),
   ];
+}
+
+/**
+ * Liste COMPLÈTE connue de ce poste (configuration + registre, pierres tombales
+ * comprises) : c'est elle qui est envoyée au serveur. Un magasin connu d'un seul
+ * appareil (registre ou configuration de l'enseigne) rejoint ainsi la liste
+ * partagée, et tous les appareils le voient.
+ */
+export function listeCompleteMagasins(): EntreeRegistreMagasin[] {
+  return fusionnerMagasins(magasinsDeConfiguration(), lireRegistreMagasins());
+}
+
+/**
+ * Marque « liste des magasins modifiée sur ce poste, pas encore confirmée par
+ * le serveur ». Propre à l'appareil : la clé ne commence pas par `leclaire_`,
+ * elle n'est donc jamais synchronisée ni effacée à la déconnexion. Tant qu'elle
+ * existe, la liste est renvoyée automatiquement (connexion, retour du réseau,
+ * cycle de synchronisation…), jusqu'à ce que le serveur l'ait reçue.
+ */
+export const CLE_MAGASINS_A_ENVOYER = 'opticlaire_magasins_a_envoyer';
+
+export function magasinsAEnvoyer(): string | null {
+  try { return localStorage.getItem(CLE_MAGASINS_A_ENVOYER); } catch { return null; }
+}
+
+/** Le serveur a reçu la liste : retire la marque, sauf si une modification plus récente a eu lieu entre-temps. */
+export function marquerMagasinsEnvoyes(marque: string | null): void {
+  try {
+    if (marque && localStorage.getItem(CLE_MAGASINS_A_ENVOYER) === marque) localStorage.removeItem(CLE_MAGASINS_A_ENVOYER);
+  } catch { /* stockage indisponible */ }
 }
 
 /**
@@ -134,13 +167,21 @@ export function getMagasins(): Magasin[] {
  * Enregistre le registre LOCAL. Les magasins déjà connus du registre et absents
  * de `magasins` sont conservés (fusion) : une liste incomplète ne peut plus en
  * effacer. Supprimer un magasin passe par `deleteMagasin`.
+ *
+ * Une modification faite sur ce poste (ajout, modification, suppression) est
+ * marquée « à envoyer » : la synchronisation l'envoie au serveur toute seule,
+ * et réessaie jusqu'à réussir. `depuisServeur` : la liste vient du serveur,
+ * rien à renvoyer.
  */
-export function saveMagasins(magasins: EntreeRegistreMagasin[]): void {
+export function saveMagasins(magasins: EntreeRegistreMagasin[], options: { depuisServeur?: boolean } = {}): void {
   try {
     const avant = localStorage.getItem(CLE_REGISTRE_MAGASINS);
     const apres = JSON.stringify(fusionnerMagasins(lireRegistreMagasins(), magasins));
     if (avant === apres) return;
     localStorage.setItem(CLE_REGISTRE_MAGASINS, apres);
+    if (!options.depuisServeur) {
+      try { localStorage.setItem(CLE_MAGASINS_A_ENVOYER, `${new Date().toISOString()}-${Math.random().toString(36).slice(2, 8)}`); } catch { /* renvoyée au prochain démarrage */ }
+    }
   } catch (error) {
     // Ne PAS avaler l'erreur : sinon l'appelant croit avoir sauvegardé alors que
     // le magasin n'est jamais persisté (ex. quota localStorage saturé) → « succès
@@ -228,14 +269,30 @@ export function getActiveMagasins(): Magasin[] {
   return magasins.filter(magasin => magasin.actif !== false);
 }
 
-/** Horodatage d'une modification du registre (la plus récente l'emporte). */
-const maintenant = () => new Date().toISOString();
+/**
+ * Horodatage d'une modification faite sur CE poste (la plus récente l'emporte).
+ * Toujours postérieur à la version connue du magasin : si l'horloge d'un autre
+ * appareil avance, sa version porte une date « future », et une suppression
+ * faite ici à l'heure de ce poste aurait perdu (le magasin revenait).
+ */
+function maintenant(id?: string): string {
+  const actuel = new Date().toISOString();
+  const cle = String(id || '').trim().toLowerCase();
+  const connu = cle ? String(lireRegistreMagasins().find(m => m.id === cle)?.modifieLe || '') : '';
+  // Comparaison en TEXTE, comme la fusion et la protection du serveur
+  // (fusionner_liste_magasins) : l'appareil et le serveur départagent pareil.
+  if (!connu || actuel > connu) return actuel;
+  // Une seconde de plus : plus récent aussi en texte, même face à une date
+  // écrite sans millièmes (« …08:00:00Z »).
+  const t = Date.parse(connu);
+  return new Date((Number.isFinite(t) ? Math.max(t, Date.now()) : Date.now()) + 1000).toISOString();
+}
 
 /**
  * Ajoute un nouveau magasin
  */
 export function addMagasin(magasin: Magasin): void {
-  saveMagasins([{ ...magasin, actif: magasin.actif !== false, supprime: false, modifieLe: maintenant() }]);
+  saveMagasins([{ ...magasin, actif: magasin.actif !== false, supprime: false, modifieLe: maintenant(magasin.id) }]);
 }
 
 /**
@@ -244,7 +301,7 @@ export function addMagasin(magasin: Magasin): void {
 export function updateMagasin(id: string, updates: Partial<Magasin>): void {
   const actuel = getMagasinById(id);
   if (!actuel) return;
-  saveMagasins([{ ...actuel, ...updates, id: actuel.id, supprime: false, modifieLe: maintenant() }]);
+  saveMagasins([{ ...actuel, ...updates, id: actuel.id, supprime: false, modifieLe: maintenant(actuel.id) }]);
 }
 
 /**
@@ -253,5 +310,5 @@ export function updateMagasin(id: string, updates: Partial<Magasin>): void {
 export function deleteMagasin(id: string): void {
   const actuel = getMagasinById(id);
   if (!actuel) return;
-  saveMagasins([{ ...actuel, supprime: true, modifieLe: maintenant() }]);
+  saveMagasins([{ ...actuel, supprime: true, modifieLe: maintenant(actuel.id) }]);
 }

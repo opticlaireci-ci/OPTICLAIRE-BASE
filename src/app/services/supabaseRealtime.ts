@@ -17,7 +17,10 @@ import { isStructuredKey } from './structuredKeys';
 import { logNetworkAware, isAuthError, isNoSessionError, isPermissionError } from '../utils/networkErrors';
 import { getValidAccessToken } from '../utils/supabaseClient';
 import { subscribeEntityChanges, onLiveStatusChange, isLive, SLOW_POLL_MS } from '../utils/supabaseLive';
-import { fusionnerMagasins, lireRegistreMagasins, saveMagasins, EVENEMENT_MAGASINS } from '../constants/magasins';
+import {
+  fusionnerMagasins, lireRegistreMagasins, saveMagasins, listeCompleteMagasins,
+  magasinsAEnvoyer, marquerMagasinsEnvoyes, EVENEMENT_MAGASINS,
+} from '../constants/magasins';
 
 const APP_DATA = 'app_data';
 
@@ -73,26 +76,44 @@ function magasinsEnAvanceSurServeur(cloudValueStr: string, fusionStr: string): b
 }
 
 let synchroMagasinsEnCours: Promise<boolean> | null = null;
+/** Dernière comparaison réussie avec la liste du serveur (horloge de ce poste). */
+let derniereSynchroMagasins = 0;
+/** Relecture de la liste du serveur au moins toutes les 2 minutes (application ouverte). */
+const VERIF_MAGASINS_MS = 120_000;
 
 /**
  * Synchronise la liste des magasins SANS PERTE : relit la liste du serveur, la
  * fusionne avec celle de cet appareil, enregistre le résultat ici puis sur le
  * serveur s'il lui manque quelque chose. Renvoie true si le serveur est à jour.
  * Lève une erreur si le serveur n'a pas pu être lu ou écrit.
+ *
+ * Est envoyé : tout ce que ce poste connaît (magasins de la configuration de
+ * l'enseigne compris). Avant, un magasin saisi dans « Configuration de
+ * l'enseigne », ou ajouté pendant que l'envoi échouait, restait sur un seul
+ * appareil (« 12 magasins sur l'ordinateur, 9 sur l'iPhone »).
  */
 export async function synchroniserMagasins(): Promise<boolean> {
   if (!FIREBASE_DATA_ENABLED) return true;
   if (synchroMagasinsEnCours) return synchroMagasinsEnCours;
   synchroMagasinsEnCours = (async () => {
+    const marque = magasinsAEnvoyer();
     const doc = await kvGetDoc<{ value: unknown }>(APP_DATA, MAGASINS_KEY);
     const cloud = Array.isArray(doc?.value) ? doc!.value as unknown[] : [];
-    const fusion = fusionnerMagasins(lireRegistreMagasins(), cloud);
-    saveMagasins(fusion);
-    const fusionStr = JSON.stringify(fusion);
-    if (fusion.length > 0 && magasinsEnAvanceSurServeur(JSON.stringify(cloud), fusionStr)) {
-      await saveToSupabase(MAGASINS_KEY, fusion, true);
+    // Copie locale : registre + serveur (la liste reçue n'est pas à renvoyer).
+    saveMagasins(fusionnerMagasins(lireRegistreMagasins(), cloud), { depuisServeur: true });
+    // Liste envoyée : tout ce que ce poste connaît, la version du serveur
+    // l'emportant à date de modification égale.
+    const complete = fusionnerMagasins(listeCompleteMagasins(), cloud);
+    const fusionStr = JSON.stringify(complete);
+    if (complete.length > 0 && magasinsEnAvanceSurServeur(JSON.stringify(cloud), fusionStr)) {
+      // Pas de file d'attente : en cas d'échec, c'est cette fonction qui
+      // réessaie, avec une liste relue et fusionnée à nouveau.
+      await kvSetDoc(APP_DATA, MAGASINS_KEY, { value: complete, updated_at: new Date().toISOString() }, false, { fileAttente: false });
+      logger.log(`✅ Liste des magasins envoyée au serveur (${complete.filter(m => !m.supprime).length} magasins)`);
     }
     lastSnapshot.set(MAGASINS_KEY, fusionStr);
+    marquerMagasinsEnvoyes(marque);
+    derniereSynchroMagasins = Date.now();
     return true;
   })();
   try {
@@ -100,6 +121,51 @@ export async function synchroniserMagasins(): Promise<boolean> {
   } finally {
     synchroMagasinsEnCours = null;
   }
+}
+
+let minuterieMagasins: ReturnType<typeof setTimeout> | null = null;
+let delaiNouvelEssaiMagasins = 0;
+
+/**
+ * Programme une synchronisation de la liste des magasins. `toujours` : même si
+ * rien n'est marqué « à envoyer » (vérification au démarrage, périodique…).
+ * En cas d'échec (réseau, session expirée), nouvel essai de plus en plus espacé
+ * (15 s, 30 s… jusqu'à 5 min) tant que la liste n'est pas arrivée au serveur.
+ */
+export function programmerSynchroMagasins(delai = 800, toujours = false): void {
+  if (!FIREBASE_DATA_ENABLED || typeof window === 'undefined') return;
+  if (minuterieMagasins) clearTimeout(minuterieMagasins);
+  minuterieMagasins = setTimeout(async () => {
+    minuterieMagasins = null;
+    const enAttente = !!magasinsAEnvoyer();
+    if (!toujours && !enAttente) return;
+    // Sans session, le serveur refuserait : reprise au prochain cycle de
+    // synchronisation, qui ne tourne qu'une fois l'utilisateur connecté.
+    if (!(await getValidAccessToken().catch(() => null))) return;
+    try {
+      await synchroniserMagasins();
+      delaiNouvelEssaiMagasins = 0;
+    } catch (err) {
+      logNetworkAware('⚠️ Synchronisation de la liste des magasins (nouvel essai programmé)', err);
+      if (!enAttente && !magasinsAEnvoyer()) return;
+      delaiNouvelEssaiMagasins = Math.min(delaiNouvelEssaiMagasins ? delaiNouvelEssaiMagasins * 2 : 15_000, 300_000);
+      programmerSynchroMagasins(delaiNouvelEssaiMagasins, true);
+    }
+  }, delai);
+}
+
+/** À chaque cycle de synchronisation : envoi en attente, ou relecture périodique de la liste du serveur. */
+function verifierMagasinsAuCycle(): void {
+  if (minuterieMagasins || synchroMagasinsEnCours) return;
+  if (magasinsAEnvoyer()) programmerSynchroMagasins(0, true);
+  else if (Date.now() - derniereSynchroMagasins > VERIF_MAGASINS_MS) programmerSynchroMagasins(0, true);
+}
+
+// Toute modification de la liste faite sur ce poste part vers le serveur sans
+// attendre (et sans dépendre de l'écran où elle a été faite).
+if (typeof window !== 'undefined') {
+  window.addEventListener(EVENEMENT_MAGASINS, () => { if (magasinsAEnvoyer()) programmerSynchroMagasins(); });
+  window.addEventListener('online', () => { if (magasinsAEnvoyer()) programmerSynchroMagasins(0, true); });
 }
 
 const listeners = new Map<string, Set<(value: any) => void>>();
@@ -226,7 +292,7 @@ function ensurePolling() {
           window.dispatchEvent(new CustomEvent(EVENEMENT_MAGASINS));
           // Le serveur a reçu une liste incomplète (ancien appareil) : on lui
           // renvoie la liste complète.
-          if (magasinsEnAvanceSurServeur(rawStr, valueStr)) synchroniserMagasins().catch(() => {});
+          if (magasinsEnAvanceSurServeur(rawStr, valueStr)) programmerSynchroMagasins(0, true);
         }
         const emitted = key === MAGASINS_KEY ? JSON.parse(valueStr) : d.value;
         listeners.get(key)?.forEach(cb => cb(emitted));
@@ -234,6 +300,9 @@ function ensurePolling() {
         window.dispatchEvent(new StorageEvent('storage', { key, newValue: valueStr, oldValue, storageArea: localStorage }));
         window.dispatchEvent(new CustomEvent('supabase-realtime-update', { detail: { key, value: emitted } }));
       }
+      // Liste des magasins : envoi en attente sur ce poste, ou relecture directe
+      // de la liste du serveur (indépendante du suivi des modifications).
+      verifierMagasinsAuCycle();
     } catch (err) {
       // Erreurs d'auth / absence de session : TOTALEMENT SILENCIEUSES ici. Le
       // polling s'exécute en boucle (toutes les quelques secondes) ; pendant une
@@ -364,12 +433,14 @@ export async function loadAllFromSupabase(): Promise<number> {
       // Si la fusion a fait apparaître des magasins locaux absents du cloud,
       // on renvoie la liste fusionnée pour que le cloud (et les autres appareils)
       // convergent — sinon l'ajout resterait bloqué sur ce seul navigateur.
-      if (key === MAGASINS_KEY) {
-        window.dispatchEvent(new CustomEvent(EVENEMENT_MAGASINS));
-        if (magasinsEnAvanceSurServeur(rawStr, mergedStr)) synchroniserMagasins().catch(() => {});
-      }
+      if (key === MAGASINS_KEY) window.dispatchEvent(new CustomEvent(EVENEMENT_MAGASINS));
       count++;
     }
+    // Liste des magasins : comparée au serveur à CHAQUE démarrage, même si la
+    // ligne n'existe pas encore sur le serveur. Ce que ce poste connaît en plus
+    // (magasin ajouté hors connexion, configuration de l'enseigne…) est envoyé ;
+    // ce que le serveur a en plus est ajouté ici.
+    programmerSynchroMagasins(0, true);
     logger.log(`📥 ${count} clés chargées depuis app_data Supabase (${skipped} clés structurées ignorées)`);
     return count;
   } catch (err) {

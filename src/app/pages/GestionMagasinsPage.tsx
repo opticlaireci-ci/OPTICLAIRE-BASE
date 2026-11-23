@@ -4,9 +4,25 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { Plus, Edit2, Trash2, X, Save, ArrowLeft, Database } from 'lucide-react';
 import { getMagasins, addMagasin, updateMagasin, deleteMagasin, EVENEMENT_MAGASINS, type Magasin } from '../constants/magasins';
-import { TENANT } from '../config/tenant';
+import { TENANT, sansEnseigne } from '../config/tenant';
 import { subscribeToChanges, synchroniserMagasins } from '../services/supabaseRealtime';
 import { getValidAccessToken } from '../utils/supabaseClient';
+
+/**
+ * Magasins portant le même nom sous des identifiants différents (ex. un même
+ * magasin créé sur l'ordinateur ET sur l'iPhone quand leurs listes différaient).
+ * Signalés seulement : les ventes peuvent être rattachées à l'un ou à l'autre.
+ */
+export function magasinsEnDouble(magasins: Magasin[]): Magasin[][] {
+  const cle = (m: Magasin) => sansEnseigne(String(m.label || m.id)).normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase().replace(/[^A-Z0-9]+/g, '');
+  const groupes = new Map<string, Magasin[]>();
+  for (const m of magasins) {
+    const k = cle(m);
+    if (k) groupes.set(k, [...(groupes.get(k) || []), m]);
+  }
+  return [...groupes.values()].filter(g => g.length > 1);
+}
 
 export function GestionMagasinsPage() {
   const navigate = useNavigate();
@@ -217,8 +233,8 @@ export function GestionMagasinsPage() {
       alert(
         `⚠️ Magasin "${nomMag}" enregistré LOCALEMENT mais PAS synchronisé.\n\n` +
         `Votre session n'est pas active (fréquent sur Safari/Firefox ou en navigation privée, ` +
-        `qui bloquent le stockage de session). Reconnectez-vous, puis rouvrez cette page : ` +
-        `le magasin sera alors poussé vers le cloud et visible sur tous les appareils.`
+        `qui bloquent le stockage de session). Reconnectez-vous : le magasin sera alors ` +
+        `envoyé automatiquement et visible sur tous les appareils.`
       );
       return;
     }
@@ -233,7 +249,7 @@ export function GestionMagasinsPage() {
       alert(
         `⚠️ Magasin "${nomMag}" enregistré localement, mais la synchronisation cloud a échoué.\n\n` +
         `Détail: ${err instanceof Error ? err.message : String(err)}\n\n` +
-        `Vérifiez votre connexion Internet puis réessayez.`
+        `Il sera renvoyé automatiquement dès que la connexion reviendra (rien à ressaisir).`
       );
     }
     resetForm();
@@ -380,6 +396,18 @@ export function GestionMagasinsPage() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {magasinsEnDouble(magasins).length > 0 && (
+        <div data-testid="magasins-doubles" className="mb-4 p-4 rounded-lg border border-amber-300 bg-amber-50 text-sm text-amber-900">
+          <p className="font-semibold mb-1">Même magasin enregistré deux fois ?</p>
+          {magasinsEnDouble(magasins).map(g => (
+            <p key={g.map(m => m.id).join('|')}>
+              « {sansEnseigne(g[0].label)} » existe sous {g.length} identifiants : {g.map(m => m.id).join(', ')}.
+            </p>
+          ))}
+          <p className="mt-1">Supprimez celui en trop (bouton corbeille) : la suppression s'applique à tous les appareils. Gardez celui qui porte les ventes.</p>
         </div>
       )}
 
