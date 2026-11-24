@@ -1,5 +1,6 @@
 import { logger } from '../utils/logger';
 import { useEffect, useMemo, useState } from 'react';
+import { objectifDuMois } from '../utils/objectifs';
 import { getMagasins } from '../constants/magasins';
 import { chargerToutesLesVentes, abonnerToutesLesVentes, readVentesCache, type VenteSupabase } from '../services/ventesService';
 import { chargerTousLesReglements, type ReglementSupabase } from '../services/reglementsService';
@@ -20,9 +21,9 @@ const REGLEMENTS_CACHE_KEY = 'leclaire_reglements_cache_ALL';
 function readReglementsCache(): ReglementSupabase[] {
   try { return JSON.parse(localStorage.getItem(REGLEMENTS_CACHE_KEY) || '[]'); } catch { return []; }
 }
-function readObjectif(magasinId: string): number {
-  const v = Number(localStorage.getItem(`leclaire_objectif_${magasinId}`));
-  return Number.isFinite(v) ? v : 0;
+/** Objectif mensuel saisi dans « Gérer le magasin » (mois en cours par défaut). */
+function readObjectif(magasinId: string, mois = new Date().getMonth(), annee = new Date().getFullYear()): number {
+  return objectifDuMois(magasinId, mois, annee);
 }
 function readTauxMarge(): number {
   const v = Number(localStorage.getItem('leclaire_taux_marge'));

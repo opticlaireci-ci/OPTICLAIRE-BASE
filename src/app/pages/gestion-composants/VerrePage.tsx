@@ -1,5 +1,6 @@
 import { logger } from '../../utils/logger';
 import { AddButton } from '../../components/AddButton';
+import { lireVentesEnCache } from '../../services/ventesService';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Search, X, Edit, Trash2, FileUp, Printer, ChevronDown } from 'lucide-react';
 import { addCreateAudit, addUpdateAudit, formatDate, AuditInfo } from '../../utils/auditUtils';
@@ -128,10 +129,10 @@ function useVentesVerre(nomVerre: string) {
     let total = 0;
     if (!cible) return { qte, total };
     const magasins = getMagasins();
-    for (const mag of magasins) {
-      const ventes: any[] = [];
-      try { ventes.push(...JSON.parse(localStorage.getItem(`leclaire_ventes_${mag.id}`) || '[]')); } catch {}
-      try { ventes.push(...JSON.parse(localStorage.getItem(`leclaire_vente_flash_${mag.id}`) || '[]')); } catch {}
+    // Copies locales des ventes (nom en MAJUSCULES : `leclaire_ventes_ABOBO`). Avant,
+    // la lecture en minuscules ne trouvait rien : quantité et total vendus à 0.
+    {
+      const ventes: any[] = lireVentesEnCache(magasins.map(m => m.id));
       for (const v of ventes) {
         for (const verre of (v.verres || [])) {
           if ((verre.verre || '').toLowerCase().trim() !== cible) continue;

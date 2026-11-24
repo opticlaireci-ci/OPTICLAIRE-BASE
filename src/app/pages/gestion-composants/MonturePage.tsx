@@ -1,5 +1,6 @@
 import { logger } from '../../utils/logger';
 import React, { useState, useCallback, useEffect } from 'react';
+import { lireVentesEnCache } from '../../services/ventesService';
 import { useLiveData } from '../../hooks/useLiveData';
 import { genCodeCourt } from '../../utils/autoNumbers';
 import { getMagasins } from '../../constants/magasins';
@@ -131,10 +132,10 @@ function useVentesMonture(reference: string, codeBarre: string, marque: string) 
 
     let qte = 0;
     let total = 0;
-    for (const mag of magasins) {
-      const ventes: any[] = [];
-      try { ventes.push(...JSON.parse(localStorage.getItem(`leclaire_ventes_${mag.id}`) || '[]')); } catch {}
-      try { ventes.push(...JSON.parse(localStorage.getItem(`leclaire_vente_flash_${mag.id}`) || '[]')); } catch {}
+    // Copies locales des ventes (nom en MAJUSCULES : `leclaire_ventes_ABOBO`). Avant,
+    // la lecture en minuscules ne trouvait rien : quantité et total vendus à 0.
+    {
+      const ventes: any[] = lireVentesEnCache(magasins.map(m => m.id));
       for (const v of ventes) {
         for (const art of (v.articles || [])) {
           const d = (art.designation || '').toLowerCase().trim();

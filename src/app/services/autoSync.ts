@@ -267,12 +267,26 @@ function debouncedCloudPush(key: string, value: string) {
     cloudPushTimers.delete(key);
     // Relire la valeur la plus récente au moment du push (peut avoir évolué).
     const latest = originalGetItem(key) ?? value;
-    try {
-      const parsed = JSON.parse(latest);
-      pushWithRetry(`app_data ${key}`, key, () => saveToSupabase(key, parsed, true));
-    } catch {
-      pushWithRetry(`app_data ${key}`, key, () => saveToSupabase(key, latest, true));
+    // « undefined » / « null » ne sont jamais une donnée : ils proviennent d'une
+    // écriture fautive (JSON.stringify d'une fonction ou d'une valeur absente).
+    // Les envoyer remplaçait (ou supprimait) la donnée partagée sur le serveur.
+    if (latest === 'undefined' || latest === 'null') {
+      logger.warn(`🛡️ Envoi ignoré pour ${key} : valeur vide (« ${latest} »)`);
+      return;
     }
+    // Chaque tentative (y compris les nouvelles tentatives après une coupure)
+    // relit la valeur ACTUELLE de l'appareil : une copie figée au premier essai
+    // pouvait, au retour du réseau, écraser ce qui avait été reçu entre-temps
+    // d'un autre appareil.
+    const valeurActuelle = () => {
+      const brut = originalGetItem(key) ?? latest;
+      try { return JSON.parse(brut); } catch { return brut; }
+    };
+    pushWithRetry(`app_data ${key}`, key, () => {
+      const v = valeurActuelle();
+      if (v === undefined || v === null || v === 'undefined' || v === 'null') return Promise.resolve(true);
+      return saveToSupabase(key, v, true);
+    });
   }, CLOUD_PUSH_DEBOUNCE_MS));
 }
 

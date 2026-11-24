@@ -935,25 +935,35 @@ function NavigationMenu() {
 
   // Composant pour les boutons État de Stock Disponible
   const StockButtons = () => {
-    const MAGASINS = getMagasins().map(magasin => magasin.id);
+    // Stock RÉEL de chaque magasin (mouvements, bons, ventes : le même calcul que
+    // « État de Stock »). Avant, ces boutons lisaient d'anciennes copies locales
+    // (`leclaire_montures_<magasin>`) que l'application n'écrit plus : les états
+    // imprimés ou exportés étaient toujours vides.
+    const lireStockDisponible = async (type: 'monture' | 'accessoire') => {
+      const magasins = getMagasins();
+      const { loadStocksParMagasin } = await import('../services/inventaireService');
+      const parMagasin = await loadStocksParMagasin(magasins.map(m => m.id));
+      const lignes: { reference: string; designation: string; quantite: number; magasin: string; prixVente: number }[] = [];
+      for (const [id, rows] of Object.entries(parMagasin)) {
+        const libelle = getMagasins().find(m => m.id.toUpperCase() === id.toUpperCase())?.label || `${TENANT.nom} ${id}`;
+        for (const r of rows || []) {
+          if (r.produitType !== type || !(Number(r.quantiteDisponible) > 0)) continue;
+          lignes.push({ reference: r.codeBarre || '', designation: r.designation || '', quantite: Number(r.quantiteDisponible) || 0, magasin: libelle, prixVente: Number(r.prixVente) || 0 });
+        }
+      }
+      return lignes.sort((a, b) => a.magasin.localeCompare(b.magasin) || a.designation.localeCompare(b.designation));
+    };
+    // CSV lisible par Excel en français : « ; » comme séparateur et marque UTF-8
+    // (sinon tout tient dans une colonne et les accents sont abîmés).
+    const csvStock = (lignes: Awaited<ReturnType<typeof lireStockDisponible>>) => {
+      const c = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+      const corps = lignes.map(l => [c(l.reference), c(l.designation), c(l.magasin), l.quantite, l.prixVente || 0].join(';'));
+      const total = [c(''), c('Total'), c(''), lignes.reduce((t, l) => t + l.quantite, 0), ''].join(';');
+      return '\ufeff' + ['Référence;Désignation;Magasin;Quantité;Prix de Vente', ...corps, total].join('\r\n') + '\r\n';
+    };
 
-    const handlePrintMontures = () => {
-      const allMontures: any[] = [];
-      MAGASINS.forEach(magasinId => {
-        const monturesKey = `leclaire_montures_${magasinId}`;
-        const monturesData = JSON.parse(localStorage.getItem(monturesKey) || '[]');
-        monturesData.forEach((monture: any) => {
-          if (monture.quantite > 0 || monture.stock > 0) {
-            allMontures.push({
-              reference: monture.reference || monture.code || '',
-              designation: monture.designation || monture.nom || monture.modele || '',
-              quantite: monture.quantite || monture.stock || 0,
-              magasin: `${TENANT.nom} ${magasinId.toUpperCase()}`,
-              prixVente: monture.prixVente || monture.prix || 0,
-            });
-          }
-        });
-      });
+    const handlePrintMontures = async () => {
+      const allMontures = await lireStockDisponible('monture');
 
       const content = `
         <!DOCTYPE html>
@@ -1005,31 +1015,10 @@ function NavigationMenu() {
       afficherHtml(content, { titre: 'État de Stock - Montures' });
     };
 
-    const handleExportMonturesExcel = () => {
-      const allMontures: any[] = [];
-      MAGASINS.forEach(magasinId => {
-        const monturesKey = `leclaire_montures_${magasinId}`;
-        const monturesData = JSON.parse(localStorage.getItem(monturesKey) || '[]');
-        monturesData.forEach((monture: any) => {
-          if (monture.quantite > 0 || monture.stock > 0) {
-            allMontures.push({
-              reference: monture.reference || monture.code || '',
-              designation: monture.designation || monture.nom || monture.modele || '',
-              quantite: monture.quantite || monture.stock || 0,
-              magasin: `${TENANT.nom} ${magasinId.toUpperCase()}`,
-              prixVente: monture.prixVente || monture.prix || 0,
-            });
-          }
-        });
-      });
+    const handleExportMonturesExcel = async () => {
+      const allMontures = await lireStockDisponible('monture');
 
-      let csv = 'Référence,Désignation,Magasin,Quantité,Prix de Vente\n';
-      allMontures.forEach(m => {
-        csv += `"${m.reference}","${m.designation}","${m.magasin}",${m.quantite},${m.prixVente || 0}\n`;
-      });
-      csv += `"","Total","",${allMontures.reduce((sum, m) => sum + m.quantite, 0)},\n`;
-
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const blob = new Blob([csvStock(allMontures)], { type: 'text/csv;charset=utf-8;' });
       const link = document.createElement('a');
       const url = URL.createObjectURL(blob);
       link.setAttribute('href', url);
@@ -1040,23 +1029,8 @@ function NavigationMenu() {
       document.body.removeChild(link);
     };
 
-    const handlePrintAccessoires = () => {
-      const allAccessoires: any[] = [];
-      MAGASINS.forEach(magasinId => {
-        const accessoiresKey = `leclaire_accessoires_${magasinId}`;
-        const accessoiresData = JSON.parse(localStorage.getItem(accessoiresKey) || '[]');
-        accessoiresData.forEach((accessoire: any) => {
-          if (accessoire.quantite > 0 || accessoire.stock > 0) {
-            allAccessoires.push({
-              reference: accessoire.reference || accessoire.code || '',
-              designation: accessoire.designation || accessoire.nom || '',
-              quantite: accessoire.quantite || accessoire.stock || 0,
-              magasin: `${TENANT.nom} ${magasinId.toUpperCase()}`,
-              prixVente: accessoire.prixVente || accessoire.prix || 0,
-            });
-          }
-        });
-      });
+    const handlePrintAccessoires = async () => {
+      const allAccessoires = await lireStockDisponible('accessoire');
 
       const content = `
         <!DOCTYPE html>
@@ -1108,31 +1082,10 @@ function NavigationMenu() {
       afficherHtml(content, { titre: 'État de Stock - Accessoires' });
     };
 
-    const handleExportAccessoiresExcel = () => {
-      const allAccessoires: any[] = [];
-      MAGASINS.forEach(magasinId => {
-        const accessoiresKey = `leclaire_accessoires_${magasinId}`;
-        const accessoiresData = JSON.parse(localStorage.getItem(accessoiresKey) || '[]');
-        accessoiresData.forEach((accessoire: any) => {
-          if (accessoire.quantite > 0 || accessoire.stock > 0) {
-            allAccessoires.push({
-              reference: accessoire.reference || accessoire.code || '',
-              designation: accessoire.designation || accessoire.nom || '',
-              quantite: accessoire.quantite || accessoire.stock || 0,
-              magasin: `${TENANT.nom} ${magasinId.toUpperCase()}`,
-              prixVente: accessoire.prixVente || accessoire.prix || 0,
-            });
-          }
-        });
-      });
+    const handleExportAccessoiresExcel = async () => {
+      const allAccessoires = await lireStockDisponible('accessoire');
 
-      let csv = 'Référence,Désignation,Magasin,Quantité,Prix de Vente\n';
-      allAccessoires.forEach(a => {
-        csv += `"${a.reference}","${a.designation}","${a.magasin}",${a.quantite},${a.prixVente || 0}\n`;
-      });
-      csv += `"","Total","",${allAccessoires.reduce((sum, a) => sum + a.quantite, 0)},\n`;
-
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const blob = new Blob([csvStock(allAccessoires)], { type: 'text/csv;charset=utf-8;' });
       const link = document.createElement('a');
       const url = URL.createObjectURL(blob);
       link.setAttribute('href', url);

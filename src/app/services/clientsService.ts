@@ -15,6 +15,7 @@ import { db, auth } from '../utils/firebaseClient';
 import { journaliserSuppression } from './auditLogService';
 import { logNetworkAware } from '../utils/networkErrors';
 import { emettreGroupe } from '../utils/evenementsGroupes';
+import { normaliseurMagasins } from '../constants/magasins';
 
 export interface ClientRow {
   id: string;
@@ -101,8 +102,11 @@ export async function chargerTousLesClients(
     const snap = await getDocs(collection(db, COLLECTION));
     const all = snap.docs.map(d => ({ id: d.id, ...d.data() } as ClientRow));
     const result: Record<string, ClientRow[]> = {};
+    // Comparaison quelle que soit l'écriture du magasin (majuscules, libellé, ancien nom).
+    const normMag = normaliseurMagasins();
     for (const id of magasinIds) {
-      const rows = sortByEdition(all.filter(c => c.magasin_id === id));
+      const cible = normMag(id);
+      const rows = sortByEdition(all.filter(c => c.magasin_id === id || (!!cible && normMag(c.magasin_id) === cible)));
       result[id] = rows;
       writeClientsCache(id, rows);
     }

@@ -78,7 +78,9 @@ export function InventaireLentillesPage() {
     user?.magasinActuel || user?.magasinIds?.[0] || getMagasins()[0]?.id || '';
 
   // Stock actuel (overrides OPTIC) pour pré-remplir le stock théorique.
-  const [opticData] = useLiveData<OpticOverrides>(OPTIC_STORAGE_KEY, [] as any);
+  // Le stock des lentilles est un OBJET (cases) : valeur par défaut {} (avec [],
+  // l'objet enregistré était refusé comme n'étant pas une liste).
+  const [opticData] = useLiveData<OpticOverrides>(OPTIC_STORAGE_KEY, {} as any);
   const overrides: OpticOverrides = (opticData as any)?.[0] ?? (opticData as any) ?? {};
 
   // Liste des inventaires persistée dans Supabase (même entité que montures,

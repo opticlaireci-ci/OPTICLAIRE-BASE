@@ -79,6 +79,8 @@ interface Props {
   ventes: SgopticVente[];
   reglements: SgopticReglement[];
   objectif?: number;
+  /** Objectif du mois choisi dans le tableau de bord (`mois` : 0 = janvier). Prioritaire sur `objectif`. */
+  objectifPour?: (annee: number, mois: number) => number;
   tauxMarge?: number;
   /** Contrôles additionnels (ex : filtre magasin) rendus à droite du bandeau STATISTIQUES. */
   headerControls?: ReactNode;
@@ -89,12 +91,13 @@ interface Props {
 }
 
 export function SgopticDashboard({
-  title, ventes, reglements, objectif = 0, tauxMarge = 0.4, headerControls,
+  title, ventes, reglements, objectif: objectifFixe = 0, objectifPour, tauxMarge = 0.4, headerControls,
   afficherActiviteMensuelle = true, afficherActiviteAnnuelle = true,
 }: Props) {
   const now = new Date();
   const [selYear, setSelYear] = useState<number>(now.getFullYear());
   const [selMonth, setSelMonth] = useState<number>(now.getMonth());
+  const objectif = objectifPour ? objectifPour(selYear, selMonth) : objectifFixe;
 
   const data = useMemo(() => {
     const dateOf = (s: any) => { const d = new Date(s || 0); return isNaN(d.getTime()) ? null : d; };

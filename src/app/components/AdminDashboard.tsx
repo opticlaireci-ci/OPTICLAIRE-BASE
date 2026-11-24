@@ -1,5 +1,6 @@
 import { useMemo, useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { useLiveData } from '../hooks/useLiveData';
+import { normaliseurMagasins } from '../constants/magasins';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell, AreaChart, Area, RadialBarChart, RadialBar,
@@ -17,7 +18,8 @@ interface Props {
   reglements: ReglementSupabase[];
   magasins: MagasinRef[];
   objectifGlobal: number;
-  objectifDe: (magasinId: string) => number;
+  /** Objectif mensuel d'un magasin (`mois` : 0 = janvier). */
+  objectifDe: (magasinId: string, mois?: number, annee?: number) => number;
   tauxMarge: number;
 }
 
@@ -250,9 +252,18 @@ export function AdminDashboard({ ventes, reglements, magasins, objectifGlobal, o
   );
 
   const d = useMemo(() => {
-    const filt = (v: any) => magasin === '__TOUS__' || v.magasin_id === magasin;
-    const filtR = (r: any) => magasin === '__TOUS__' || r.magasin_id === magasin;
-    const objectif = magasin === '__TOUS__' ? objectifGlobal : objectifDe(magasin);
+    // Même magasin quelle que soit l'écriture (« abobo », « ABOBO », « LECLAIRE
+    // ABOBO », ancien nom…) : une comparaison exacte écartait les ventes et
+    // règlements enregistrés autrement (anciennes versions, imports).
+    const normMag = normaliseurMagasins();
+    const magSel = normMag(magasin);
+    const filt = (v: any) => magasin === '__TOUS__' || normMag(v.magasin_id) === magSel;
+    const filtR = (r: any) => magasin === '__TOUS__' || normMag(r.magasin_id) === magSel;
+    // Objectif du MOIS affiché (somme des magasins pour « Tous ») : avant, celui
+    // du mois en cours restait affiché quel que soit le mois choisi.
+    const objectif = magasin === '__TOUS__'
+      ? (magasins.length ? magasins.reduce((t: number, m: any) => t + objectifDe(m.id, mois, annee), 0) : objectifGlobal)
+      : objectifDe(magasin, mois, annee);
 
     const ventesA = ventes.filter(filt);
     const reglementsA = reglements.filter(filtR);

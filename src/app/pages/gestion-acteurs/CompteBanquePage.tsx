@@ -12,7 +12,10 @@ import CloseIcon from '@mui/icons-material/Close';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import { api } from '../../services/api';
 import { addCreateAudit, addUpdateAudit, logDeletion, showAuditNotification } from '../../utils/auditUtils';
-import { getMagasins, type Magasin } from '../../constants/magasins';
+import { getMagasins, magasinCanonique, type Magasin } from '../../constants/magasins';
+import { chargerToutesLesVentes, readVentesCache } from '../../services/ventesService';
+import { chargerTousLesReglements } from '../../services/reglementsService';
+import { estPaiementAssurance } from '../../utils/venteTotals';
 import { useAuth } from '../../contexts/AuthContext';
 import { canAdd } from '../../utils/actionRights';
 
@@ -33,28 +36,44 @@ function loadMagasins(): Magasin[] {
 }
 
 /**
- * Calcule les entrées d'un magasin VENTILÉES par compte banque choisi lors de la
- * vente. Retourne un objet { NOM_COMPTE_MAJUSCULE: montant }. Ainsi, si une vente
- * a été enregistrée sur « CAISSE INTERNE », le montant n'alimente QUE ce compte —
- * et non tous les comptes disponibles (correction du double comptage).
+ * Entrées de chaque magasin VENTILÉES par compte banque : l'argent réellement
+ * reçu, sur le compte choisi à chaque encaissement (si une vente a été
+ * enregistrée sur « CAISSE INTERNE », son acompte n'alimente QUE ce compte) :
+ *   • l'acompte versé à l'enregistrement de la vente (compte de la vente) ;
+ *   • chaque règlement (compte choisi pour ce règlement).
+ * Jamais la part assurance, ni les devis.
+ *
+ * Avant, ce calcul lisait une copie locale sous un nom erroné
+ * (`leclaire_ventes_abobo` au lieu de `leclaire_ventes_ABOBO`) et des champs
+ * de montant qui n'existent pas sur les ventes : les entrées restaient à 0.
+ * Résultat : { idMagasin: { NOM_COMPTE_MAJUSCULE: montant } }.
  */
-function calcEntreesParCompte(magasinId: string): Record<string, number> {
-  const map: Record<string, number> = {};
-  try {
-    const ventes: any[] = JSON.parse(localStorage.getItem(`leclaire_ventes_${magasinId}`) || '[]');
-    const flash: any[] = JSON.parse(localStorage.getItem(`leclaire_vente_flash_${magasinId}`) || '[]');
-    for (const v of [...ventes, ...flash]) {
-      const amt = parseFloat(String(v.totalNet ?? v.montantTotal ?? v.montant ?? v.total ?? 0)) || 0;
-      if (!amt) continue;
-      const compte = String(
-        v?.recap?.compteBanque ?? v?.compteBanque ?? v?.compte_banque ?? ''
-      ).trim().toUpperCase();
-      if (!compte) continue; // sans compte défini → on n'attribue à aucun
-      map[compte] = (map[compte] || 0) + amt;
-    }
-  } catch { /* ignore */ }
+function calcEntreesParMagasin(mgs: Magasin[], ventes: any[], reglements: any[]): Record<string, Record<string, number>> {
+  const parCanon = new Map<string, string>();
+  for (const m of mgs) parCanon.set(magasinCanonique(m.id), m.id);
+  const map: Record<string, Record<string, number>> = Object.fromEntries(mgs.map(m => [m.id, {}]));
+  const ajouter = (magasin: unknown, compteBrut: unknown, montant: number) => {
+    const id = parCanon.get(magasinCanonique(magasin));
+    const compte = String(compteBrut ?? '').trim().toUpperCase();
+    if (!id || !compte || !montant) return; // sans compte défini → on n'attribue à aucun
+    map[id][compte] = (map[id][compte] || 0) + montant;
+  };
+  for (const v of ventes) {
+    if ((v?.type || 'vente') !== 'vente') continue;
+    if (estPaiementAssurance(v?.recap?.modePaiement)) continue;
+    ajouter(v?.magasin_id, v?.recap?.compteBanque ?? v?.compteBanque ?? v?.compte_banque, Number(v?.recap?.acompte ?? 0) || 0);
+  }
+  for (const r of reglements) {
+    if (estPaiementAssurance(r?.mode_paiement ?? r?.modePaiement)) continue;
+    // Ligne technique des anciennes importations (acompte déjà compté dans la vente).
+    if (String(r?.details || '').trim().toLowerCase() === 'acompte importé') continue;
+    ajouter(r?.magasin_id, r?.compte_banque ?? r?.compteBanque, Number(r?.montant) || 0);
+  }
   return map;
 }
+
+let derniereLectureEntrees = 0;
+let dernieresDonnees: { ventes: any[]; reglements: any[] } | null = null;
 
 function fmt(n: number) {
   return n.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -93,9 +112,23 @@ export function CompteBanquePage() {
   const [transferring, setTransferring] = useState<string | null>(null);
 
   const refreshEntrees = useCallback((mgs: Magasin[]) => {
-    const map: Record<string, Record<string, number>> = {};
-    mgs.forEach(m => { map[m.id] = calcEntreesParCompte(m.id); });
-    setEntrees(map);
+    // Affichage immédiat : dernières données lues de la base, sinon copies locales.
+    if (dernieresDonnees) setEntrees(calcEntreesParMagasin(mgs, dernieresDonnees.ventes, dernieresDonnees.reglements));
+    else {
+      let cacheReglements: any[] = [];
+      try { cacheReglements = JSON.parse(localStorage.getItem('leclaire_reglements_cache_ALL') || '[]'); } catch { /* copie abîmée */ }
+      setEntrees(calcEntreesParMagasin(mgs, readVentesCache('ALL'), Array.isArray(cacheReglements) ? cacheReglements : []));
+    }
+    // Les événements de synchronisation arrivent en rafale : une relecture
+    // complète de la base au plus toutes les 60 s.
+    if (Date.now() - derniereLectureEntrees < 60_000) return;
+    derniereLectureEntrees = Date.now();
+    Promise.all([chargerToutesLesVentes(), chargerTousLesReglements()])
+      .then(([ventes, reglements]) => {
+        dernieresDonnees = { ventes: ventes || [], reglements: reglements || [] };
+        setEntrees(calcEntreesParMagasin(mgs, dernieresDonnees.ventes, dernieresDonnees.reglements));
+      })
+      .catch(() => { derniereLectureEntrees = 0; /* hors ligne : nouvel essai au prochain événement */ });
   }, []);
 
   useEffect(() => {

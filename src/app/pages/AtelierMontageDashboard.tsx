@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { useLiveData } from '../hooks/useLiveData';
+import { lireVentesEnCache } from '../services/ventesService';
 import { getMagasins } from '../constants/magasins';
 import { Package, Eye, AlertTriangle, XCircle, Wallet } from 'lucide-react';
 import {
@@ -166,10 +167,10 @@ export function AtelierMontageCharts({ bons }: { bons: MontageBon[] }) {
   const topProduits = useMemo(() => {
     const magasins = getMagasins();
     const parProduit = new Map<string, number>();
-    for (const mag of magasins) {
-      const lots: any[] = [];
-      try { lots.push(...JSON.parse(localStorage.getItem(`leclaire_ventes_${mag.id}`) || '[]')); } catch {}
-      try { lots.push(...JSON.parse(localStorage.getItem(`leclaire_vente_flash_${mag.id}`) || '[]')); } catch {}
+    // Copies locales des ventes (nom en MAJUSCULES) : la lecture en minuscules ne
+    // trouvait rien, la liste des produits les plus vendus restait vide.
+    {
+      const lots: any[] = lireVentesEnCache(magasins.map(m => m.id));
       for (const v of lots) {
         for (const art of (v.articles || [])) {
           const nom = (art.designation || '').trim();

@@ -60,7 +60,10 @@ export function useBons<T extends { id: string }>(type: TypeBon, magasinIds?: st
       const rows = await lireBonsTable(type, filtre.length ? filtre : undefined);
       let liste = rows.map(r => DEPUIS_LIGNE[type](r)) as T[];
       // Administration : bons présents seulement dans l'ancienne liste → remis dans la table.
-      if (!filtre.length && !recuperees.has(type)) {
+      // Seulement si la table ne contient encore AUCUN bon de ce type (reprise
+      // initiale) : l'ancienne liste est figée depuis la migration, la relire à
+      // chaque ouverture ferait revenir les bons supprimés depuis.
+      if (!filtre.length && !recuperees.has(type) && liste.length === 0) {
         recuperees.add(type);
         try {
           const anciens = await loadFromSupabase<any>(cle, []);

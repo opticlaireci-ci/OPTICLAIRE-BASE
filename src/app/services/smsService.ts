@@ -681,8 +681,11 @@ export async function envoyerRenouvellementsDuJour(): Promise<number> {
     if (!ventes || !ventes.length) return 0;
 
     const delai = config.delaiRenouvellementMois || 20;
-    const seuil = new Date();
-    seuil.setMonth(seuil.getMonth() - delai);
+    // N mois en arrière, même jour (borné à la fin du mois : le 31 mars − 1 mois
+    // donnait le 3 mars, soit quelques jours d'avance sur le délai).
+    const auj = new Date();
+    const finMois = new Date(auj.getFullYear(), auj.getMonth() - delai + 1, 0).getDate();
+    const seuil = new Date(auj.getFullYear(), auj.getMonth() - delai, Math.min(auj.getDate(), finMois), auj.getHours(), auj.getMinutes());
 
     let envoyes = 0;
     for (const v of ventes) {

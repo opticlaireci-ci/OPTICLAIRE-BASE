@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { Search, X, Edit, MessageSquare, Plus, FileDown, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight } from 'lucide-react';
 import { addCreateAudit, addUpdateAudit, formatAuditInfo, formatDate, AuditInfo } from '../../utils/auditUtils';
-import { getMagasins } from '../../constants/magasins';
+import { getMagasins, magasinCanonique } from '../../constants/magasins';
 import { AddButton } from '../../components/AddButton';
 import { chargerClients, upsertClient, subscribeClientsMagasin, readClientsCache, type ClientRow } from '../../services/clientsService';
 import { chargerToutesLesVentes, abonnerToutesLesVentes, readVentesCache, type VenteSupabase } from '../../services/ventesService';
@@ -43,9 +43,16 @@ interface Client extends AuditInfo {
 const genNum = () => String(Math.floor(10000 + Math.random() * 90000));
 
 // ── Mapping Firestore (snake_case) ↔ UI (camelCase) ───────────────────────────
+/** Identifiant du magasin tel que dans la liste (« ABOBO » ou « LECLAIRE ABOBO » → « abobo »). */
+const idMagasinConnu = (id?: string) => {
+  if (!id || id === 'global') return id;
+  const cible = magasinCanonique(id);
+  return getAllMagasins().find(m => m.id === id || (!!cible && magasinCanonique(m.id) === cible))?.id ?? id;
+};
 const magLabelOf = (id?: string) => {
   if (!id || id === 'global') return 'Global';
-  return getAllMagasins().find(m => m.id === id)?.label ?? id;
+  const connu = idMagasinConnu(id);
+  return getAllMagasins().find(m => m.id === connu)?.label ?? id;
 };
 
 function rowToClient(r: ClientRow): Client {
@@ -56,7 +63,7 @@ function rowToClient(r: ClientRow): Client {
     jourNaissance: r.jour_naissance, moisNaissance: r.mois_naissance, anneeNaissance: r.annee_naissance,
     matriculeAssurance: r.matricule_assurance, entreprise: r.entreprise, notes: r.notes,
     solde: r.solde ?? 0, dateEdition: r.date_edition, source: r.source,
-    magasinId: r.magasin_id, magasinLabel: magLabelOf(r.magasin_id),
+    magasinId: idMagasinConnu(r.magasin_id), magasinLabel: magLabelOf(r.magasin_id),
     createdBy: any.createdBy, createdAt: any.createdAt, updatedBy: any.updatedBy, updatedAt: any.updatedAt,
   } as Client;
 }
@@ -90,7 +97,7 @@ function extractFromVentesRows(ventes: VenteSupabase[]): Client[] {
     out.push({
       id: `v-${num}`, numeroClient: num, nom: v.client || '', telephone: v.telephone || '',
       solde: (v.total_net || 0) - a - as2, dateEdition: v.date || new Date().toISOString(),
-      source: 'vente', magasinId: v.magasin_id, magasinLabel: magLabelOf(v.magasin_id),
+      source: 'vente', magasinId: idMagasinConnu(v.magasin_id), magasinLabel: magLabelOf(v.magasin_id),
     } as Client);
   });
   return out;

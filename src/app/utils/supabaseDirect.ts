@@ -1,6 +1,7 @@
 import { logger } from './logger';
 import { supabase } from './supabaseClient';
 import { isPermissionError, isAuthError, isNoSessionError } from './networkErrors';
+import { fusionnerListes, listeAvecIds, baseDeFusion } from './fusionListes';
 
 /**
  * NOYAU "ACCÈS DIRECT" — remplace supabaseKv.ts.
@@ -411,7 +412,10 @@ export async function kvGetCollectionDelta<T = any>(
 /** Renvoie un document par id, ou null s'il n'existe pas. */
 export async function kvGetDoc<T = any>(entity: string, id: string): Promise<T | null> {
   const target = resolveTarget(entity);
-  const key = isAppData(target) ? `${target.refType}:${id}` : id;
+  // Clé brute pour `app_data` (« leclaire_magasins »), préfixée seulement pour
+  // un sous-type. Avant : « undefined:leclaire_magasins » → toute lecture
+  // directe d'un réglage partagé renvoyait « rien ».
+  const key = isAppData(target) ? appDataKey(target, id) : id;
   const col = isAppData(target) ? 'key' : 'id';
   let query = supabase.from(target.table).select('*').eq(col, key);
   if (isRefTable(target)) query = query.eq('type', target.refType);
@@ -478,6 +482,67 @@ function enqueuePendingWrite(entity: string, id: string, value: Record<string, a
   writePendingWrites(rows);
 }
 
+/**
+ * ÉCRITURE CONDITIONNELLE d'une liste partagée (`app_data`), avec fusion.
+ *
+ * Lit la version du serveur et son horodatage, fusionne (voir fusionnerListes),
+ * puis n'écrit QUE si personne n'a écrit entre-temps (même horodatage) ; sinon
+ * relit la nouvelle version, refusionne et recommence. Deux appareils qui
+ * enregistrent à la même milliseconde ne s'écrasent donc plus.
+ *
+ * `baseConnue` : dernière version reçue du serveur (null si inconnue : seuls
+ * les éléments communs à `avant` et au serveur servent alors de base — un
+ * élément présent seulement sur cet appareil n'est jamais supprimé).
+ * Renvoie la liste réellement enregistrée. Lève une erreur si le serveur ne
+ * répond pas (l'appelant se rabat alors sur l'écriture habituelle, mise en file).
+ */
+export async function kvEcrireListeFusionnee(
+  id: string,
+  baseConnue: unknown,
+  locale: Array<{ id: string | number }>,
+  avant: unknown = locale,
+): Promise<Array<{ id: string | number }>> {
+  for (let essai = 0; essai < 6; essai++) {
+    const { data, error } = await supabase.from('app_data').select('value, updated_at').eq('key', id).maybeSingle();
+    if (error) throw new Error(`lecture ${id}: ${error.message}`);
+    const ligne: any = data;
+    const distante = ligne?.value?.value;
+    const base = listeAvecIds(baseConnue) ? baseConnue : baseDeFusion(null, avant, distante);
+    const resultat = listeAvecIds(distante) ? fusionnerListes(base, locale, distante) : locale;
+    const valeur = { ...(ligne?.value && typeof ligne.value === 'object' ? ligne.value : {}), id, value: resultat };
+    const maintenant = new Date().toISOString();
+    if (!ligne) {
+      const { error: e2 } = await supabase.from('app_data').insert({ key: id, value: valeur, updated_at: maintenant });
+      if (!e2) return resultat;
+      if (String((e2 as any).code) === '23505' || /duplicate|unique/i.test(e2.message || '')) continue; // créée entre-temps
+      throw new Error(`création ${id}: ${e2.message}`);
+    }
+    let q: any = supabase.from('app_data').update({ value: valeur, updated_at: maintenant }).eq('key', id);
+    q = ligne.updated_at ? q.eq('updated_at', ligne.updated_at) : q.is('updated_at', null);
+    const { data: maj, error: e3 } = await q.select('key');
+    if (e3) throw new Error(`écriture ${id}: ${e3.message}`);
+    if (Array.isArray(maj) && maj.length) return resultat;
+    // Une autre écriture est passée entre la lecture et l'écriture : on recommence.
+    await new Promise(r => setTimeout(r, 80 + Math.random() * 200));
+  }
+  throw new Error(`écriture ${id}: conflit persistant`);
+}
+
+/**
+ * Liste partagée (`app_data`) mise en file pendant une coupure : au retour du
+ * réseau, elle est FUSIONNÉE avec la version actuelle du serveur au lieu de la
+ * remplacer — les ajouts faits entre-temps sur les autres appareils restent,
+ * et ce qui a été saisi ici hors ligne arrive.
+ */
+async function rejouerEcriture(item: any): Promise<void> {
+  const liste = item?.value?.value;
+  const cible = resolveTarget(item?.entity);
+  if (cible.table === 'app_data' && !cible.refType && listeAvecIds(liste)) {
+    try { await kvEcrireListeFusionnee(item.id, null, liste, liste); return; } catch { /* repli : écriture habituelle */ }
+  }
+  await kvSetDocInternal(item.entity, item.id, item.value, !!item.merge, false);
+}
+
 async function flushPendingWrites() {
   if (pendingFlushRunning) return;
   pendingFlushRunning = true;
@@ -485,18 +550,28 @@ async function flushPendingWrites() {
     const rows = readPendingWrites();
     if (!rows.length) return;
     const remaining: any[] = [];
-    for (const item of rows) {
+    const ident = (r: any) => `${r?.entity}|${r?.id}|${r?.queuedAt}`;
+    for (let i = 0; i < rows.length; i++) {
+      const item = rows[i];
       try {
-        await kvSetDocInternal(item.entity, item.id, item.value, !!item.merge, false);
+        await rejouerEcriture(item);
       } catch (err) {
         // On conserve uniquement ce qui est encore potentiellement récupérable.
         // Une erreur de droits/session ne doit pas supprimer silencieusement la
         // donnée : elle reste en file et sera retentée après reconnexion/correction.
         remaining.push(item);
-        if (!isRetryableWriteError(err)) break;
+        if (!isRetryableWriteError(err)) {
+          // Les écritures suivantes restent en file (avant : elles étaient
+          // retirées sans avoir été envoyées).
+          remaining.push(...rows.slice(i + 1));
+          break;
+        }
       }
     }
-    writePendingWrites(remaining);
+    // Écritures ajoutées à la file PENDANT l'envoi : conservées.
+    const traitees = new Set(rows.map(ident));
+    const nouvelles = readPendingWrites().filter(r => !traitees.has(ident(r)));
+    writePendingWrites([...remaining, ...nouvelles]);
   } finally {
     pendingFlushRunning = false;
   }
@@ -632,7 +707,15 @@ export async function kvCreateDoc(entity: string, value: Record<string, any>): P
 /** Supprime un document. */
 export async function kvDeleteDoc(entity: string, id: string): Promise<void> {
   const target = resolveTarget(entity);
-  const key = isAppData(target) ? `${target.refType}:${id}` : id;
+  // Réglages partagés (`app_data` brut) : jamais supprimés depuis un appareil.
+  // Effacer une copie locale (nettoyage des caches à la déconnexion, réparation)
+  // passe par ici : une vraie suppression effacerait la donnée de TOUS les
+  // appareils. (C'était déjà le cas de fait : la clé visée était erronée.)
+  if (isAppData(target) && !target.refType) {
+    logger.log(`ℹ️ Réglage partagé conservé sur le serveur : ${id}`);
+    return;
+  }
+  const key = isAppData(target) ? appDataKey(target, id) : id;
   const col = isAppData(target) ? 'key' : 'id';
   let query = supabase.from(target.table).delete().eq(col, key);
   if (isRefTable(target)) query = query.eq('type', target.refType);

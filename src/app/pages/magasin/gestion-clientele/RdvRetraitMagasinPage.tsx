@@ -104,8 +104,9 @@ function CalendarView({ ventes }: { ventes: any[] }) {
     return map;
   }, [ventes]);
 
-  const prev = () => { const d = new Date(current); d.setMonth(d.getMonth() - 1); setCurrent(d); };
-  const next = () => { const d = new Date(current); d.setMonth(d.getMonth() + 1); setCurrent(d); };
+  // Le 1er du mois : depuis un 31, « mois suivant » sautait un mois (31 oct. → déc.).
+  const prev = () => setCurrent(new Date(current.getFullYear(), current.getMonth() - 1, 1));
+  const next = () => setCurrent(new Date(current.getFullYear(), current.getMonth() + 1, 1));
   const goToday = () => setCurrent(new Date());
 
   const firstDayOfWeek = new Date(year, month, 1).getDay();

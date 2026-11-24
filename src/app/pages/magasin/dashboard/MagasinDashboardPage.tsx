@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router';
+import { objectifDuMois } from '../../../utils/objectifs';
 import { chargerVentes, readVentesCache, type VenteSupabase } from '../../../services/ventesService';
 import { chargerReglementsParMagasin, type ReglementSupabase } from '../../../services/reglementsService';
 import { getMagasinLabel } from '../../../constants/magasins';
@@ -25,7 +26,8 @@ export function MagasinDashboardPage() {
   const [ventes, setVentes] = useState<VenteSupabase[]>(() => readVentesCache(magasinId));
   const [reglements, setReglements] = useState<ReglementSupabase[]>(() => readLS(REGLEMENTS_CACHE(magasinId)));
 
-  const objectif = Number(localStorage.getItem(`leclaire_objectif_${magasinId}`) || 0) || 0;
+  // Objectif mensuel saisi dans « Gérer le magasin », pour le mois choisi.
+  const objectifPour = (annee: number, mois: number) => objectifDuMois(magasinId, mois, annee);
   const tauxMarge = Number(localStorage.getItem('leclaire_taux_marge') || 0.4) || 0.4;
 
   useEffect(() => {
@@ -69,7 +71,7 @@ export function MagasinDashboardPage() {
       title={label}
       ventes={ventes}
       reglements={reglements}
-      objectif={objectif}
+      objectifPour={objectifPour}
       tauxMarge={tauxMarge}
       // Conseillères et opticiens : activités masquées, sauf case cochée par l'administrateur.
       afficherActiviteMensuelle={peutVoir(user, VOIR_ACTIVITE_MENSUELLE_KEY)}

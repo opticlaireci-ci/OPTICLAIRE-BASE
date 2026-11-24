@@ -12,10 +12,21 @@
  * à la lecture et garantit l'invariant TOTAL >= TOTAL NET >= 0.
  */
 
-const toNumber = (value: any): number => {
-  const n = Number(value);
+/**
+ * Nombre saisi au clavier : « 45 000 », « 45 000 F », « 45.000 », « 12,5 ».
+ * `Number('45 000')` donne NaN et `parseFloat('45 000')` donne 45 : un prix
+ * tapé avec des espaces valait 0 ou 45 dans les totaux.
+ */
+export function lireNombreSaisi(value: unknown): number {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+  let t = String(value ?? '').replace(/[\s\u00a0\u202f]/g, '').replace(/(fcfa|cfa|f)$/i, '');
+  if (/^-?\d{1,3}(\.\d{3})+$/.test(t)) t = t.replace(/\./g, '');   // 45.000 → 45000
+  t = t.replace(',', '.');
+  const n = Number(t);
   return Number.isFinite(n) ? n : 0;
-};
+}
+
+const toNumber = (value: any): number => lireNombreSaisi(value);
 
 const roundMoney = (n: number): number => Math.max(0, Math.round(toNumber(n)));
 

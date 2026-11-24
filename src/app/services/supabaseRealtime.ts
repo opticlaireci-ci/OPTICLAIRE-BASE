@@ -11,12 +11,13 @@ import { logger } from '../utils/logger';
  * navigateurs. Aucune dépendance Firebase.
  */
 
-import { kvGetCollection, kvGetCollectionDelta, kvGetDoc, kvSetDoc, kvDeleteDoc } from '../utils/supabaseDirect';
+import { kvGetCollection, kvGetCollectionDelta, kvGetDoc, kvSetDoc, kvDeleteDoc, kvEcrireListeFusionnee } from '../utils/supabaseDirect';
 import { FIREBASE_DATA_ENABLED } from '../utils/firebaseClient';
 import { isStructuredKey } from './structuredKeys';
 import { logNetworkAware, isAuthError, isNoSessionError, isPermissionError } from '../utils/networkErrors';
 import { getValidAccessToken } from '../utils/supabaseClient';
 import { subscribeEntityChanges, onLiveStatusChange, isLive, SLOW_POLL_MS } from '../utils/supabaseLive';
+import { fusionnerMarquesSms, fusionnerListes, listeAvecIds } from '../utils/fusionListes';
 import {
   fusionnerMagasins, lireRegistreMagasins, saveMagasins, listeCompleteMagasins,
   magasinsAEnvoyer, marquerMagasinsEnvoyes, EVENEMENT_MAGASINS,
@@ -45,10 +46,43 @@ const FAST_POLL_MS = 15_000;
 const MAGASINS_KEY = 'leclaire_magasins';
 
 /**
+ * Marques « SMS déjà envoyé » (anniversaire du jour, lunettes prêtes,
+ * renouvellement, vente) : ensembles partagés par les postes d'encadrement.
+ * Remplacée en bloc, la copie d'un poste effaçait les marques posées par un
+ * autre, et les mêmes SMS repartaient (doublons facturés).
+ * Elles sont désormais FUSIONNÉES à trois (dernière version connue du serveur,
+ * version du serveur, version de ce poste) : une marque ajoutée n'importe où
+ * est gardée ; une marque retirée exprès (envoi refusé, à retenter) reste retirée.
+ */
+const CLE_MARQUES_SMS = /^leclaire_sms_(done_[a-z_]+|anniv)$/;
+/**
  * Renvoie la chaîne JSON à réellement stocker en local pour une clé donnée à
  * partir de la valeur cloud. Pour `leclaire_magasins`, fusionne avec le local.
  */
-function reconcilePulledValue(key: string, cloudValueStr: string): string {
+function reconcilePulledValue(key: string, cloudValueStr: string, precedentStr?: string): string {
+  if (CLE_MARQUES_SMS.test(key)) {
+    try {
+      const local = JSON.parse(localStorage.getItem(key) || 'null');
+      // Sans version précédente connue (démarrage) : simple réunion — mieux vaut
+      // ne pas renvoyer un SMS que le renvoyer en double.
+      const base = precedentStr ? JSON.parse(precedentStr) : null;
+      return JSON.stringify(fusionnerMarquesSms(base, JSON.parse(cloudValueStr), local));
+    } catch { return cloudValueStr; }
+  }
+  // Liste partagée modifiée ICI depuis la dernière version reçue (envoi en
+  // cours ou en attente) : la version du serveur est fusionnée avec la copie
+  // locale au lieu de la remplacer — sinon l'ajout pas encore parti disparaît
+  // de l'appareil, puis du serveur au prochain envoi.
+  if (key !== MAGASINS_KEY && precedentStr) {
+    try {
+      const cloud = JSON.parse(cloudValueStr);
+      const local = JSON.parse(localStorage.getItem(key) || 'null');
+      const base = JSON.parse(precedentStr);
+      if (listeAvecIds(cloud) && listeAvecIds(local) && listeAvecIds(base) && JSON.stringify(local) !== precedentStr) {
+        return JSON.stringify(fusionnerListes(base, local, cloud));
+      }
+    } catch { /* valeur non JSON : version du serveur */ }
+  }
   if (key !== MAGASINS_KEY) return cloudValueStr;
   try {
     const cloud = JSON.parse(cloudValueStr);
@@ -213,7 +247,44 @@ export async function saveToSupabase(key: string, value: any, _skipLocalStorage 
       logger.warn(`🛡️ Push Supabase ignoré pour tableau vide: ${key}`);
       return true;
     }
-    await kvSetDoc(APP_DATA, key, { value, updated_at: new Date().toISOString() });
+    // Marques SMS : fusion avec celles du serveur (aucune marque d'un autre poste perdue).
+    if (CLE_MARQUES_SMS.test(key)) {
+      const actuel = await kvGetDoc<{ value?: unknown }>(APP_DATA, key).catch(() => null);
+      const precedent = lastSnapshot.get(key);
+      const base = precedent ? JSON.parse(precedent) : null;
+      value = fusionnerMarquesSms(base, actuel?.value, value);
+    }
+    // Liste partagée (éléments avec identifiant : mouvements de caisse, rendez-
+    // vous, demandes de devis…) : FUSION avec ce qui a été enregistré entre-temps
+    // sur un autre appareil. Avant, la copie de cet appareil remplaçait celle du
+    // serveur : l'ajout fait ailleurs quelques secondes plus tôt disparaissait.
+    let fusionnee = false;
+    let ecrite = false;
+    if (key !== MAGASINS_KEY && !CLE_MARQUES_SMS.test(key) && listeAvecIds(value)) {
+      try {
+        const precedent = lastSnapshot.get(key);
+        const base = precedent ? JSON.parse(precedent) : null;
+        // Écriture conditionnelle avec fusion (aucun ajout d'un autre appareil écrasé).
+        const resultat = await kvEcrireListeFusionnee(key, base, value as any[], value);
+        fusionnee = JSON.stringify(resultat) !== JSON.stringify(value);
+        value = resultat;
+        ecrite = true;
+      } catch { /* serveur injoignable : écriture habituelle ci-dessous (réessais, file d'attente) */ }
+    }
+    if (!ecrite) await kvSetDoc(APP_DATA, key, { value, updated_at: new Date().toISOString() });
+    if (CLE_MARQUES_SMS.test(key) || listeAvecIds(value)) lastSnapshot.set(key, JSON.stringify(value));
+    if (fusionnee) {
+      // La copie de cet appareil reçoit aussi ce qui venait d'ailleurs.
+      try {
+        const { setItemWithoutSync } = await import('./autoSync');
+        const texte = JSON.stringify(value);
+        const ancien = localStorage.getItem(key);
+        setItemWithoutSync(key, texte);
+        listeners.get(key)?.forEach(cb => cb(value));
+        window.dispatchEvent(new StorageEvent('storage', { key, newValue: texte, oldValue: ancien, storageArea: localStorage }));
+        window.dispatchEvent(new CustomEvent('supabase-realtime-update', { detail: { key, value } }));
+      } catch { /* hors navigateur */ }
+    }
     logger.log(`✅ Enregistré sur Supabase: ${key}`);
     return true;
   } catch (err) {
@@ -282,10 +353,11 @@ function ensurePolling() {
         const key = d.id;
         if (isStructuredKey(key)) continue;
         const rawStr = JSON.stringify(d.value);
-        if (lastSnapshot.get(key) === rawStr) continue;
+        const precedentStr = lastSnapshot.get(key);
+        if (precedentStr === rawStr) continue;
         lastSnapshot.set(key, rawStr);
         // Fusion pour la liste des magasins (ne jamais écraser un ajout local).
-        const valueStr = reconcilePulledValue(key, rawStr);
+        const valueStr = reconcilePulledValue(key, rawStr, precedentStr);
         const oldValue = localStorage.getItem(key);
         setItemWithoutSync(key, valueStr);
         if (key === MAGASINS_KEY) {
@@ -427,7 +499,7 @@ export async function loadAllFromSupabase(): Promise<number> {
       if (isStructuredKey(key)) { skipped++; continue; }
       const rawStr = JSON.stringify(d.value);
       // Fusion pour la liste des magasins (préserve les ajouts locaux non poussés).
-      const mergedStr = reconcilePulledValue(key, rawStr);
+      const mergedStr = reconcilePulledValue(key, rawStr, lastSnapshot.get(key));
       setItemWithoutSync(key, mergedStr);
       lastSnapshot.set(key, rawStr);
       // Si la fusion a fait apparaître des magasins locaux absents du cloud,

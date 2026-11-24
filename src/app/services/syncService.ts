@@ -168,7 +168,8 @@ export function startAutoSync(
           }
           logger.log(`⬆️ Migration: ${itemsToPush.length} clés locales à envoyer`);
           import('./supabaseRealtime').then(({ saveToSupabase }) => {
-            Promise.all(itemsToPush.map(it => saveToSupabase(it.key, it.value, true)));
+            // Échec d'une clé (réseau) : sans effet sur les autres, et sans erreur non gérée.
+            Promise.allSettled(itemsToPush.map(it => saveToSupabase(it.key, it.value, true)));
           });
         })
         .then(() => {

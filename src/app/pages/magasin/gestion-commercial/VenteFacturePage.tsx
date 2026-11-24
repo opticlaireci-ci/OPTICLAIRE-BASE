@@ -34,7 +34,7 @@ import { journaliserAction } from '../../../services/auditLogService';
 import { useLiveData } from '../../../hooks/useLiveData';
 import { getMagasinLabel } from '../../../constants/magasins';
 import { TENANT } from '../../../config/tenant';
-import { normaliserTotauxVente } from '../../../utils/venteTotals';
+import { lireNombreSaisi, normaliserTotauxVente } from '../../../utils/venteTotals';
 
 // ── Montant en toutes lettres (français) ─────────────────────────────────────
 function montantEnLettres(nombre: number): string {
@@ -753,7 +753,8 @@ export async function telechargerReglementPDF(reglement: any, vente: any, magasi
     return `${dt.toLocaleDateString('fr-FR')} ${dt.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
   };
   const dateReg = reglement.date || new Date().toISOString();
-  const editePar = reglement.editePar || (vente as any).createdBy || 'LOUISE MARLÈNE';
+  // Auteur réel du règlement (jamais un nom écrit en dur : il s'imprimait sur les reçus de tous les magasins).
+  const editePar = reglement.editePar || reglement.edite_par || (vente as any)?.createdBy || (vente as any)?.edite_par || '—';
 
   // En-tête partagé (style reçu image : nom noir + coordonnées à gauche, logo à droite)
   let y = pdfHeader(doc, magasinId, { date: dateReg });
@@ -1039,8 +1040,10 @@ function imprimerReglement(reglement: any, vente: any, magasinId?: string) {
     const dt = d ? new Date(d) : new Date();
     return `${dt.toLocaleDateString('fr-FR')} ${dt.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
   };
-  const fmtF = (n: number) => { const v = Math.round((Number(n) || 0) * 100) / 100; const [int, dec] = v.toFixed(2).split('.'); return int.replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + '.' + dec; };
-  const editePar = reglement.editePar || (vente as any).createdBy || 'LOUISE MARLÈNE';
+  // Virgule décimale, comme le reçu PDF (le reçu imprimé affichait « 12 000.00 »).
+  const fmtF = (n: number) => { const v = Math.round((Number(n) || 0) * 100) / 100; const [int, dec] = v.toFixed(2).split('.'); return int.replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ',' + dec; };
+  // Auteur réel du règlement (jamais un nom écrit en dur : il s'imprimait sur les reçus de tous les magasins).
+  const editePar = reglement.editePar || reglement.edite_par || (vente as any)?.createdBy || (vente as any)?.edite_par || '—';
   const dateReg = reglement.date || new Date().toISOString();
 
   // Totaux
@@ -1670,9 +1673,10 @@ function VerreBlock({
 
   const calcTotal = (od: typeof data.oeilDroit, og: typeof data.oeilGauche): string => {
     const lineTotal = (o: typeof od) => {
-      const p = parseFloat(o.prix) || 0;
-      const q = parseFloat(o.quantite) || 1;
-      const r = parseFloat(o.remise) || 0;
+      // Saisie libre : « 45 000 » ou « 45.000 » valaient 45 avec parseFloat.
+      const p = lireNombreSaisi(o.prix);
+      const q = lireNombreSaisi(o.quantite) || 1;
+      const r = lireNombreSaisi(o.remise);
       return p * q * (1 - r / 100);
     };
     return String(Math.round(lineTotal(od) + lineTotal(og)));
@@ -4961,7 +4965,7 @@ function ListeVentes({ ventes, onNouvelle, onModifier, onSupprimer }: { ventes: 
                                   <td className="px-3 py-2 border border-gray-300">{detail.recap.details || '—'}</td>
                                   <td className="px-3 py-2 border border-gray-300">
                                     <div>{fmt(detail.date)} {new Date(detail.date).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</div>
-                                    <div className="text-xs text-gray-600">{(detail as any).createdBy || 'LOUISE MARLÈNE'}</div>
+                                    <div className="text-xs text-gray-600">{(detail as any).createdBy || (detail as any).edite_par || '—'}</div>
                                     {detail.recap.acompteModifiePar && (
                                       <div className="text-[10px] text-purple-700">Modifié par {detail.recap.acompteModifiePar}</div>
                                     )}

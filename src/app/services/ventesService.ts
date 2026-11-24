@@ -68,6 +68,25 @@ export function readVentesCache(magasinId: string): VenteSupabase[] {
   } catch { return []; }
 }
 
+let memoVentesEnCache: { cle: string; t: number; ventes: VenteSupabase[] } | null = null;
+/**
+ * Ventes RÉELLES (sans les devis) présentes dans les copies locales, tous
+ * magasins confondus, sans doublon : copie « tous magasins » + copie de chaque
+ * magasin. Mémorisée 3 s : les écrans qui l'appellent pour chaque ligne (une
+ * monture, un verre…) ne relisent pas toutes les ventes à chaque fois.
+ */
+export function lireVentesEnCache(magasinIds: string[]): VenteSupabase[] {
+  const cle = magasinIds.join('|');
+  if (memoVentesEnCache && memoVentesEnCache.cle === cle && Date.now() - memoVentesEnCache.t < 3000) return memoVentesEnCache.ventes;
+  const parId = new Map<string, VenteSupabase>();
+  for (const id of ['ALL', ...magasinIds]) {
+    for (const v of readVentesCache(id)) if (v && !parId.has(v.id)) parId.set(v.id, v);
+  }
+  const ventes = [...parId.values()].filter(v => (v.type || 'vente') === 'vente');
+  memoVentesEnCache = { cle, t: Date.now(), ventes };
+  return ventes;
+}
+
 /** Écrit le cache + notifie les abonnés si les données ont changé. */
 function writeVentesCache(magasinId: string, ventes: VenteSupabase[]) {
   try {
